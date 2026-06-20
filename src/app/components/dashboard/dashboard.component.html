@@ -1,0 +1,315 @@
+@if (state.error()) {
+  <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    {{ state.error() }}
+  </div>
+}
+
+@if (!state.hasReport()) {
+  <div class="card">
+    <div
+      class="flex flex-col items-center px-4 py-12 text-center sm:py-16"
+      [class.border-brand-500]="dragOver()"
+      [class.bg-brand-50]="dragOver()"
+      [class.border-2]="dragOver()"
+      [class.border-dashed]="dragOver()"
+      (drop)="onDrop($event)"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave()"
+    >
+      <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+        <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+      </div>
+      <h3 class="text-xl font-bold text-slate-900">Upload Groww P&amp;L Report</h3>
+      <p class="mt-2 max-w-md text-sm text-slate-500">Drop your .xlsx or .csv file here. All processing happens in your browser.</p>
+      <label class="btn-primary mt-6 cursor-pointer">
+        Choose File
+        <input type="file" accept=".xlsx,.xls,.csv" (change)="onFileSelected($event)" class="hidden" />
+      </label>
+    </div>
+  </div>
+} @else {
+  @if (state.report(); as report) {
+    <div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 sm:text-xl">Dashboard</h2>
+        <p class="text-sm text-slate-500">{{ report.summary.period }}</p>
+      </div>
+      <div class="flex gap-2">
+        <a routerLink="/analytics" class="btn-secondary flex-1 sm:flex-none">📊 Charts</a>
+        <label class="btn-secondary flex-1 cursor-pointer sm:flex-none">
+          Upload
+          <input type="file" accept=".xlsx,.xls,.csv" (change)="onFileSelected($event)" class="hidden" />
+        </label>
+      </div>
+    </div>
+
+    <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:mb-6">
+      @for (stat of [
+        { label: 'Client', value: report.summary.clientName },
+        { label: 'Trades', value: (report.trades.length | number) },
+        { label: 'Stocks', value: (report.stockSummary.length | number) }
+      ]; track stat.label) {
+        <div class="card border-l-4 border-l-brand-500 p-4">
+          <div class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ stat.label }}</div>
+          <div class="mt-1 truncate text-sm font-semibold text-slate-900 sm:text-base">{{ stat.value }}</div>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="mb-4 sm:mb-6">
+    <app-filter-panel [collapsible]="true" />
+  </div>
+
+  @if (analysis(); as data) {
+    <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-4">
+      @for (stat of [
+        { label: 'Realised P&L', value: formatCurrency(data.summary.realisedPnL), cls: pnlClass(data.summary.realisedPnL) },
+        { label: 'Net P&L', value: formatCurrency(data.summary.netPnL), cls: pnlClass(data.summary.netPnL) },
+        { label: 'Charges', value: formatCurrency(data.summary.allocatedCharges), cls: 'text-red-600' },
+        { label: 'Win Rate', value: (data.summary.winRate | number:'1.1-1') + '%', cls: 'text-slate-900', sub: data.summary.winningTrades + 'W / ' + data.summary.losingTrades + 'L' }
+      ]; track stat.label) {
+        <div class="card p-4">
+          <div class="text-xs font-medium text-slate-500">{{ stat.label }}</div>
+          <div class="mt-1 text-base font-bold sm:text-lg" [class]="stat.cls">{{ stat.value }}</div>
+          @if (stat.sub) {
+            <div class="mt-0.5 text-xs text-slate-400">{{ stat.sub }}</div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="card overflow-hidden">
+      <!-- Tabs -->
+      <div class="overflow-x-auto border-b border-slate-200">
+        <div class="flex min-w-max px-2">
+          @for (tab of [
+            { id: 'daily', label: 'Daily' },
+            { id: 'weekly', label: 'Weekly' },
+            { id: 'monthly', label: 'Monthly' },
+            { id: 'stocks', label: 'Per Stock' },
+            { id: 'charges', label: 'Charges' }
+          ]; track tab.id) {
+            <button
+              type="button"
+              class="tab-btn"
+              [class.tab-btn-active]="activeTab() === tab.id"
+              (click)="setTab($any(tab.id))"
+            >{{ tab.label }}</button>
+          }
+        </div>
+      </div>
+
+      <div class="p-0">
+        @if (activeTab() === 'daily' || activeTab() === 'weekly' || activeTab() === 'monthly') {
+          <p class="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
+            Click a period row to expand. Trades are grouped by stock — click a stock for trade details.
+          </p>
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="w-10 text-center">#</th>
+                  @for (col of periodColumns; track col.key) {
+                    <th>
+                      <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key, $event)">
+                        {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
+                      </button>
+                    </th>
+                  }
+                  <th class="w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of sortedPeriodData(); track row.period; let i = $index) {
+                  <tr
+                    class="cursor-pointer transition"
+                    [class.bg-brand-50]="isPeriodExpanded(row.period)"
+                    (click)="togglePeriodExpand(row.period)"
+                  >
+                    <td class="text-center text-slate-400">{{ i + 1 }}</td>
+                    <td class="font-semibold text-slate-900">{{ row.label }}</td>
+                    <td>{{ row.tradeCount }}</td>
+                    <td class="hidden sm:table-cell">{{ formatCurrency(row.totalBuyValue) }}</td>
+                    <td class="hidden md:table-cell">{{ formatCurrency(row.totalSellValue) }}</td>
+                    <td [class]="pnlClass(row.realisedPnL)">{{ formatCurrency(row.realisedPnL) }}</td>
+                    <td class="hidden lg:table-cell text-red-600">{{ formatCurrency(row.allocatedCharges) }}</td>
+                    <td [class]="pnlClass(row.netPnL)">{{ formatCurrency(row.netPnL) }}</td>
+                    <td class="hidden sm:table-cell">{{ row.winRate | number:'1.1-1' }}%</td>
+                    <td class="text-slate-400">
+                      <svg class="h-4 w-4 transition" [class.rotate-180]="isPeriodExpanded(row.period)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </td>
+                  </tr>
+
+                  @if (isPeriodExpanded(row.period)) {
+                    <tr>
+                      <td [attr.colspan]="periodColumns.length + 2" class="!border-t-0 bg-slate-50 p-0">
+                        <div class="border-t-2 border-brand-500 px-3 py-3 sm:px-4">
+                          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {{ groupTradesByStock(row.trades).length }} stocks · {{ row.tradeCount }} trades
+                          </div>
+
+                          <!-- Stock accordions -->
+                          <div class="space-y-2">
+                            @for (group of groupTradesByStock(row.trades); track group.key; let gi = $index) {
+                              <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                <!-- Stock header -->
+                                <button
+                                  type="button"
+                                  class="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-50 sm:px-4"
+                                  (click)="toggleStockExpand(stockAccordionKey(row.period, group.key), $event)"
+                                >
+                                  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500">{{ gi + 1 }}</span>
+                                  <div class="min-w-0 flex-1">
+                                    <div class="truncate text-sm font-semibold text-slate-900">{{ group.stockName }}</div>
+                                    <div class="text-xs text-slate-400">{{ group.isin }} · {{ group.tradeCount }} trades · Qty {{ group.totalQuantity | number }}</div>
+                                  </div>
+                                  <div class="hidden shrink-0 text-right sm:block">
+                                    <div class="text-xs text-slate-400">P&amp;L</div>
+                                    <div class="text-sm font-semibold" [class]="pnlClass(group.totalPnL)">{{ formatCurrency(group.totalPnL) }}</div>
+                                  </div>
+                                  <svg class="h-4 w-4 shrink-0 text-slate-400 transition" [class.rotate-180]="isStockExpanded(row.period, group.key)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+
+                                <!-- Trade details -->
+                                @if (isStockExpanded(row.period, group.key)) {
+                                  <div class="border-t border-slate-100 bg-slate-50/50">
+                                    <div class="overflow-x-auto">
+                                      <table class="data-table min-w-[600px]">
+                                        <thead>
+                                          <tr>
+                                            <th class="w-8 text-center">#</th>
+                                            <th>Type</th>
+                                            <th>Qty</th>
+                                            <th>Buy</th>
+                                            <th class="hidden sm:table-cell">Buy Value</th>
+                                            <th>Sell</th>
+                                            <th class="hidden sm:table-cell">Sell Value</th>
+                                            <th>P&amp;L</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          @for (trade of group.trades; track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
+                                            <tr>
+                                              <td class="text-center text-slate-400">{{ ti + 1 }}</td>
+                                              <td>
+                                                <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                                  {{ tradeTypeLabel(trade.tradeType) }}
+                                                </span>
+                                              </td>
+                                              <td>{{ trade.quantity | number }}</td>
+                                              <td>
+                                                <div class="text-xs">{{ formatDate(trade.buyDate) }}</div>
+                                                <div class="text-slate-500">{{ formatCurrency(trade.buyPrice) }}</div>
+                                              </td>
+                                              <td class="hidden sm:table-cell">{{ formatCurrency(trade.buyValue) }}</td>
+                                              <td>
+                                                <div class="text-xs">{{ formatDate(trade.sellDate) }}</div>
+                                                <div class="text-slate-500">{{ formatCurrency(trade.sellPrice) }}</div>
+                                              </td>
+                                              <td class="hidden sm:table-cell">{{ formatCurrency(trade.sellValue) }}</td>
+                                              <td class="font-medium" [class]="pnlClass(trade.realisedPnL)">{{ formatCurrency(trade.realisedPnL) }}</td>
+                                            </tr>
+                                          }
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                }
+                              </div>
+                            }
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                } @empty {
+                  <tr><td [attr.colspan]="periodColumns.length + 2" class="py-8 text-center text-slate-400">No trades in selected range</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (activeTab() === 'stocks') {
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="w-10 text-center">#</th>
+                  @for (col of stockColumns; track col.key) {
+                    <th>
+                      <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key, $event)">
+                        {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
+                      </button>
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (stock of sortedStockData(); track stock.isin; let i = $index) {
+                  <tr>
+                    <td class="text-center text-slate-400">{{ i + 1 }}</td>
+                    <td>
+                      <div class="max-w-[180px] truncate font-semibold text-slate-900 sm:max-w-xs">{{ stock.stockName }}</div>
+                      <div class="text-xs text-slate-400">{{ stock.isin }}</div>
+                    </td>
+                    <td>{{ stock.tradeCount }}</td>
+                    <td>{{ stock.quantity | number }}</td>
+                    <td class="hidden sm:table-cell">{{ formatCurrency(stock.buyValue) }}</td>
+                    <td class="hidden sm:table-cell">{{ formatCurrency(stock.sellValue) }}</td>
+                    <td [class]="pnlClass(stock.realisedPnL)">{{ formatCurrency(stock.realisedPnL) }}</td>
+                    <td class="hidden md:table-cell" [class]="pnlClass(stock.realisedPnL)">{{ formatPct(stock.realisedPnLPct) }}</td>
+                    <td class="hidden lg:table-cell text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</td>
+                    <td [class]="pnlClass(stock.netPnL)">{{ formatCurrency(stock.netPnL) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="10" class="py-8 text-center text-slate-400">No stock data</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (activeTab() === 'charges') {
+          <p class="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">Charges allocated proportionally by sell value within filtered trades.</p>
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="w-10 text-center">#</th>
+                  @for (col of chargeColumns; track col.key) {
+                    <th>
+                      <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key, $event)">
+                        {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
+                      </button>
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of sortedChargeData(); track item.label; let i = $index) {
+                  <tr>
+                    <td class="text-center text-slate-400">{{ i + 1 }}</td>
+                    <td>{{ item.label }}</td>
+                    <td class="text-red-600">{{ formatCurrency(item.amount) }}</td>
+                  </tr>
+                }
+                <tr class="bg-slate-50 font-semibold">
+                  <td></td>
+                  <td>Total Charges</td>
+                  <td class="text-red-600">{{ formatCurrency(data.charges.total) }}</td>
+                </tr>
+                <tr>
+                  <td></td>
+                  <td>Allocated to filtered trades</td>
+                  <td class="text-red-600">{{ formatCurrency(data.summary.allocatedCharges) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </div>
+  }
+}

@@ -1,0 +1,63 @@
+@if (!state.hasReport()) {
+  <div class="card p-8 text-center sm:p-12">
+    <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">📊</div>
+    <h3 class="text-lg font-semibold text-slate-900">No report loaded</h3>
+    <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L report on the dashboard first.</p>
+    <a routerLink="/" class="btn-primary mt-6 inline-flex">Go to Dashboard</a>
+  </div>
+} @else {
+  @if (analysis(); as data) {
+    <div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 sm:text-xl">Analytics</h2>
+        <p class="text-sm text-slate-500">Charts update when you apply filters</p>
+      </div>
+      <a routerLink="/" class="btn-secondary hidden sm:inline-flex">← Dashboard</a>
+    </div>
+
+    <app-filter-panel
+      class="mb-4 block sm:mb-6"
+      [collapsible]="true"
+      [showChartFilters]="true"
+      (filtersChanged)="onFiltersChanged()"
+    />
+
+    <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-4">
+      @for (stat of [
+        { label: 'Realised P&L', value: formatCurrency(data.summary.realisedPnL), cls: pnlClass(data.summary.realisedPnL) },
+        { label: 'Net P&L', value: formatCurrency(data.summary.netPnL), cls: pnlClass(data.summary.netPnL) },
+        { label: 'Win Rate', value: (data.summary.winRate | number:'1.1-1') + '%', cls: 'text-slate-900' },
+        { label: 'Trades', value: (data.summary.tradeCount | number), cls: 'text-slate-900' }
+      ]; track stat.label) {
+        <div class="card border-l-4 border-l-brand-500 p-4">
+          <div class="text-xs font-medium text-slate-500">{{ stat.label }}</div>
+          <div class="mt-1 text-base font-bold sm:text-lg" [class]="stat.cls">{{ stat.value }}</div>
+        </div>
+      }
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">
+      <div class="xl:col-span-8">
+        <app-chart-card [config]="dailyChartConfig()" size="lg" />
+      </div>
+      <div class="md:col-span-1 xl:col-span-4">
+        <app-chart-card [config]="winLossChartConfig()" />
+      </div>
+      <div class="md:col-span-1 xl:col-span-6">
+        <app-chart-card [config]="monthlyChartConfig()" />
+      </div>
+      <div class="md:col-span-1 xl:col-span-6">
+        <app-chart-card [config]="cumulativeChartConfig()" />
+      </div>
+      <div class="xl:col-span-7">
+        <app-chart-card [config]="topStocksChartConfig()" size="lg" />
+      </div>
+      <div class="md:col-span-1 xl:col-span-5">
+        <app-chart-card [config]="tradeTypeChartConfig()" />
+      </div>
+      <div class="xl:col-span-12">
+        <app-chart-card [config]="chargesChartConfig()" />
+      </div>
+    </div>
+  }
+}

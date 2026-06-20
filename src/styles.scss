@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased font-sans;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900;
+  }
+
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+  }
+
+  .chip {
+    @apply rounded-full border px-3 py-1 text-xs font-medium transition;
+  }
+
+  .chip-active {
+    @apply border-brand-500 bg-brand-500 text-white;
+  }
+
+  .chip-inactive {
+    @apply border-slate-200 bg-white text-slate-600 hover:border-brand-500 hover:text-brand-600;
+  }
+
+  .sort-btn {
+    @apply inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-slate-500 transition hover:text-brand-600;
+  }
+
+  .sort-btn-active {
+    @apply text-brand-600;
+  }
+
+  .tab-btn {
+    @apply whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-semibold text-slate-500 transition hover:text-slate-800;
+  }
+
+  .tab-btn-active {
+    @apply border-brand-500 text-brand-600;
+  }
+
+  .data-table {
+    @apply w-full min-w-[640px] text-left text-sm;
+  }
+
+  .data-table th {
+    @apply bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .data-table td {
+    @apply border-t border-slate-100 px-3 py-2.5;
+  }
+
+  .data-table tbody tr:hover {
+    @apply bg-slate-50/80;
+  }
+}

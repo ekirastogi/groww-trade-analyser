@@ -1,0 +1,73 @@
+<div class="card overflow-hidden">
+  <div
+    class="flex items-center justify-between border-b border-slate-100 px-4 py-3"
+    [class.cursor-pointer]="collapsible()"
+    (click)="collapsible() && toggleExpanded()"
+  >
+    <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+      <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+      Filters
+      @if (activeFilterCount() > 0) {
+        <span class="rounded-full bg-brand-500 px-2 py-0.5 text-xs font-medium text-white">{{ activeFilterCount() }}</span>
+      }
+    </h3>
+    @if (collapsible()) {
+      <svg class="h-4 w-4 text-slate-400 transition" [class.rotate-180]="filtersExpanded()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    }
+  </div>
+
+  @if (!collapsible() || filtersExpanded()) {
+    <div class="space-y-4 p-4">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-slate-500">From</label>
+          <input type="date" class="input-field" [ngModel]="localStartDate()" (ngModelChange)="localStartDate.set($event)" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-slate-500">To</label>
+          <input type="date" class="input-field" [ngModel]="localEndDate()" (ngModelChange)="localEndDate.set($event)" />
+        </div>
+
+        @if (showChartFilters()) {
+          <div>
+            <label class="mb-1 block text-xs font-semibold text-slate-500">Chart Period</label>
+            <select class="input-field" [ngModel]="chartPeriod()" (ngModelChange)="chartPeriod.set($event)">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-semibold text-slate-500">Top Stocks</label>
+            <select class="input-field" [ngModel]="topStocksCount()" (ngModelChange)="topStocksCount.set(+$event)">
+              <option [value]="5">Top 5</option>
+              <option [value]="10">Top 10</option>
+              <option [value]="15">Top 15</option>
+              <option [value]="20">Top 20</option>
+            </select>
+          </div>
+        }
+
+        <div class="flex items-end gap-2 sm:col-span-2 lg:col-span-1">
+          <button type="button" class="btn-primary flex-1 sm:flex-none" (click)="applyFilters()">Apply</button>
+          <button type="button" class="btn-secondary flex-1 sm:flex-none" (click)="resetFilters()">Reset</button>
+        </div>
+      </div>
+
+      <div>
+        <span class="mb-2 block text-xs font-semibold text-slate-500">Trade Type</span>
+        <div class="flex flex-wrap gap-2">
+          @for (type of availableTradeTypes(); track type) {
+            <button
+              type="button"
+              class="chip"
+              [class.chip-active]="isTradeTypeSelected(type)"
+              [class.chip-inactive]="!isTradeTypeSelected(type)"
+              (click)="toggleTradeType(type)"
+            >{{ tradeTypeLabels[type] || type }}</button>
+          }
+        </div>
+      </div>
+    </div>
+  }
+</div>
