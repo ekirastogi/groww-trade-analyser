@@ -437,7 +437,7 @@
                 <tr>
                   <th class="w-10 text-center">#</th>
                   @for (col of visibleStockColumnList(); track col.key) {
-                    <th [class]="col.key === 'stockName' ? 'text-left' : 'text-right'">
+                    <th [class]="col.key === 'stockName' ? 'text-left w-auto' : 'text-right'">
                       <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key)">
                         {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
                       </button>
@@ -450,10 +450,10 @@
                   <tr>
                     <td class="text-center text-slate-400">{{ i + 1 }}</td>
                     @for (col of visibleStockColumnList(); track col.key) {
-                      <td [class]="col.key === 'stockName' ? '' : stockColumnCellClass(col.key, stock)">
+                      <td [class]="col.key === 'stockName' ? 'col-name' : stockColumnCellClass(col.key, stock)">
                         @switch (col.key) {
                           @case ('stockName') {
-                            <span class="font-semibold text-slate-900">{{ stock.stockName }}</span>
+                            <span class="block truncate font-semibold text-slate-900" [title]="stock.stockName">{{ stock.stockName }}</span>
                           }
                           @case ('tradeCount') { {{ stock.tradeCount }} }
                           @case ('quantity') { {{ stock.quantity | number }} }
