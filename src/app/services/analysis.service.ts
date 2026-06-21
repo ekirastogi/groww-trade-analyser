@@ -12,11 +12,12 @@ import {
 @Injectable({ providedIn: 'root' })
 export class AnalysisService {
   analyze(report: Report, opts: AnalysisOptions = {}): AnalysisResult {
-    const trades = this.filterTrades(report.trades, opts);
-    const totalSell = trades.reduce((s, t) => s + t.sellValue, 0);
-    const chargeRatio = totalSell > 0 && report.charges.total > 0
-      ? report.charges.total / totalSell
+    const reportTotalSell = report.trades.reduce((s, t) => s + t.sellValue, 0);
+    const chargeRatio = reportTotalSell > 0 && report.charges.total > 0
+      ? report.charges.total / reportTotalSell
       : 0;
+
+    const trades = this.filterTrades(report.trades, opts);
 
     return {
       summary: this.buildSummary(trades, chargeRatio),
@@ -76,6 +77,7 @@ export class AnalysisService {
       winRate: tradeCount ? (winningTrades / tradeCount) * 100 : 0,
       allocatedCharges,
       netPnL: realisedPnL - allocatedCharges,
+      chargeRatio,
     };
   }
 

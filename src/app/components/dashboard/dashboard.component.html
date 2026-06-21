@@ -474,11 +474,16 @@
                       </button>
                     </th>
                   }
+                  <th class="w-8"></th>
                 </tr>
               </thead>
               <tbody>
                 @for (stock of sortedStockData(); track stock.isin; let i = $index) {
-                  <tr>
+                  <tr
+                    class="cursor-pointer transition"
+                    [class.bg-brand-50]="isPerStockExpanded(stock)"
+                    (click)="togglePerStockExpand(stock)"
+                  >
                     <td class="text-center text-slate-400">{{ i + 1 }}</td>
                     @for (col of visibleStockColumnList(); track col.key) {
                       <td [class]="col.key === 'stockName' ? 'col-name' : stockColumnCellClass(col.key, stock)">
@@ -497,7 +502,77 @@
                         }
                       </td>
                     }
+                    <td class="text-slate-400">
+                      <svg class="h-4 w-4 transition" [class.rotate-180]="isPerStockExpanded(stock)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </td>
                   </tr>
+
+                  @if (isPerStockExpanded(stock)) {
+                    <tr>
+                      <td [attr.colspan]="visibleStockColumnList().length + 2" class="!border-t-0 bg-slate-50 p-0">
+                        <div class="border-t-2 border-brand-500 px-3 py-3 sm:px-4">
+                          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {{ tradesForStock(stock).length }} trades
+                          </div>
+                          <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                            @if (visibleTradeDetailColumns().length) {
+                              <table class="data-table min-w-[480px]">
+                                <thead>
+                                  <tr>
+                                    <th class="w-8 text-center">#</th>
+                                    @for (col of visibleTradeDetailColumns(); track col.key) {
+                                      <th [class]="col.key === 'tradeCount' ? 'text-left' : 'text-right'">
+                                        {{ tradeDetailColumnLabel(col.key) }}
+                                      </th>
+                                    }
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (trade of tradesForStock(stock); track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
+                                    <tr>
+                                      <td class="text-center text-slate-400">{{ ti + 1 }}</td>
+                                      @for (col of visibleTradeDetailColumns(); track col.key) {
+                                        <td [class]="col.key === 'tradeCount' ? '' : tradeDetailCellClass(col.key, trade)">
+                                          @switch (col.key) {
+                                            @case ('tradeCount') {
+                                              <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                                {{ tradeTypeLabel(trade.tradeType) }}
+                                              </span>
+                                            }
+                                            @case ('quantity') { {{ trade.quantity | number }} }
+                                            @case ('buyValue') {
+                                              <div class="text-right">
+                                                <div class="text-xs">{{ formatDate(trade.buyDate) }}</div>
+                                                <div>{{ formatCurrency(trade.buyValue) }}</div>
+                                              </div>
+                                            }
+                                            @case ('sellValue') {
+                                              <div class="text-right">
+                                                <div class="text-xs">{{ formatDate(trade.sellDate) }}</div>
+                                                <div>{{ formatCurrency(trade.sellValue) }}</div>
+                                              </div>
+                                            }
+                                            @case ('realisedPnL') { {{ formatCurrency(trade.realisedPnL) }} }
+                                            @case ('realisedPnLPct') { {{ formatPct(tradeRealisedPnLPct(trade)) }} }
+                                            @case ('allocatedCharges') { {{ formatCurrency(tradeAllocatedCharge(trade)) }} }
+                                            @case ('netPnL') { {{ formatCurrency(tradeNetPnL(trade)) }} }
+                                          }
+                                        </td>
+                                      }
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            } @else {
+                              <p class="px-4 py-6 text-center text-sm text-slate-400">
+                                Select more columns to see trade details
+                              </p>
+                            }
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  }
                 } @empty {
                   <tr><td [attr.colspan]="visibleStockColumnList().length + 1" class="py-8 text-center text-slate-400">
                     @if (!hasActiveStockScenario()) {

@@ -6,6 +6,7 @@ import { ReportStateService } from '../../services/report-state.service';
 import {
   PeriodBucket,
   StockSummary,
+  Trade,
   TRADE_TYPE_LABELS,
   TradeType,
 } from '../../models/trade.models';
@@ -89,6 +90,7 @@ export class DashboardComponent {
   sortDirection = signal<SortDir>('desc');
   expandedPeriod = signal<string | null>(null);
   expandedStock = signal<string | null>(null);
+  expandedPerStock = signal<string | null>(null);
   stockColumnsPanelOpen = signal(false);
   stockScenarioPanelOpen = signal(false);
   periodColumnsPanelOpen = signal(false);
@@ -137,6 +139,12 @@ export class DashboardComponent {
   visibleStockColumnList = computed(() =>
     this.stockColumns.filter((col) => this.visibleStockColumns().has(col.key))
   );
+
+  visibleTradeDetailColumns = computed(() =>
+    this.visibleStockColumnList().filter((col) => col.key !== 'stockName')
+  );
+
+  chargeRatio = computed(() => this.analysis()?.summary.chargeRatio ?? 0);
 
   visiblePeriodColumnList = computed(() =>
     this.periodColumns.filter((col) => this.visiblePeriodColumns().has(col.key as PeriodColumnKey))
@@ -301,6 +309,7 @@ export class DashboardComponent {
     this.activeTab.set(tab);
     this.expandedPeriod.set(null);
     this.expandedStock.set(null);
+    this.expandedPerStock.set(null);
     this.resetSortForTab(tab);
     this.chartVersion.update((v) => v + 1);
   }
@@ -335,6 +344,58 @@ export class DashboardComponent {
 
   isStockExpanded(period: string, stockKey: string): boolean {
     return this.expandedStock() === this.stockAccordionKey(period, stockKey);
+  }
+
+  stockRowKey(stock: StockSummary): string {
+    return stock.isin || stock.stockName;
+  }
+
+  togglePerStockExpand(stock: StockSummary): void {
+    const key = this.stockRowKey(stock);
+    this.expandedPerStock.set(this.expandedPerStock() === key ? null : key);
+  }
+
+  isPerStockExpanded(stock: StockSummary): boolean {
+    return this.expandedPerStock() === this.stockRowKey(stock);
+  }
+
+  tradesForStock(stock: StockSummary): Trade[] {
+    const key = this.stockRowKey(stock);
+    return (this.analysis()?.filteredTrades ?? [])
+      .filter((t) => (t.isin || t.stockName) === key)
+      .sort((a, b) => b.sellDate.localeCompare(a.sellDate));
+  }
+
+  tradeDetailColumnLabel(key: StockColumnKey): string {
+    if (key === 'tradeCount') return 'Type';
+    return this.stockColumns.find((col) => col.key === key)?.label ?? key;
+  }
+
+  tradeAllocatedCharge(trade: Trade): number {
+    return trade.sellValue * this.chargeRatio();
+  }
+
+  tradeNetPnL(trade: Trade): number {
+    return trade.realisedPnL - this.tradeAllocatedCharge(trade);
+  }
+
+  tradeRealisedPnLPct(trade: Trade): number {
+    return trade.buyValue > 0 ? trade.realisedPnL / trade.buyValue : 0;
+  }
+
+  tradeDetailCellClass(key: StockColumnKey, trade: Trade): string {
+    const base = 'text-right tabular-nums';
+    switch (key) {
+      case 'realisedPnL':
+      case 'realisedPnLPct':
+        return `${base} ${this.pnlClass(trade.realisedPnL)}`;
+      case 'allocatedCharges':
+        return `${base} text-red-600`;
+      case 'netPnL':
+        return `${base} font-semibold ${this.pnlClass(this.tradeNetPnL(trade))}`;
+      default:
+        return base;
+    }
   }
 
   toggleSort(column: string, event?: Event): void {

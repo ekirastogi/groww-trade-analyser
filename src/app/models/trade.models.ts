@@ -105,6 +105,7 @@ export interface AnalysisResult {
     winRate: number;
     allocatedCharges: number;
     netPnL: number;
+    chargeRatio: number;
   };
   daily: PeriodBucket[];
   weekly: PeriodBucket[];
