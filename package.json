@@ -6,7 +6,7 @@
     "start": "ng serve",
     "build": "ng build",
     "build:firebase": "ng build --configuration production",
-    "deploy": "cd .. && firebase deploy --only hosting",
+    "deploy": "ng build --configuration production && firebase deploy --only hosting",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
