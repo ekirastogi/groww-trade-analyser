@@ -12,7 +12,7 @@ import { ReportHistoryComponent } from '../components/shared/report-history/repo
 })
 export class AdminLayoutComponent {
   readonly state = inject(ReportStateService);
-  sidebarOpen = signal(typeof window !== 'undefined' && window.innerWidth >= 1024);
+  sidebarOpen = signal(false);
   isMobile = signal(typeof window !== 'undefined' && window.innerWidth < 1024);
 
   @HostListener('window:resize')
@@ -31,5 +31,9 @@ export class AdminLayoutComponent {
 
   closeSidebar(): void {
     this.sidebarOpen.set(false);
+  }
+
+  onNavigate(): void {
+    this.closeSidebar();
   }
 }

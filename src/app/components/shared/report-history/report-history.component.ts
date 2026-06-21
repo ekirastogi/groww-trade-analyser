@@ -1,4 +1,4 @@
-import { Component, inject, input } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReportStateService } from '../../../services/report-state.service';
 import { formatRelativeTime } from '../../../utils/format.utils';
@@ -83,8 +83,10 @@ export class ReportHistoryComponent {
 
   variant = input<'bar' | 'sidebar' | 'upload'>('bar');
   showLabel = input(true);
+  selected = output<void>();
 
   select(id: string): void {
     this.state.selectHistoryReport(id);
+    this.selected.emit();
   }
 }

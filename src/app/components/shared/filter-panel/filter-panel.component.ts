@@ -36,7 +36,7 @@ export class FilterPanelComponent {
         this.chartPeriod.set(this.state.chartPeriod());
         this.topStocksCount.set(this.state.topStocksCount());
       }
-    });
+    }, { allowSignalWrites: true });
   }
 
   toggleExpanded(): void {

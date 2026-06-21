@@ -122,8 +122,14 @@
 
       <div class="p-0">
         @if (activeTab() === 'daily' || activeTab() === 'weekly' || activeTab() === 'monthly') {
-          <p class="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
-            Click a period row to expand. Trades are grouped by stock — click a stock for trade details.
+          <div class="border-b border-slate-100 px-3 pb-1 pt-1.5 sm:px-4">
+            <app-chart-card
+              [config]="periodChartConfig()"
+              [heightPx]="80"
+            />
+          </div>
+          <p class="border-b border-slate-100 px-4 py-2 text-[11px] text-slate-400">
+            Click a period row to expand trades by stock
           </p>
           <div class="overflow-x-auto">
             <table class="data-table">

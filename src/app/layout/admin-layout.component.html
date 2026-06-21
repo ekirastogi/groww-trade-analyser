@@ -23,26 +23,26 @@
     <nav class="flex-1 space-y-1 p-3">
       <a routerLink="/" routerLinkActive="bg-brand-500/15 text-white border-l-2 border-brand-500" [routerLinkActiveOptions]="{ exact: true }"
          class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white"
-         (click)="closeSidebar()">
+         (click)="onNavigate()">
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
         Dashboard
       </a>
       <a routerLink="/analytics" routerLinkActive="bg-brand-500/15 text-white border-l-2 border-brand-500"
          class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white"
-         (click)="closeSidebar()">
+         (click)="onNavigate()">
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         Analytics
       </a>
       <a routerLink="/charges" routerLinkActive="bg-brand-500/15 text-white border-l-2 border-brand-500"
          class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white"
-         (click)="closeSidebar()">
+         (click)="onNavigate()">
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         Charges
       </a>
     </nav>
     @if (state.hasHistory() && !state.hasReport()) {
       <div class="border-t border-white/10 p-3">
-        <app-report-history variant="sidebar" />
+        <app-report-history variant="sidebar" (selected)="onNavigate()" />
       </div>
     }
     @if (state.report(); as report) {
@@ -88,17 +88,20 @@
   <!-- Mobile bottom nav -->
   <nav class="fixed bottom-0 left-0 right-0 z-30 flex border-t border-slate-200 bg-white pb-safe lg:hidden">
     <a routerLink="/" routerLinkActive="text-brand-600" [routerLinkActiveOptions]="{ exact: true }"
-       class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium text-slate-500">
+       class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium text-slate-500"
+       (click)="onNavigate()">
       <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
       Dashboard
     </a>
     <a routerLink="/analytics" routerLinkActive="text-brand-600"
-       class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium text-slate-500">
+       class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium text-slate-500"
+       (click)="onNavigate()">
       <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
       Analytics
     </a>
     <a routerLink="/charges" routerLinkActive="text-brand-600"
-       class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium text-slate-500">
+       class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium text-slate-500"
+       (click)="onNavigate()">
       <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       Charges
     </a>

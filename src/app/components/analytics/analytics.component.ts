@@ -16,11 +16,14 @@ import {
   abbreviateLabel,
   barChartOptions,
   comboChartOptions,
+  groupedBarChartOptions,
   lineChartOptions,
+  countBarChartOptions,
   doughnutChartOptions,
-  pieChartOptions,
   withDecimation,
   isMobileChart,
+  buildPnLBarDataset,
+  buildLineDataset,
 } from '../../utils/chart-theme';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
@@ -52,70 +55,125 @@ export class AnalyticsComponent {
     return this.buildPeriodChart();
   });
 
-  monthlyChartConfig = computed(() => {
+  dailyNetPnLChartConfig = computed(() => {
     this.chartVersion();
-    const monthly = this.analysis()?.monthly ?? [];
+    const daily = this.analysis()?.daily ?? [];
+    if (!daily.length) return null;
+    const mobile = isMobileChart();
     return withDecimation({
       type: 'bar',
       data: {
-        labels: monthly.map((d) => abbreviateLabel(d.label, isMobileChart() ? 8 : 14)),
-        datasets: [{
-          label: 'Net P&L',
-          data: monthly.map((d) => d.netPnL),
-          backgroundColor: monthly.map((d) =>
-            d.netPnL >= 0 ? CHART_COLORS.successAlpha : CHART_COLORS.dangerAlpha
-          ),
-          borderRadius: 4,
-        }],
+        labels: daily.map((d) => abbreviateLabel(d.label, mobile ? 8 : 12)),
+        datasets: [buildPnLBarDataset('Net P&L', daily.map((d) => d.netPnL))],
       },
-      options: barChartOptions('Monthly Net P&L'),
+      options: barChartOptions(''),
+    });
+  });
+
+  monthlyChartConfig = computed(() => {
+    this.chartVersion();
+    const monthly = this.analysis()?.monthly ?? [];
+    if (!monthly.length) return null;
+    const mobile = isMobileChart();
+    return withDecimation({
+      type: 'bar',
+      data: {
+        labels: monthly.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
+        datasets: [buildPnLBarDataset('Net P&L', monthly.map((d) => d.netPnL))],
+      },
+      options: barChartOptions(''),
     });
   });
 
   cumulativeChartConfig = computed(() => {
     this.chartVersion();
     const periodData = this.state.chartPeriodData();
+    if (!periodData.length) return null;
     let cumulative = 0;
     const cumData = periodData.map((d) => {
       cumulative += d.netPnL;
       return cumulative;
     });
+    const mobile = isMobileChart();
     return withDecimation({
       type: 'line',
       data: {
-        labels: periodData.map((d) => abbreviateLabel(d.label, isMobileChart() ? 8 : 14)),
-        datasets: [{
-          label: 'Cumulative Net P&L',
-          data: cumData,
-          borderColor: CHART_COLORS.secondary,
-          backgroundColor: CHART_COLORS.primaryLight,
-          fill: true,
-          tension: 0.35,
-          borderWidth: 2,
-          pointBackgroundColor: CHART_COLORS.secondary,
-        }],
+        labels: periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
+        datasets: [
+          buildLineDataset('Cumulative Net P&L', cumData, CHART_COLORS.secondary, CHART_COLORS.secondaryLight),
+        ],
       },
-      options: lineChartOptions(`Cumulative Net P&L (${this.chartPeriodLabel()})`),
+      options: lineChartOptions(''),
     });
   });
 
-  winLossChartConfig = computed(() => {
+  tradeVolumeChartConfig = computed(() => {
     this.chartVersion();
-    const summary = this.analysis()?.summary;
-    if (!summary) return null;
-    const breakeven = summary.tradeCount - summary.winningTrades - summary.losingTrades;
-    return {
-      type: 'doughnut' as const,
+    const periodData = this.state.chartPeriodData();
+    if (!periodData.length) return null;
+    const mobile = isMobileChart();
+    return withDecimation({
+      type: 'bar',
       data: {
-        labels: ['Winning', 'Losing', 'Break-even'],
+        labels: periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
         datasets: [{
-          data: [summary.winningTrades, summary.losingTrades, breakeven],
-          backgroundColor: [CHART_COLORS.success, CHART_COLORS.danger, '#adb5bd'],
-          borderWidth: 0,
+          label: 'Trades',
+          data: periodData.map((d) => d.tradeCount),
+          backgroundColor: CHART_COLORS.secondary,
+          hoverBackgroundColor: '#4f46e5',
+          borderRadius: 6,
+          maxBarThickness: 48,
         }],
       },
-      options: doughnutChartOptions('Win / Loss Ratio'),
-    };
+      options: countBarChartOptions(''),
+    });
+  });
+
+  winRateTrendChartConfig = computed(() => {
+    this.chartVersion();
+    const periodData = this.state.chartPeriodData();
+    if (!periodData.length) return null;
+    const mobile = isMobileChart();
+    return withDecimation({
+      type: 'line',
+      data: {
+        labels: periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
+        datasets: [
+          buildLineDataset('Win Rate', periodData.map((d) => d.winRate), CHART_COLORS.primary, CHART_COLORS.primaryLight),
+        ],
+      },
+      options: lineChartOptions('', true),
+    });
+  });
+
+  pnlVsChargesChartConfig = computed(() => {
+    this.chartVersion();
+    const periodData = this.state.chartPeriodData();
+    if (!periodData.length) return null;
+    const mobile = isMobileChart();
+    return withDecimation({
+      type: 'bar',
+      data: {
+        labels: periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 12)),
+        datasets: [
+          {
+            label: 'Realised P&L',
+            data: periodData.map((d) => d.realisedPnL),
+            backgroundColor: CHART_COLORS.successSoft,
+            borderRadius: 6,
+            maxBarThickness: 40,
+          },
+          {
+            label: 'Charges',
+            data: periodData.map((d) => d.allocatedCharges),
+            backgroundColor: CHART_COLORS.dangerSoft,
+            borderRadius: 6,
+            maxBarThickness: 40,
+          },
+        ],
+      },
+      options: groupedBarChartOptions(''),
+    });
   });
 
   topStocksChartConfig = computed(() => {
@@ -123,21 +181,32 @@ export class AnalyticsComponent {
     const stocks = [...(this.analysis()?.stocks ?? [])].sort((a, b) => b.netPnL - a.netPnL);
     const n = this.state.topStocksCount();
     const top = stocks.slice(0, n);
+    if (!top.length) return null;
     const mobile = isMobileChart();
     return {
       type: 'bar' as const,
       data: {
-        labels: top.map((s) => abbreviateLabel(s.stockName, mobile ? 14 : 22)),
-        datasets: [{
-          label: 'Net P&L',
-          data: top.map((s) => s.netPnL),
-          backgroundColor: top.map((s) =>
-            s.netPnL >= 0 ? CHART_COLORS.successAlpha : CHART_COLORS.dangerAlpha
-          ),
-          borderRadius: 4,
-        }],
+        labels: top.map((s) => abbreviateLabel(s.stockName, mobile ? 16 : 24)),
+        datasets: [buildPnLBarDataset('Net P&L', top.map((s) => s.netPnL))],
       },
-      options: barChartOptions(`Top ${n} Stocks by Net P&L`, true),
+      options: barChartOptions('', true),
+    };
+  });
+
+  bottomStocksChartConfig = computed(() => {
+    this.chartVersion();
+    const stocks = [...(this.analysis()?.stocks ?? [])].sort((a, b) => a.netPnL - b.netPnL);
+    const n = Math.min(this.state.topStocksCount(), stocks.length);
+    const bottom = stocks.slice(0, n);
+    if (!bottom.length) return null;
+    const mobile = isMobileChart();
+    return {
+      type: 'bar' as const,
+      data: {
+        labels: bottom.map((s) => abbreviateLabel(s.stockName, mobile ? 16 : 24)),
+        datasets: [buildPnLBarDataset('Net P&L', bottom.map((s) => s.netPnL))],
+      },
+      options: barChartOptions('', true),
     };
   });
 
@@ -146,18 +215,20 @@ export class AnalyticsComponent {
     const items = (this.analysis()?.charges.items ?? []).filter(
       (i) => i.label !== 'Total' && i.amount > 0
     );
+    if (!items.length) return null;
     return {
-      type: 'pie' as const,
+      type: 'doughnut' as const,
       data: {
-        labels: items.map((i) => abbreviateLabel(i.label, isMobileChart() ? 16 : 24)),
+        labels: items.map((i) => abbreviateLabel(i.label, isMobileChart() ? 18 : 28)),
         datasets: [{
           data: items.map((i) => i.amount),
           backgroundColor: CHART_COLORS.palette,
           borderWidth: 2,
           borderColor: '#fff',
+          hoverOffset: 6,
         }],
       },
-      options: pieChartOptions('Charges Breakdown'),
+      options: doughnutChartOptions(''),
     };
   });
 
@@ -169,6 +240,7 @@ export class AnalyticsComponent {
       map.set(t.tradeType, (map.get(t.tradeType) ?? 0) + 1);
     }
     const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return null;
     return {
       type: 'doughnut' as const,
       data: {
@@ -176,10 +248,12 @@ export class AnalyticsComponent {
         datasets: [{
           data: entries.map(([, c]) => c),
           backgroundColor: CHART_COLORS.palette,
-          borderWidth: 0,
+          borderWidth: 2,
+          borderColor: '#fff',
+          hoverOffset: 6,
         }],
       },
-      options: doughnutChartOptions('Trade Types'),
+      options: doughnutChartOptions(''),
     };
   });
 
@@ -202,28 +276,21 @@ export class AnalyticsComponent {
         labels: periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
         datasets: [
           {
-            label: 'Realised P&L',
-            data: periodData.map((d) => d.realisedPnL),
-            backgroundColor: periodData.map((d) =>
-              d.realisedPnL >= 0 ? CHART_COLORS.successAlpha : CHART_COLORS.dangerAlpha
-            ),
-            borderRadius: 4,
+            ...buildPnLBarDataset('Realised P&L', periodData.map((d) => d.realisedPnL)),
             order: 2,
           },
           {
-            label: 'Net P&L',
-            data: periodData.map((d) => d.netPnL),
+            ...buildLineDataset(
+              'Net P&L',
+              periodData.map((d) => d.netPnL),
+              CHART_COLORS.secondary
+            ),
             type: 'line',
-            borderColor: CHART_COLORS.secondary,
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            tension: 0.35,
-            pointRadius: mobile ? 2 : 3,
             order: 1,
           },
         ],
       },
-      options: comboChartOptions(`${this.chartPeriodLabel()} P&L`),
+      options: comboChartOptions(''),
     });
   }
 }

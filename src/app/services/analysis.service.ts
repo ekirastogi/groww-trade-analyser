@@ -121,9 +121,32 @@ export class AnalysisService {
         b.allocatedCharges = b.totalSellValue * chargeRatio;
         b.netPnL = b.realisedPnL - b.allocatedCharges;
         b.trades.sort((a, b2) => b2.realisedPnL - a.realisedPnL);
+        if (period === 'weekly') {
+          b.label = this.weeklyRangeLabel(b.trades);
+        }
         return b;
       })
       .sort((a, b) => a.period.localeCompare(b.period));
+  }
+
+  private weeklyRangeLabel(trades: Trade[]): string {
+    if (!trades.length) return '';
+    const dates = trades.map((t) => t.sellDate).sort();
+    return this.formatDateRange(dates[0], dates[dates.length - 1]);
+  }
+
+  private formatDateRange(from: string, to: string): string {
+    const fmt = (iso: string, withYear: boolean) =>
+      new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        ...(withYear ? { year: 'numeric' } : {}),
+      });
+
+    if (from === to) return fmt(from, true);
+
+    const sameYear = from.slice(0, 4) === to.slice(0, 4);
+    return `${fmt(from, !sameYear)} – ${fmt(to, true)}`;
   }
 
   private periodKey(dateStr: string, period: string): { key: string; label: string } {
@@ -132,7 +155,7 @@ export class AnalysisService {
       const { year, week } = this.getISOWeek(d);
       return {
         key: `${year}-W${String(week).padStart(2, '0')}`,
-        label: `Week ${String(week).padStart(2, '0')}, ${year}`,
+        label: '',
       };
     }
     if (period === 'monthly') {

@@ -1,4 +1,4 @@
-import { Component, signal, computed, inject } from '@angular/core';
+import { Component, signal, computed, inject, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -31,6 +31,15 @@ import {
 } from '../../utils/stock-scenario.utils';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
+import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
+import {
+  abbreviateLabel,
+  sparklineChartOptions,
+  CHART_COLORS,
+  isMobileChart,
+  withDecimation,
+  buildPnLBarDataset,
+} from '../../utils/chart-theme';
 
 type SortDir = 'asc' | 'desc';
 type TabId = 'daily' | 'weekly' | 'monthly' | 'stocks';
@@ -57,7 +66,7 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, FilterPanelComponent, ReportHistoryComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FilterPanelComponent, ReportHistoryComponent, ChartCardComponent],
   templateUrl: './dashboard.component.html',
 })
 export class DashboardComponent {
@@ -81,6 +90,7 @@ export class DashboardComponent {
   savedStockScenarios = signal<StockScenario[]>(loadSavedStockScenarios());
   scenarioNameInput = signal('');
   visibleStockColumns = signal<Set<StockColumnKey>>(new Set(DEFAULT_VISIBLE_STOCK_COLUMNS));
+  private chartVersion = signal(0);
 
   readonly stockFilterColumns = STOCK_FILTER_COLUMNS;
   readonly exampleStockScenarios = EXAMPLE_STOCK_SCENARIOS;
@@ -158,6 +168,62 @@ export class DashboardComponent {
     })
   );
 
+  periodChartData = computed(() =>
+    [...this.activePeriodData()].sort((a, b) => a.period.localeCompare(b.period))
+  );
+
+  periodChartConfig = computed(() => {
+    this.chartVersion();
+    const tab = this.activeTab();
+    if (tab !== 'daily' && tab !== 'weekly' && tab !== 'monthly') return null;
+
+    const periods = this.periodChartData();
+    if (!periods.length) return null;
+
+    const mobile = isMobileChart();
+    const netValues = periods.map((d) => d.netPnL);
+    const overallPositive = netValues.reduce((s, v) => s + v, 0) >= 0;
+    const lineColor = overallPositive ? CHART_COLORS.success : CHART_COLORS.danger;
+    const fillColor = overallPositive ? 'rgba(16,185,129,0.10)' : 'rgba(239,68,68,0.10)';
+
+    const formatLabel = (label: string): string => {
+      if (tab === 'monthly') {
+        // "Jun 2025" → "Jun '25"
+        const parts = label.split(' ');
+        return parts.length >= 2 ? `${parts[0]} '${parts[1].slice(2)}` : label;
+      }
+      if (tab === 'weekly') {
+        // "02–08 Jun 2025" → take the month part e.g. "Jun"
+        const m = label.match(/([A-Za-z]+)/);
+        return m ? m[1] : label.slice(0, 6);
+      }
+      // daily: "02 Jun 2025" → "02 Jun"
+      const parts = label.split(' ');
+      return parts.length >= 2 ? `${parts[0]} ${parts[1]}` : label;
+    };
+
+    return withDecimation({
+      type: 'line',
+      data: {
+        labels: periods.map((d) => formatLabel(d.label)),
+        datasets: [
+          {
+            label: 'Net P&L',
+            data: netValues,
+            borderColor: lineColor,
+            backgroundColor: fillColor,
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+          },
+        ],
+      },
+      options: sparklineChartOptions(),
+    });
+  });
+
   sortedStockData = computed(() => {
     const stocks = filterStocksByRules(this.analysis()?.stocks ?? [], this.stockFilterRules());
     return this.sortRows(stocks, (row, col) => {
@@ -202,6 +268,12 @@ export class DashboardComponent {
     this.expandedPeriod.set(null);
     this.expandedStock.set(null);
     this.resetSortForTab(tab);
+    this.chartVersion.update((v) => v + 1);
+  }
+
+  @HostListener('window:resize')
+  onResize(): void {
+    this.chartVersion.update((v) => v + 1);
   }
 
   togglePeriodExpand(period: string): void {

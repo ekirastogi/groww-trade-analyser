@@ -6,6 +6,9 @@ import {
   AfterViewInit,
   OnDestroy,
   effect,
+  signal,
+  HostListener,
+  computed,
 } from '@angular/core';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 
@@ -15,26 +18,64 @@ Chart.register(...registerables);
   selector: 'app-chart-card',
   standalone: true,
   template: `
-    <div class="card h-full overflow-hidden">
-      <div class="relative p-3 sm:p-4" [style.height.px]="height()">
-        <canvas #canvas class="max-h-full max-w-full"></canvas>
+    <div
+      class="flex flex-col overflow-hidden"
+      [class.rounded-xl]="!compact()"
+      [class.border]="!compact()"
+      [class.border-slate-200]="!compact()"
+      [class.bg-white]="!compact()"
+      [class.shadow-sm]="!compact()"
+      [class.h-full]="!compact() && heightPx() == null"
+      [style.height.px]="compact() ? null : heightPx()"
+    >
+      @if (title()) {
+        <div class="border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-3.5">
+          <h3 class="text-sm font-semibold tracking-tight text-slate-900">{{ title() }}</h3>
+          @if (subtitle()) {
+            <p class="mt-0.5 text-xs leading-relaxed text-slate-500">{{ subtitle() }}</p>
+          }
+        </div>
+      }
+
+      <div
+        class="relative flex-1 overflow-hidden"
+        [class.px-1]="compact()"
+        [class.px-3]="!compact()"
+        [class.py-3]="!compact()"
+        [class.sm:px-4]="!compact()"
+        [class.sm:py-4]="!compact()"
+        [style.height.px]="compact() ? compactHeight() : null"
+        [style.max-height.px]="compact() ? compactHeight() : null"
+      >
+        @if (config()) {
+          <canvas #canvas class="block h-full w-full"></canvas>
+        } @else {
+          <div class="flex h-full flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center">
+            <svg class="mb-2 h-8 w-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            <p class="text-sm text-slate-500">{{ emptyMessage() }}</p>
+          </div>
+        }
       </div>
     </div>
   `,
 })
 export class ChartCardComponent implements AfterViewInit, OnDestroy {
   config = input.required<ChartConfiguration<any, any, any> | null>();
-  size = input<'sm' | 'md' | 'lg'>('md');
+  title = input('');
+  subtitle = input('');
+  emptyMessage = input('No data for current filters');
+  size = input<'xs' | 'sm' | 'md' | 'lg'>('md');
+  compact = input(false);
+  heightPx = input<number | null>(null);
+
+  compactHeight = computed(() => {
+    const mobile = typeof window !== 'undefined' && window.innerWidth < 640;
+    return mobile ? 44 : 48;
+  });
 
   canvasRef = viewChild<ElementRef<HTMLCanvasElement>>('canvas');
-
-  height = () => {
-    switch (this.size()) {
-      case 'sm': return 240;
-      case 'lg': return typeof window !== 'undefined' && window.innerWidth < 640 ? 300 : 380;
-      default: return typeof window !== 'undefined' && window.innerWidth < 640 ? 260 : 320;
-    }
-  };
 
   private chart: Chart | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -47,6 +88,11 @@ export class ChartCardComponent implements AfterViewInit, OnDestroy {
       if (cfg) this.render(cfg);
       else this.destroyChart();
     });
+  }
+
+  @HostListener('window:resize')
+  onResize(): void {
+    this.chart?.resize();
   }
 
   ngAfterViewInit(): void {
@@ -65,6 +111,17 @@ export class ChartCardComponent implements AfterViewInit, OnDestroy {
     this.destroyChart();
   }
 
+  resolveHeight(): number {
+    if (this.heightPx() != null) return this.heightPx()!;
+    const mobile = typeof window !== 'undefined' && window.innerWidth < 640;
+    switch (this.size()) {
+      case 'xs': return mobile ? 120 : 140;
+      case 'sm': return mobile ? 220 : 260;
+      case 'lg': return mobile ? 280 : 360;
+      default: return mobile ? 240 : 300;
+    }
+  }
+
   private destroyChart(): void {
     this.chart?.destroy();
     this.chart = null;
@@ -74,6 +131,13 @@ export class ChartCardComponent implements AfterViewInit, OnDestroy {
     const canvas = this.canvasRef()?.nativeElement;
     if (!canvas) return;
     this.destroyChart();
-    this.chart = new Chart(canvas, config);
+    this.chart = new Chart(canvas, {
+      ...config,
+      options: {
+        ...config.options,
+        responsive: true,
+        maintainAspectRatio: false,
+      },
+    });
   }
 }
