@@ -57,6 +57,21 @@ export const TEXT_OPERATORS: { key: StockFilterOperator; label: string }[] = [
 
 export const EXAMPLE_STOCK_SCENARIOS: { name: string; rules: Omit<StockFilterRule, 'id'>[] }[] = [
   {
+    name: 'Profitable stocks',
+    rules: [{ column: 'netPnL', operator: 'gt', value: '0' }],
+  },
+  {
+    name: 'Loss-making stocks',
+    rules: [{ column: 'netPnL', operator: 'lt', value: '0' }],
+  },
+  {
+    name: '+ve P&L, net loss',
+    rules: [
+      { column: 'realisedPnL', operator: 'gt', value: '0' },
+      { column: 'netPnL', operator: 'lt', value: '0' },
+    ],
+  },
+  {
     name: 'Winners (+ve P&L & Net)',
     rules: [
       { column: 'realisedPnL', operator: 'gt', value: '0' },
@@ -67,13 +82,6 @@ export const EXAMPLE_STOCK_SCENARIOS: { name: string; rules: Omit<StockFilterRul
     name: 'Losers (-ve P&L & Net)',
     rules: [
       { column: 'realisedPnL', operator: 'lt', value: '0' },
-      { column: 'netPnL', operator: 'lt', value: '0' },
-    ],
-  },
-  {
-    name: 'Profitable but net loss',
-    rules: [
-      { column: 'realisedPnL', operator: 'gt', value: '0' },
       { column: 'netPnL', operator: 'lt', value: '0' },
     ],
   },

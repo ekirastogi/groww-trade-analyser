@@ -249,6 +249,29 @@ export class DashboardComponent {
     return { total, shown };
   });
 
+  stockTableTotals = computed(() => {
+    const stocks = this.sortedStockData();
+    if (!stocks.length) return null;
+
+    const sum = (pick: (s: StockSummary) => number) =>
+      stocks.reduce((acc, stock) => acc + pick(stock), 0);
+
+    const buyValue = sum((s) => s.buyValue);
+    const realisedPnL = sum((s) => s.realisedPnL);
+
+    return {
+      stockCount: stocks.length,
+      tradeCount: sum((s) => s.tradeCount),
+      quantity: sum((s) => s.quantity),
+      buyValue,
+      sellValue: sum((s) => s.sellValue),
+      realisedPnL,
+      realisedPnLPct: buyValue > 0 ? realisedPnL / buyValue : 0,
+      allocatedCharges: sum((s) => s.allocatedCharges),
+      netPnL: sum((s) => s.netPnL),
+    };
+  });
+
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (input.files?.length) this.state.loadFile(input.files[0]);
@@ -492,6 +515,21 @@ export class DashboardComponent {
         return `${base} text-red-600`;
       case 'netPnL':
         return `${base} font-semibold ${this.pnlClass(stock.netPnL)}`;
+      default:
+        return base;
+    }
+  }
+
+  stockTotalsCellClass(key: StockColumnKey, totals: NonNullable<ReturnType<typeof this.stockTableTotals>>): string {
+    const base = 'text-right tabular-nums font-semibold';
+    switch (key) {
+      case 'realisedPnL':
+      case 'realisedPnLPct':
+        return `${base} ${this.pnlClass(totals.realisedPnL)}`;
+      case 'allocatedCharges':
+        return `${base} text-red-600`;
+      case 'netPnL':
+        return `${base} ${this.pnlClass(totals.netPnL)}`;
       default:
         return base;
     }

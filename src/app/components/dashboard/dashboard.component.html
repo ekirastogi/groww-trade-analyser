@@ -508,6 +508,30 @@
                   </td></tr>
                 }
               </tbody>
+              @if (stockTableTotals(); as totals) {
+                <tfoot>
+                  <tr class="bg-slate-50">
+                    <td class="text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Total</td>
+                    @for (col of visibleStockColumnList(); track col.key) {
+                      <td [class]="col.key === 'stockName' ? 'col-name font-semibold text-slate-900' : stockTotalsCellClass(col.key, totals)">
+                        @switch (col.key) {
+                          @case ('stockName') {
+                            {{ totals.stockCount }} {{ totals.stockCount === 1 ? 'stock' : 'stocks' }}
+                          }
+                          @case ('tradeCount') { {{ totals.tradeCount | number }} }
+                          @case ('quantity') { {{ totals.quantity | number }} }
+                          @case ('buyValue') { {{ formatCurrency(totals.buyValue) }} }
+                          @case ('sellValue') { {{ formatCurrency(totals.sellValue) }} }
+                          @case ('realisedPnL') { {{ formatCurrency(totals.realisedPnL) }} }
+                          @case ('realisedPnLPct') { {{ formatPct(totals.realisedPnLPct) }} }
+                          @case ('allocatedCharges') { {{ formatCurrency(totals.allocatedCharges) }} }
+                          @case ('netPnL') { {{ formatCurrency(totals.netPnL) }} }
+                        }
+                      </td>
+                    }
+                  </tr>
+                </tfoot>
+              }
             </table>
           </div>
         }

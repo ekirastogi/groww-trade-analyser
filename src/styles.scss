@@ -94,4 +94,8 @@
   .stock-table tbody tr:hover {
     @apply bg-slate-50/80;
   }
+
+  .stock-table tfoot td {
+    @apply border-t-2 border-slate-200 bg-slate-50 px-3 py-2.5;
+  }
 }
