@@ -92,11 +92,26 @@
         title="Trade Volume"
         [subtitle]="'Number of trades per ' + chartPeriodLabel().toLowerCase() + ' period'"
       />
-      <app-chart-card
-        [config]="winRateTrendChartConfig()"
-        title="Win Rate Trend"
-        [subtitle]="'Winning trade percentage by ' + chartPeriodLabel().toLowerCase() + ' period'"
-      />
+      <div class="flex flex-col gap-0">
+        <div class="flex items-center justify-between">
+          <span></span>
+          <button
+            type="button"
+            class="chip mb-1 text-xs"
+            [class.chip-active]="winRateShowDots()"
+            [class.chip-inactive]="!winRateShowDots()"
+            (click)="winRateShowDots.set(!winRateShowDots())"
+          >
+            <svg class="mr-1 inline h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg>
+            {{ winRateShowDots() ? 'Hide dots' : 'Show dots' }}
+          </button>
+        </div>
+        <app-chart-card
+          [config]="winRateTrendChartConfig()"
+          title="Win Rate Trend"
+          subtitle="Bars = Net P&L (left axis) · Line = Win Rate % (right axis)"
+        />
+      </div>
     </div>
 
     <!-- Stocks -->
@@ -122,7 +137,7 @@
 
     <!-- Breakdown -->
     <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown</div>
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
       <app-chart-card
         [config]="tradeTypeChartConfig()"
         title="Trade Types"
@@ -132,6 +147,44 @@
         [config]="chargesChartConfig()"
         title="Charges Breakdown"
         subtitle="Share of total trading charges"
+      />
+    </div>
+
+    <!-- Insights -->
+    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Insights</div>
+    <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <app-chart-card
+        [config]="tradesVsPnLChartConfig()"
+        title="Trades vs Net P&L"
+        subtitle="Each dot = one stock · does volume correlate with profit?"
+        size="lg"
+      />
+      @if (holdingVsPnLChartConfig()) {
+        <app-chart-card
+          [config]="holdingVsPnLChartConfig()"
+          title="Holding Period vs P&L"
+          subtitle="Each dot = one delivery trade · does holding longer pay off?"
+          size="lg"
+        />
+      }
+      <app-chart-card
+        [config]="winLossByStockChartConfig()"
+        title="Win / Loss by Stock"
+        subtitle="Top 12 stocks by trade count — winning vs losing trades"
+        size="lg"
+      />
+      <app-chart-card
+        [config]="pnlEfficiencyChartConfig()"
+        title="P&L per Trade (Efficiency)"
+        subtitle="Net P&L ÷ number of trades — top 12 by absolute value"
+        size="lg"
+      />
+    </div>
+    <div class="grid grid-cols-1 gap-4">
+      <app-chart-card
+        [config]="pnlDistributionChartConfig()"
+        title="P&L Distribution"
+        subtitle="How many trades fell in each profit / loss bucket"
       />
     </div>
   }

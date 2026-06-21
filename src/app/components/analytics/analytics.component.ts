@@ -20,6 +20,7 @@ import {
   lineChartOptions,
   countBarChartOptions,
   doughnutChartOptions,
+  scatterChartOptions,
   baseLegendPublic,
   withDecimation,
   isMobileChart,
@@ -43,6 +44,7 @@ export class AnalyticsComponent {
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
 
   private chartVersion = signal(0);
+  winRateShowDots = signal(false);
 
   analysis = computed(() => this.state.analysis());
 
@@ -173,18 +175,102 @@ export class AnalyticsComponent {
 
   winRateTrendChartConfig = computed(() => {
     this.chartVersion();
-    const periodData = this.state.chartPeriodData();
+    const periodData = this.state.chartPeriodData().filter((d) => d.tradeCount > 0);
     if (!periodData.length) return null;
     const mobile = isMobileChart();
+    const showDots = this.winRateShowDots();
+    const labels = periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14));
+    const netPnLValues = periodData.map((d) => d.netPnL);
     return withDecimation({
-      type: 'line',
+      type: 'bar',
       data: {
-        labels: periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
+        labels,
         datasets: [
-          buildLineDataset('Win Rate', periodData.map((d) => d.winRate), CHART_COLORS.primary, CHART_COLORS.primaryLight),
+          {
+            ...buildPnLBarDataset('Net P&L', netPnLValues),
+            type: 'bar',
+            yAxisID: 'yPnL',
+            order: 2,
+          },
+          {
+            ...buildLineDataset('Win Rate', periodData.map((d) => d.winRate), CHART_COLORS.primary),
+            type: 'line',
+            yAxisID: 'yWin',
+            pointRadius: showDots ? (mobile ? 3 : 4) : 0,
+            pointHoverRadius: 5,
+            borderWidth: 2,
+            order: 1,
+          },
         ],
       },
-      options: lineChartOptions('', true),
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index' as const, intersect: false },
+        animation: { duration: mobile ? 350 : 550, easing: 'easeOutQuart' },
+        layout: { padding: { top: 4, right: 8, bottom: 0, left: 4 } },
+        plugins: {
+          ...baseLegendPublic(true),
+          title: { display: false },
+          tooltip: {
+            backgroundColor: CHART_COLORS.ink,
+            titleColor: '#f8fafc',
+            bodyColor: '#e2e8f0',
+            borderColor: 'rgba(255,255,255,0.08)',
+            borderWidth: 1,
+            titleFont: { size: 12, weight: 'bold' as const },
+            bodyFont: { size: 12 },
+            padding: 12,
+            cornerRadius: 10,
+            callbacks: {
+              label: (ctx) => {
+                if (ctx.dataset.yAxisID === 'yWin') {
+                  return `Win Rate: ${Number(ctx.parsed.y).toFixed(1)}%`;
+                }
+                return `Net P&L: ${formatCurrency(Number(ctx.parsed.y))}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: {
+              maxRotation: mobile ? 35 : 0,
+              autoSkip: true,
+              maxTicksLimit: mobile ? 5 : 14,
+              font: { size: mobile ? 9 : 11 },
+              color: CHART_COLORS.muted,
+            },
+          },
+          yPnL: {
+            position: 'left' as const,
+            grid: { color: CHART_COLORS.grid },
+            border: { display: false },
+            ticks: {
+              font: { size: mobile ? 9 : 11 },
+              color: CHART_COLORS.muted,
+              maxTicksLimit: 5,
+              callback: (v) => formatCurrency(Number(v)),
+            },
+            grace: '8%',
+          },
+          yWin: {
+            position: 'right' as const,
+            grid: { display: false },
+            border: { display: false },
+            min: 0,
+            max: 100,
+            ticks: {
+              font: { size: mobile ? 9 : 11 },
+              color: CHART_COLORS.primary,
+              maxTicksLimit: 5,
+              callback: (v) => `${v}%`,
+            },
+          },
+        },
+      },
     });
   });
 
@@ -296,6 +382,137 @@ export class AnalyticsComponent {
         }],
       },
       options: doughnutChartOptions(''),
+    };
+  });
+
+  // ── Insights ─────────────────────────────────────────────────────────
+
+  tradesVsPnLChartConfig = computed(() => {
+    this.chartVersion();
+    const stocks = this.analysis()?.stocks ?? [];
+    if (stocks.length < 2) return null;
+    return {
+      type: 'scatter' as const,
+      data: {
+        datasets: stocks.map((s) => ({
+          label: abbreviateLabel(s.stockName, 20),
+          data: [{ x: s.tradeCount, y: s.netPnL }],
+          backgroundColor: s.netPnL >= 0 ? 'rgba(16,185,129,0.70)' : 'rgba(239,68,68,0.70)',
+          borderColor: s.netPnL >= 0 ? CHART_COLORS.success : CHART_COLORS.danger,
+          borderWidth: 1,
+        })),
+      },
+      options: scatterChartOptions('Trades', 'Net P&L', false, true),
+    };
+  });
+
+  holdingVsPnLChartConfig = computed(() => {
+    this.chartVersion();
+    const trades = this.analysis()?.filteredTrades ?? [];
+    if (trades.length < 2) return null;
+    const delivery = trades.filter((t) => t.holdingDays > 0);
+    if (!delivery.length) return null;
+    return {
+      type: 'scatter' as const,
+      data: {
+        datasets: [{
+          label: 'Trade',
+          data: delivery.map((t) => ({ x: t.holdingDays, y: t.realisedPnL })),
+          backgroundColor: delivery.map((t) => t.realisedPnL >= 0 ? 'rgba(16,185,129,0.60)' : 'rgba(239,68,68,0.60)'),
+          borderWidth: 0,
+        }],
+      },
+      options: scatterChartOptions('Holding Days', 'P&L', false, true),
+    };
+  });
+
+  pnlDistributionChartConfig = computed(() => {
+    this.chartVersion();
+    const trades = this.analysis()?.filteredTrades ?? [];
+    if (!trades.length) return null;
+    const buckets = [
+      { label: '<−5k', min: -Infinity, max: -5000 },
+      { label: '−5k–−1k', min: -5000, max: -1000 },
+      { label: '−1k–0', min: -1000, max: 0 },
+      { label: '0–1k', min: 0, max: 1000 },
+      { label: '1k–5k', min: 1000, max: 5000 },
+      { label: '>5k', min: 5000, max: Infinity },
+    ];
+    const counts = buckets.map((b) =>
+      trades.filter((t) => t.realisedPnL > b.min && t.realisedPnL <= b.max).length
+    );
+    return {
+      type: 'bar' as const,
+      data: {
+        labels: buckets.map((b) => b.label),
+        datasets: [{
+          label: 'Trades',
+          data: counts,
+          backgroundColor: buckets.map((_, i) => i < 3 ? 'rgba(239,68,68,0.80)' : 'rgba(16,185,129,0.80)'),
+          borderRadius: 6,
+          maxBarThickness: 48,
+        }],
+      },
+      options: countBarChartOptions(''),
+    };
+  });
+
+  pnlEfficiencyChartConfig = computed(() => {
+    this.chartVersion();
+    const stocks = [...(this.analysis()?.stocks ?? [])]
+      .filter((s) => s.tradeCount > 0)
+      .map((s) => ({ ...s, pnlPerTrade: s.netPnL / s.tradeCount }))
+      .sort((a, b) => Math.abs(b.pnlPerTrade) - Math.abs(a.pnlPerTrade))
+      .slice(0, 12);
+    if (!stocks.length) return null;
+    const mobile = isMobileChart();
+    return {
+      type: 'bar' as const,
+      data: {
+        labels: stocks.map((s) => abbreviateLabel(s.stockName, mobile ? 12 : 18)),
+        datasets: [buildPnLBarDataset('Net P&L / Trade', stocks.map((s) => s.pnlPerTrade))],
+      },
+      options: barChartOptions('', true),
+    };
+  });
+
+  winLossByStockChartConfig = computed(() => {
+    this.chartVersion();
+    const trades = this.analysis()?.filteredTrades ?? [];
+    if (!trades.length) return null;
+    const map = new Map<string, { wins: number; losses: number }>();
+    for (const t of trades) {
+      const k = t.stockName;
+      if (!map.has(k)) map.set(k, { wins: 0, losses: 0 });
+      const entry = map.get(k)!;
+      if (t.realisedPnL > 0) entry.wins++; else entry.losses++;
+    }
+    const sorted = [...map.entries()]
+      .sort((a, b) => (b[1].wins + b[1].losses) - (a[1].wins + a[1].losses))
+      .slice(0, 12);
+    const mobile = isMobileChart();
+    return {
+      type: 'bar' as const,
+      data: {
+        labels: sorted.map(([name]) => abbreviateLabel(name, mobile ? 10 : 16)),
+        datasets: [
+          {
+            label: 'Winning',
+            data: sorted.map(([, v]) => v.wins),
+            backgroundColor: 'rgba(16,185,129,0.82)',
+            borderRadius: 4,
+            maxBarThickness: 32,
+          },
+          {
+            label: 'Losing',
+            data: sorted.map(([, v]) => v.losses),
+            backgroundColor: 'rgba(239,68,68,0.82)',
+            borderRadius: 4,
+            maxBarThickness: 32,
+          },
+        ],
+      },
+      options: groupedBarChartOptions(''),
     };
   });
 

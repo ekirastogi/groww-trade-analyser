@@ -260,6 +260,73 @@ export function groupedBarChartOptions(title: string): ChartOptions {
   };
 }
 
+export function scatterChartOptions(xLabel: string, yLabel: string, xCurrency = false, yCurrency = false, yPercent = false): ChartOptions {
+  const mobile = isMobileChart();
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: baseAnimation(),
+    layout: baseLayout(),
+    plugins: {
+      ...baseLegend(false),
+      title: { display: false },
+      tooltip: {
+        ...baseTooltip(),
+        callbacks: {
+          label: (ctx) => {
+            const x = Number((ctx.raw as { x: number; y: number }).x);
+            const y = Number((ctx.raw as { x: number; y: number }).y);
+            const xStr = xCurrency ? formatCurrency(x) : String(x);
+            const yStr = yCurrency ? formatCurrency(y) : yPercent ? `${y.toFixed(1)}%` : String(y);
+            return `${xLabel}: ${xStr}  ·  ${yLabel}: ${yStr}`;
+          },
+          title: (items) => (items[0]?.dataset?.label ?? ''),
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: CHART_COLORS.grid },
+        border: { display: false },
+        title: {
+          display: !mobile,
+          text: xLabel,
+          font: { ...FONT, size: 11 },
+          color: CHART_COLORS.muted,
+          padding: { top: 4 },
+        },
+        ticks: {
+          font: { ...FONT, size: mobile ? 9 : 11 },
+          color: CHART_COLORS.muted,
+          maxTicksLimit: mobile ? 5 : 8,
+          callback: (v) => xCurrency ? formatCurrency(Number(v)) : String(v),
+        },
+      },
+      y: {
+        grid: { color: CHART_COLORS.grid },
+        border: { display: false },
+        title: {
+          display: !mobile,
+          text: yLabel,
+          font: { ...FONT, size: 11 },
+          color: CHART_COLORS.muted,
+          padding: { bottom: 4 },
+        },
+        ticks: {
+          font: { ...FONT, size: mobile ? 9 : 11 },
+          color: CHART_COLORS.muted,
+          maxTicksLimit: 5,
+          callback: (v) => yCurrency ? formatCurrency(Number(v)) : yPercent ? `${Number(v)}%` : String(v),
+        },
+        grace: '10%',
+      },
+    },
+    elements: {
+      point: { radius: mobile ? 4 : 5, hoverRadius: 7, hitRadius: 10 },
+    },
+  };
+}
+
 export function comboChartOptions(title: string): ChartOptions {
   return {
     responsive: true,
