@@ -41,6 +41,11 @@ import {
   buildPnLBarDataset,
 } from '../../utils/chart-theme';
 
+type PeriodColumnKey = 'period' | 'tradeCount' | 'totalBuyValue' | 'totalSellValue' | 'realisedPnL' | 'allocatedCharges' | 'netPnL' | 'winRate';
+
+const DEFAULT_VISIBLE_PERIOD_COLUMNS: PeriodColumnKey[] = [
+  'period', 'tradeCount', 'realisedPnL', 'allocatedCharges', 'netPnL', 'winRate',
+];
 type SortDir = 'asc' | 'desc';
 type TabId = 'daily' | 'weekly' | 'monthly' | 'stocks';
 type StockColumnKey =
@@ -86,10 +91,12 @@ export class DashboardComponent {
   expandedStock = signal<string | null>(null);
   stockColumnsPanelOpen = signal(false);
   stockScenarioPanelOpen = signal(false);
+  periodColumnsPanelOpen = signal(false);
   stockFilterRules = signal<StockFilterRule[]>([]);
   savedStockScenarios = signal<StockScenario[]>(loadSavedStockScenarios());
   scenarioNameInput = signal('');
   visibleStockColumns = signal<Set<StockColumnKey>>(new Set(DEFAULT_VISIBLE_STOCK_COLUMNS));
+  visiblePeriodColumns = signal<Set<PeriodColumnKey>>(new Set(DEFAULT_VISIBLE_PERIOD_COLUMNS));
   private chartVersion = signal(0);
 
   readonly stockFilterColumns = STOCK_FILTER_COLUMNS;
@@ -129,6 +136,10 @@ export class DashboardComponent {
 
   visibleStockColumnList = computed(() =>
     this.stockColumns.filter((col) => this.visibleStockColumns().has(col.key))
+  );
+
+  visiblePeriodColumnList = computed(() =>
+    this.periodColumns.filter((col) => this.visiblePeriodColumns().has(col.key as PeriodColumnKey))
   );
 
   topStats = computed(() => {
@@ -324,6 +335,34 @@ export class DashboardComponent {
 
   toggleStockColumnsPanel(): void {
     this.stockColumnsPanelOpen.update((open) => !open);
+    if (this.stockColumnsPanelOpen()) this.periodColumnsPanelOpen.set(false);
+  }
+
+  togglePeriodColumnsPanel(): void {
+    this.periodColumnsPanelOpen.update((open) => !open);
+  }
+
+  isPeriodColumnVisible(key: string): boolean {
+    return this.visiblePeriodColumns().has(key as PeriodColumnKey);
+  }
+
+  togglePeriodColumn(key: string): void {
+    if (key === 'period') return;
+    const k = key as PeriodColumnKey;
+    this.visiblePeriodColumns.update((current) => {
+      const next = new Set(current);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }
+
+  periodCellClass(key: string, row: PeriodBucket): string {
+    switch (key) {
+      case 'realisedPnL': return this.pnlClass(row.realisedPnL);
+      case 'netPnL': return this.pnlClass(row.netPnL);
+      default: return '';
+    }
   }
 
   toggleStockScenarioPanel(): void {

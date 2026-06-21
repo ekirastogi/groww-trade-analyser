@@ -128,15 +128,40 @@
               [heightPx]="80"
             />
           </div>
-          <p class="border-b border-slate-100 px-4 py-2 text-[11px] text-slate-400">
-            Click a period row to expand trades by stock
-          </p>
+          <div class="border-b border-slate-100 px-4 py-2 sm:px-4">
+            <div class="flex items-center justify-between">
+              <p class="text-[11px] text-slate-400">Click a row to expand trades by stock</p>
+              <button
+                type="button"
+                class="btn-ghost px-2 py-1 text-xs"
+                (click)="togglePeriodColumnsPanel()"
+              >
+                <svg class="mr-1 inline h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                Columns
+              </button>
+            </div>
+            @if (periodColumnsPanelOpen()) {
+              <div class="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">
+                @for (col of periodColumns; track col.key) {
+                  <button
+                    type="button"
+                    class="chip"
+                    [class.chip-active]="isPeriodColumnVisible(col.key)"
+                    [class.chip-inactive]="!isPeriodColumnVisible(col.key)"
+                    [class.opacity-60]="col.key === 'period'"
+                    [disabled]="col.key === 'period'"
+                    (click)="togglePeriodColumn(col.key)"
+                  >{{ col.label }}</button>
+                }
+              </div>
+            }
+          </div>
           <div class="overflow-x-auto">
             <table class="data-table">
               <thead>
                 <tr>
                   <th class="w-10 text-center">#</th>
-                  @for (col of periodColumns; track col.key) {
+                  @for (col of visiblePeriodColumnList(); track col.key) {
                     <th>
                       <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key, $event)">
                         {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
@@ -154,14 +179,20 @@
                     (click)="togglePeriodExpand(row.period)"
                   >
                     <td class="text-center text-slate-400">{{ i + 1 }}</td>
-                    <td class="font-semibold text-slate-900">{{ row.label }}</td>
-                    <td>{{ row.tradeCount }}</td>
-                    <td class="hidden sm:table-cell">{{ formatCurrency(row.totalBuyValue) }}</td>
-                    <td class="hidden md:table-cell">{{ formatCurrency(row.totalSellValue) }}</td>
-                    <td [class]="pnlClass(row.realisedPnL)">{{ formatCurrency(row.realisedPnL) }}</td>
-                    <td class="hidden lg:table-cell text-red-600">{{ formatCurrency(row.allocatedCharges) }}</td>
-                    <td [class]="pnlClass(row.netPnL)">{{ formatCurrency(row.netPnL) }}</td>
-                    <td class="hidden sm:table-cell">{{ row.winRate | number:'1.1-1' }}%</td>
+                    @for (col of visiblePeriodColumnList(); track col.key) {
+                      <td [class]="periodCellClass(col.key, row)">
+                        @switch (col.key) {
+                          @case ('period') { <span class="font-semibold text-slate-900">{{ row.label }}</span> }
+                          @case ('tradeCount') { {{ row.tradeCount }} }
+                          @case ('totalBuyValue') { {{ formatCurrency(row.totalBuyValue) }} }
+                          @case ('totalSellValue') { {{ formatCurrency(row.totalSellValue) }} }
+                          @case ('realisedPnL') { {{ formatCurrency(row.realisedPnL) }} }
+                          @case ('allocatedCharges') { <span class="text-red-600">{{ formatCurrency(row.allocatedCharges) }}</span> }
+                          @case ('netPnL') { {{ formatCurrency(row.netPnL) }} }
+                          @case ('winRate') { {{ row.winRate | number:'1.1-1' }}% }
+                        }
+                      </td>
+                    }
                     <td class="text-slate-400">
                       <svg class="h-4 w-4 transition" [class.rotate-180]="isPeriodExpanded(row.period)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                     </td>
@@ -169,7 +200,7 @@
 
                   @if (isPeriodExpanded(row.period)) {
                     <tr>
-                      <td [attr.colspan]="periodColumns.length + 2" class="!border-t-0 bg-slate-50 p-0">
+                      <td [attr.colspan]="visiblePeriodColumnList().length + 2" class="!border-t-0 bg-slate-50 p-0">
                         <div class="border-t-2 border-brand-500 px-3 py-3 sm:px-4">
                           <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                             {{ groupTradesByStock(row.trades).length }} stocks · {{ row.tradeCount }} trades
@@ -250,7 +281,7 @@
                     </tr>
                   }
                 } @empty {
-                  <tr><td [attr.colspan]="periodColumns.length + 2" class="py-8 text-center text-slate-400">No trades in selected range</td></tr>
+                  <tr><td [attr.colspan]="visiblePeriodColumnList().length + 2" class="py-8 text-center text-slate-400">No trades in selected range</td></tr>
                 }
               </tbody>
             </table>
