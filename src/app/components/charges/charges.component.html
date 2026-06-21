@@ -1,0 +1,106 @@
+@if (!state.hasReport()) {
+  <div class="card p-8 text-center sm:p-12">
+    <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">💰</div>
+    <h3 class="text-lg font-semibold text-slate-900">No report loaded</h3>
+    <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L report on the dashboard or pick a recent upload below.</p>
+    <a routerLink="/" class="btn-primary mt-6 inline-flex">Go to Dashboard</a>
+  </div>
+  @if (state.hasHistory()) {
+    <div class="card mt-4 overflow-hidden p-0">
+      <div class="px-4 py-5 sm:px-6">
+        <app-report-history variant="upload" />
+      </div>
+    </div>
+  }
+} @else {
+  @if (analysis(); as data) {
+    <div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 sm:text-xl">Charges</h2>
+        <p class="text-sm text-slate-500">Breakdown of trading charges from your report</p>
+      </div>
+      <a routerLink="/" class="btn-secondary hidden sm:inline-flex">← Dashboard</a>
+    </div>
+
+    <app-filter-panel class="mb-4 block sm:mb-6" [collapsible]="true" />
+
+    <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-3">
+      @for (stat of [
+        { label: 'Total Charges', value: formatCurrency(data.charges.total), cls: 'text-red-600' },
+        { label: 'Allocated (filtered)', value: formatCurrency(data.summary.allocatedCharges), cls: 'text-red-600' },
+        { label: 'Sell Value (filtered)', value: formatCurrency(data.summary.totalSellValue), cls: 'text-slate-900' }
+      ]; track stat.label) {
+        <div class="card border-l-4 border-l-red-400 p-4">
+          <div class="text-xs font-medium text-slate-500">{{ stat.label }}</div>
+          <div class="mt-1 text-base font-bold sm:text-lg" [class]="stat.cls">{{ stat.value }}</div>
+        </div>
+      }
+    </div>
+
+    <div class="card overflow-hidden">
+      <p class="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
+        Charges allocated proportionally by sell value within filtered trades.
+      </p>
+
+      <!-- Mobile card view -->
+      <div class="divide-y divide-slate-100 lg:hidden">
+        @for (item of sortedChargeData(); track item.label; let i = $index) {
+          <div class="flex items-center justify-between gap-3 px-4 py-3">
+            <div class="min-w-0 flex-1">
+              <div class="text-xs text-slate-400">#{{ i + 1 }}</div>
+              <div class="text-sm font-medium text-slate-900">{{ item.label }}</div>
+            </div>
+            <div class="shrink-0 text-sm font-semibold text-red-600">{{ formatCurrency(item.amount) }}</div>
+          </div>
+        } @empty {
+          <div class="px-4 py-8 text-center text-sm text-slate-400">No charge data</div>
+        }
+        <div class="flex items-center justify-between gap-3 bg-slate-50 px-4 py-3 font-semibold">
+          <span>Total Charges</span>
+          <span class="text-red-600">{{ formatCurrency(data.charges.total) }}</span>
+        </div>
+        <div class="flex items-center justify-between gap-3 px-4 py-3">
+          <span class="text-sm text-slate-600">Allocated to filtered trades</span>
+          <span class="text-sm font-semibold text-red-600">{{ formatCurrency(data.summary.allocatedCharges) }}</span>
+        </div>
+      </div>
+
+      <!-- Desktop table -->
+      <div class="hidden overflow-x-auto lg:block">
+        <table class="data-table min-w-0">
+          <thead>
+            <tr>
+              <th class="w-10 text-center">#</th>
+              @for (col of chargeColumns; track col.key) {
+                <th>
+                  <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key)">
+                    {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
+                  </button>
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of sortedChargeData(); track item.label; let i = $index) {
+              <tr>
+                <td class="text-center text-slate-400">{{ i + 1 }}</td>
+                <td>{{ item.label }}</td>
+                <td class="text-red-600">{{ formatCurrency(item.amount) }}</td>
+              </tr>
+            }
+            <tr class="bg-slate-50 font-semibold">
+              <td></td>
+              <td>Total Charges</td>
+              <td class="text-red-600">{{ formatCurrency(data.charges.total) }}</td>
+            </tr>
+            <tr>
+              <td></td>
+              <td>Allocated to filtered trades</td>
+              <td class="text-red-600">{{ formatCurrency(data.summary.allocatedCharges) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+}

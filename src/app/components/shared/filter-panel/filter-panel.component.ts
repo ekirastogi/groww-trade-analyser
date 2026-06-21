@@ -20,10 +20,10 @@ export class FilterPanelComponent {
 
   localStartDate = signal('');
   localEndDate = signal('');
-  localTradeTypes = signal<TradeType[]>(['all']);
+  localTradeTypes = signal<TradeType[]>(['intraday']);
   chartPeriod = signal<'daily' | 'weekly' | 'monthly'>('daily');
   topStocksCount = signal(10);
-  filtersExpanded = signal(true);
+  filtersExpanded = signal(false);
 
   availableTradeTypes = () => this.state.report()?.tradeTypes ?? ['all'];
 
@@ -37,10 +37,6 @@ export class FilterPanelComponent {
         this.topStocksCount.set(this.state.topStocksCount());
       }
     });
-
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      this.filtersExpanded.set(false);
-    }
   }
 
   toggleExpanded(): void {

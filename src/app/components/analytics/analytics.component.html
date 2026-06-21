@@ -2,9 +2,16 @@
   <div class="card p-8 text-center sm:p-12">
     <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">📊</div>
     <h3 class="text-lg font-semibold text-slate-900">No report loaded</h3>
-    <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L report on the dashboard first.</p>
+    <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L report on the dashboard or pick a recent upload below.</p>
     <a routerLink="/" class="btn-primary mt-6 inline-flex">Go to Dashboard</a>
   </div>
+  @if (state.hasHistory()) {
+    <div class="card mt-4 overflow-hidden p-0">
+      <div class="px-4 py-5 sm:px-6">
+        <app-report-history variant="upload" />
+      </div>
+    </div>
+  }
 } @else {
   @if (analysis(); as data) {
     <div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">

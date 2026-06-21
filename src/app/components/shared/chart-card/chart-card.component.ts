@@ -7,7 +7,9 @@ import {
   OnDestroy,
   effect,
 } from '@angular/core';
-import { Chart, ChartConfiguration } from 'chart.js';
+import { Chart, ChartConfiguration, registerables } from 'chart.js';
+
+Chart.register(...registerables);
 
 @Component({
   selector: 'app-chart-card',
@@ -41,7 +43,9 @@ export class ChartCardComponent implements AfterViewInit, OnDestroy {
   constructor() {
     effect(() => {
       const cfg = this.config();
-      if (cfg && this.ready) this.render(cfg);
+      if (!this.ready) return;
+      if (cfg) this.render(cfg);
+      else this.destroyChart();
     });
   }
 
@@ -58,13 +62,18 @@ export class ChartCardComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
+    this.destroyChart();
+  }
+
+  private destroyChart(): void {
     this.chart?.destroy();
+    this.chart = null;
   }
 
   private render(config: ChartConfiguration<any, any, any>): void {
     const canvas = this.canvasRef()?.nativeElement;
     if (!canvas) return;
-    this.chart?.destroy();
+    this.destroyChart();
     this.chart = new Chart(canvas, config);
   }
 }

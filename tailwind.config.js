@@ -19,6 +19,9 @@ module.exports = {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
+      padding: {
+        safe: 'env(safe-area-inset-bottom)',
+      },
     },
   },
   plugins: [],

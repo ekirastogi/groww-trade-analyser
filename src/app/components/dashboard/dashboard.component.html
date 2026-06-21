@@ -5,7 +5,7 @@
 }
 
 @if (!state.hasReport()) {
-  <div class="card">
+  <div class="card overflow-hidden">
     <div
       class="flex flex-col items-center px-4 py-12 text-center sm:py-16"
       [class.border-brand-500]="dragOver()"
@@ -26,6 +26,19 @@
         <input type="file" accept=".xlsx,.xls,.csv" (change)="onFileSelected($event)" class="hidden" />
       </label>
     </div>
+
+    <div class="border-t border-slate-200 bg-white px-4 py-5 sm:px-6 lg:py-6">
+      <div class="mb-4 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Or open a recent upload
+      </div>
+      @if (state.hasHistory()) {
+        <app-report-history variant="upload" [showLabel]="false" />
+      } @else {
+        <p class="mx-auto max-w-lg text-center text-sm text-slate-500">
+          Upload a file and it will appear here. Your last 5 reports are saved in this browser.
+        </p>
+      }
+    </div>
   </div>
 } @else {
   @if (state.report(); as report) {
@@ -36,6 +49,11 @@
       </div>
       <div class="flex gap-2">
         <a routerLink="/analytics" class="btn-secondary flex-1 sm:flex-none">📊 Charts</a>
+        @if (state.hasHistory()) {
+          <button type="button" class="btn-secondary flex-1 sm:flex-none" (click)="openRecentUploads()">
+            Recent files
+          </button>
+        }
         <label class="btn-secondary flex-1 cursor-pointer sm:flex-none">
           Upload
           <input type="file" accept=".xlsx,.xls,.csv" (change)="onFileSelected($event)" class="hidden" />
@@ -43,15 +61,14 @@
       </div>
     </div>
 
-    <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:mb-6">
-      @for (stat of [
-        { label: 'Client', value: report.summary.clientName },
-        { label: 'Trades', value: (report.trades.length | number) },
-        { label: 'Stocks', value: (report.stockSummary.length | number) }
-      ]; track stat.label) {
+    <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-4">
+      @for (stat of topStats(); track stat.label) {
         <div class="card border-l-4 border-l-brand-500 p-4">
           <div class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ stat.label }}</div>
-          <div class="mt-1 truncate text-sm font-semibold text-slate-900 sm:text-base">{{ stat.value }}</div>
+          <div class="mt-1 truncate text-sm font-semibold sm:text-base" [class]="stat.cls">{{ stat.value }}</div>
+          @if (stat.sub) {
+            <div class="mt-0.5 text-xs text-slate-400">{{ stat.sub }}</div>
+          }
         </div>
       }
     </div>
@@ -66,12 +83,16 @@
       @for (stat of [
         { label: 'Realised P&L', value: formatCurrency(data.summary.realisedPnL), cls: pnlClass(data.summary.realisedPnL) },
         { label: 'Net P&L', value: formatCurrency(data.summary.netPnL), cls: pnlClass(data.summary.netPnL) },
-        { label: 'Charges', value: formatCurrency(data.summary.allocatedCharges), cls: 'text-red-600' },
+        { label: 'Charges', value: formatCurrency(data.summary.allocatedCharges), cls: 'text-red-600', link: '/charges' },
         { label: 'Win Rate', value: (data.summary.winRate | number:'1.1-1') + '%', cls: 'text-slate-900', sub: data.summary.winningTrades + 'W / ' + data.summary.losingTrades + 'L' }
       ]; track stat.label) {
         <div class="card p-4">
           <div class="text-xs font-medium text-slate-500">{{ stat.label }}</div>
-          <div class="mt-1 text-base font-bold sm:text-lg" [class]="stat.cls">{{ stat.value }}</div>
+          @if (stat.link) {
+            <a [routerLink]="stat.link" class="mt-1 block text-base font-bold sm:text-lg hover:underline" [class]="stat.cls">{{ stat.value }}</a>
+          } @else {
+            <div class="mt-1 text-base font-bold sm:text-lg" [class]="stat.cls">{{ stat.value }}</div>
+          }
           @if (stat.sub) {
             <div class="mt-0.5 text-xs text-slate-400">{{ stat.sub }}</div>
           }
@@ -84,11 +105,10 @@
       <div class="overflow-x-auto border-b border-slate-200">
         <div class="flex min-w-max px-2">
           @for (tab of [
+            { id: 'stocks', label: 'Per Stock' },
             { id: 'daily', label: 'Daily' },
             { id: 'weekly', label: 'Weekly' },
-            { id: 'monthly', label: 'Monthly' },
-            { id: 'stocks', label: 'Per Stock' },
-            { id: 'charges', label: 'Charges' }
+            { id: 'monthly', label: 'Monthly' }
           ]; track tab.id) {
             <button
               type="button"
@@ -162,7 +182,7 @@
                                   <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500">{{ gi + 1 }}</span>
                                   <div class="min-w-0 flex-1">
                                     <div class="truncate text-sm font-semibold text-slate-900">{{ group.stockName }}</div>
-                                    <div class="text-xs text-slate-400">{{ group.isin }} · {{ group.tradeCount }} trades · Qty {{ group.totalQuantity | number }}</div>
+                                    <div class="text-xs text-slate-400">{{ group.tradeCount }} trades · Qty {{ group.totalQuantity | number }}</div>
                                   </div>
                                   <div class="hidden shrink-0 text-right sm:block">
                                     <div class="text-xs text-slate-400">P&amp;L</div>
@@ -232,14 +252,187 @@
         }
 
         @if (activeTab() === 'stocks') {
+          <div class="space-y-3 border-b border-slate-100 px-3 py-3 sm:px-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition"
+                [class.bg-brand-50]="stockScenarioPanelOpen()"
+                [class.text-brand-700]="stockScenarioPanelOpen()"
+                [class.text-slate-600]="!stockScenarioPanelOpen()"
+                [class.hover:bg-slate-100]="!stockScenarioPanelOpen()"
+                (click)="toggleStockScenarioPanel()"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                Scenario builder
+                @if (hasActiveStockScenario()) {
+                  <span class="rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] font-bold text-white">ON</span>
+                }
+                <svg class="h-3.5 w-3.5 transition" [class.rotate-180]="stockScenarioPanelOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+
+              <span class="text-xs text-slate-500">
+                Showing {{ stockScenarioStats().shown }} of {{ stockScenarioStats().total }} stocks
+              </span>
+
+              <div class="ml-auto flex flex-wrap items-center gap-2">
+                <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Sort</span>
+                <select
+                  class="input-field w-auto min-w-[120px] py-1.5 text-xs"
+                  [ngModel]="sortColumn()"
+                  (ngModelChange)="setStockSortColumn($event)"
+                >
+                  @for (opt of stockSortOptions; track opt.key) {
+                    <option [value]="opt.key">{{ opt.label }}</option>
+                  }
+                </select>
+                <button type="button" class="btn-secondary px-3 py-1.5 text-xs" (click)="toggleStockSortDirection()">
+                  {{ sortDirection() === 'asc' ? 'Low → High' : 'High → Low' }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                  (click)="toggleStockColumnsPanel()"
+                >
+                  Columns
+                  <svg class="h-3.5 w-3.5 transition" [class.rotate-180]="stockColumnsPanelOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+              </div>
+            </div>
+
+            @if (stockScenarioPanelOpen()) {
+              <div class="rounded-lg border border-slate-200 bg-slate-50/80 p-3 sm:p-4">
+                <p class="mb-3 text-xs text-slate-500">
+                  Add rules on any column. All rules must match (AND). Build your own view — nothing is forced.
+                </p>
+
+                @if (stockFilterRules().length) {
+                  <div class="space-y-2">
+                    @for (rule of stockFilterRules(); track rule.id) {
+                      <div class="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-2 sm:grid-cols-[1.2fr_0.8fr_1fr_auto] sm:items-center">
+                        <select
+                          class="input-field py-1.5 text-xs"
+                          [ngModel]="rule.column"
+                          (ngModelChange)="updateStockFilterRule(rule.id, { column: $event })"
+                        >
+                          @for (col of stockFilterColumns; track col.key) {
+                            <option [value]="col.key">{{ col.label }}</option>
+                          }
+                        </select>
+                        <select
+                          class="input-field py-1.5 text-xs"
+                          [ngModel]="rule.operator"
+                          (ngModelChange)="updateStockFilterRule(rule.id, { operator: $event })"
+                        >
+                          @for (op of stockRuleOperators(rule.column); track op.key) {
+                            <option [value]="op.key">{{ op.label }}</option>
+                          }
+                        </select>
+                        <input
+                          type="text"
+                          class="input-field py-1.5 text-xs"
+                          [placeholder]="stockRulePlaceholder(rule.column)"
+                          [ngModel]="rule.value"
+                          (ngModelChange)="updateStockFilterRule(rule.id, { value: $event })"
+                        />
+                        <button type="button" class="btn-ghost justify-self-end px-2 py-1 text-xs text-red-600" (click)="removeStockFilterRule(rule.id)">
+                          Remove
+                        </button>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500">
+                    No rules yet — all stocks are shown. Add a rule or load an example below.
+                  </p>
+                }
+
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button type="button" class="btn-secondary px-3 py-1.5 text-xs" (click)="addStockFilterRule()">+ Add rule</button>
+                  @if (stockFilterRules().length) {
+                    <button type="button" class="btn-ghost px-3 py-1.5 text-xs" (click)="clearStockFilterRules()">Clear all</button>
+                  }
+                </div>
+
+                <div class="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center">
+                  <input
+                    type="text"
+                    class="input-field py-1.5 text-xs sm:max-w-xs"
+                    placeholder="Scenario name"
+                    [ngModel]="scenarioNameInput()"
+                    (ngModelChange)="scenarioNameInput.set($event)"
+                  />
+                  <button
+                    type="button"
+                    class="btn-primary px-3 py-1.5 text-xs"
+                    [disabled]="!scenarioNameInput().trim() || !stockFilterRules().length"
+                    (click)="saveStockScenario()"
+                  >
+                    Save scenario
+                  </button>
+                </div>
+
+                @if (savedStockScenarios().length) {
+                  <div class="mt-3">
+                    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Your saved scenarios</div>
+                    <div class="flex flex-wrap gap-2">
+                      @for (scenario of savedStockScenarios(); track scenario.id) {
+                        <div class="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white text-xs">
+                          <button type="button" class="px-3 py-1 font-medium text-slate-700 hover:bg-slate-50" (click)="loadSavedStockScenario(scenario.id)">
+                            {{ scenario.name }}
+                          </button>
+                          <button type="button" class="border-l border-slate-200 px-2 py-1 text-slate-400 hover:bg-red-50 hover:text-red-600" (click)="deleteSavedStockScenario(scenario.id)" aria-label="Delete scenario">
+                            ×
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+
+                <div class="mt-3">
+                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Quick examples (optional)</div>
+                  <div class="flex flex-wrap gap-2">
+                    @for (example of exampleStockScenarios; track example.name; let i = $index) {
+                      <button type="button" class="chip chip-inactive" (click)="loadExampleStockScenario(i)">
+                        {{ example.name }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+
+            @if (stockColumnsPanelOpen()) {
+              <div class="flex flex-wrap gap-2">
+                @for (col of stockColumns; track col.key) {
+                  <button
+                    type="button"
+                    class="chip"
+                    [class.chip-active]="isStockColumnVisible(col.key)"
+                    [class.chip-inactive]="!isStockColumnVisible(col.key)"
+                    [class.opacity-60]="col.required"
+                    [disabled]="col.required"
+                    (click)="toggleStockColumn(col.key)"
+                  >
+                    {{ col.label }}
+                    @if (col.required) {
+                      <span class="ml-1 text-[10px] opacity-70">(always)</span>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
           <div class="overflow-x-auto">
-            <table class="data-table">
+            <table class="stock-table">
               <thead>
                 <tr>
                   <th class="w-10 text-center">#</th>
-                  @for (col of stockColumns; track col.key) {
-                    <th>
-                      <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key, $event)">
+                  @for (col of visibleStockColumnList(); track col.key) {
+                    <th [class]="col.key === 'stockName' ? 'text-left' : 'text-right'">
+                      <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key)">
                         {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
                       </button>
                     </th>
@@ -250,61 +443,33 @@
                 @for (stock of sortedStockData(); track stock.isin; let i = $index) {
                   <tr>
                     <td class="text-center text-slate-400">{{ i + 1 }}</td>
-                    <td>
-                      <div class="max-w-[180px] truncate font-semibold text-slate-900 sm:max-w-xs">{{ stock.stockName }}</div>
-                      <div class="text-xs text-slate-400">{{ stock.isin }}</div>
-                    </td>
-                    <td>{{ stock.tradeCount }}</td>
-                    <td>{{ stock.quantity | number }}</td>
-                    <td class="hidden sm:table-cell">{{ formatCurrency(stock.buyValue) }}</td>
-                    <td class="hidden sm:table-cell">{{ formatCurrency(stock.sellValue) }}</td>
-                    <td [class]="pnlClass(stock.realisedPnL)">{{ formatCurrency(stock.realisedPnL) }}</td>
-                    <td class="hidden md:table-cell" [class]="pnlClass(stock.realisedPnL)">{{ formatPct(stock.realisedPnLPct) }}</td>
-                    <td class="hidden lg:table-cell text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</td>
-                    <td [class]="pnlClass(stock.netPnL)">{{ formatCurrency(stock.netPnL) }}</td>
+                    @for (col of visibleStockColumnList(); track col.key) {
+                      <td [class]="col.key === 'stockName' ? '' : stockColumnCellClass(col.key, stock)">
+                        @switch (col.key) {
+                          @case ('stockName') {
+                            <span class="font-semibold text-slate-900">{{ stock.stockName }}</span>
+                          }
+                          @case ('tradeCount') { {{ stock.tradeCount }} }
+                          @case ('quantity') { {{ stock.quantity | number }} }
+                          @case ('buyValue') { {{ formatCurrency(stock.buyValue) }} }
+                          @case ('sellValue') { {{ formatCurrency(stock.sellValue) }} }
+                          @case ('realisedPnL') { {{ formatCurrency(stock.realisedPnL) }} }
+                          @case ('realisedPnLPct') { {{ formatPct(stock.realisedPnLPct) }} }
+                          @case ('allocatedCharges') { {{ formatCurrency(stock.allocatedCharges) }} }
+                          @case ('netPnL') { {{ formatCurrency(stock.netPnL) }} }
+                        }
+                      </td>
+                    }
                   </tr>
                 } @empty {
-                  <tr><td colspan="10" class="py-8 text-center text-slate-400">No stock data</td></tr>
+                  <tr><td [attr.colspan]="visibleStockColumnList().length + 1" class="py-8 text-center text-slate-400">
+                    @if (!hasActiveStockScenario()) {
+                      No stock data
+                    } @else {
+                      No stocks match your scenario
+                    }
+                  </td></tr>
                 }
-              </tbody>
-            </table>
-          </div>
-        }
-
-        @if (activeTab() === 'charges') {
-          <p class="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">Charges allocated proportionally by sell value within filtered trades.</p>
-          <div class="overflow-x-auto">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th class="w-10 text-center">#</th>
-                  @for (col of chargeColumns; track col.key) {
-                    <th>
-                      <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key, $event)">
-                        {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
-                      </button>
-                    </th>
-                  }
-                </tr>
-              </thead>
-              <tbody>
-                @for (item of sortedChargeData(); track item.label; let i = $index) {
-                  <tr>
-                    <td class="text-center text-slate-400">{{ i + 1 }}</td>
-                    <td>{{ item.label }}</td>
-                    <td class="text-red-600">{{ formatCurrency(item.amount) }}</td>
-                  </tr>
-                }
-                <tr class="bg-slate-50 font-semibold">
-                  <td></td>
-                  <td>Total Charges</td>
-                  <td class="text-red-600">{{ formatCurrency(data.charges.total) }}</td>
-                </tr>
-                <tr>
-                  <td></td>
-                  <td>Allocated to filtered trades</td>
-                  <td class="text-red-600">{{ formatCurrency(data.summary.allocatedCharges) }}</td>
-                </tr>
               </tbody>
             </table>
           </div>

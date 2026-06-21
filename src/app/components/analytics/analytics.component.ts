@@ -24,11 +24,12 @@ import {
 } from '../../utils/chart-theme';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
+import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
 
 @Component({
   selector: 'app-analytics',
   standalone: true,
-  imports: [CommonModule, RouterLink, FilterPanelComponent, ChartCardComponent],
+  imports: [CommonModule, RouterLink, FilterPanelComponent, ChartCardComponent, ReportHistoryComponent],
   templateUrl: './analytics.component.html',
 })
 export class AnalyticsComponent {
@@ -119,7 +120,7 @@ export class AnalyticsComponent {
 
   topStocksChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = this.analysis()?.stocks ?? [];
+    const stocks = [...(this.analysis()?.stocks ?? [])].sort((a, b) => b.netPnL - a.netPnL);
     const n = this.state.topStocksCount();
     const top = stocks.slice(0, n);
     const mobile = isMobileChart();

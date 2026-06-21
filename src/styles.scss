@@ -74,4 +74,20 @@
   .data-table tbody tr:hover {
     @apply bg-slate-50/80;
   }
+
+  .stock-table {
+    @apply w-full min-w-[960px] text-left text-sm;
+  }
+
+  .stock-table th {
+    @apply whitespace-nowrap bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .stock-table td {
+    @apply whitespace-nowrap border-t border-slate-100 px-3 py-2.5;
+  }
+
+  .stock-table tbody tr:hover {
+    @apply bg-slate-50/80;
+  }
 }

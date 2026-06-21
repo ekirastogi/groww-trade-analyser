@@ -87,6 +87,13 @@ export interface Report {
   tradeTypes: TradeType[];
 }
 
+export interface ReportHistoryEntry {
+  id: string;
+  fileName: string;
+  uploadedAt: number;
+  report: Report;
+}
+
 export interface AnalysisResult {
   summary: {
     tradeCount: number;
