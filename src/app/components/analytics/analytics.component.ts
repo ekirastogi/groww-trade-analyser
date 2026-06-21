@@ -20,6 +20,7 @@ import {
   lineChartOptions,
   countBarChartOptions,
   doughnutChartOptions,
+  baseLegendPublic,
   withDecimation,
   isMobileChart,
   buildPnLBarDataset,
@@ -57,16 +58,54 @@ export class AnalyticsComponent {
 
   dailyNetPnLChartConfig = computed(() => {
     this.chartVersion();
-    const daily = this.analysis()?.daily ?? [];
+    const daily = [...(this.analysis()?.daily ?? [])].sort((a, b) => a.period.localeCompare(b.period));
     if (!daily.length) return null;
     const mobile = isMobileChart();
+
+    let cumulative = 0;
+    const cumData = daily.map((d) => { cumulative += d.netPnL; return cumulative; });
+    const overallPositive = cumulative >= 0;
+    const cumColor = overallPositive ? CHART_COLORS.success : CHART_COLORS.danger;
+    const cumFill = overallPositive ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
+
     return withDecimation({
-      type: 'bar',
+      type: 'line',
       data: {
-        labels: daily.map((d) => abbreviateLabel(d.label, mobile ? 8 : 12)),
-        datasets: [buildPnLBarDataset('Net P&L', daily.map((d) => d.netPnL))],
+        labels: daily.map((d) => abbreviateLabel(d.label, mobile ? 6 : 10)),
+        datasets: [
+          {
+            label: 'Daily Net P&L',
+            data: daily.map((d) => d.netPnL),
+            borderColor: CHART_COLORS.secondary,
+            backgroundColor: 'transparent',
+            fill: false,
+            tension: 0.3,
+            borderWidth: 1.5,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            order: 1,
+          },
+          {
+            label: 'Cumulative',
+            data: cumData,
+            borderColor: cumColor,
+            backgroundColor: cumFill,
+            fill: true,
+            tension: 0.4,
+            borderWidth: 2.5,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            order: 2,
+          },
+        ],
       },
-      options: barChartOptions(''),
+      options: {
+        ...lineChartOptions(''),
+        plugins: {
+          ...lineChartOptions('').plugins,
+          ...baseLegendPublic(true),
+        },
+      },
     });
   });
 
@@ -94,13 +133,16 @@ export class AnalyticsComponent {
       cumulative += d.netPnL;
       return cumulative;
     });
+    const overallPositive = cumulative >= 0;
+    const lineColor = overallPositive ? CHART_COLORS.success : CHART_COLORS.danger;
+    const fillColor = overallPositive ? 'rgba(16,185,129,0.10)' : 'rgba(239,68,68,0.10)';
     const mobile = isMobileChart();
     return withDecimation({
       type: 'line',
       data: {
         labels: periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
         datasets: [
-          buildLineDataset('Cumulative Net P&L', cumData, CHART_COLORS.secondary, CHART_COLORS.secondaryLight),
+          buildLineDataset('Cumulative Net P&L', cumData, lineColor, fillColor),
         ],
       },
       options: lineChartOptions(''),

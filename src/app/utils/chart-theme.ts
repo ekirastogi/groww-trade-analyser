@@ -69,21 +69,25 @@ function baseTooltip() {
   };
 }
 
+export function baseLegendPublic(show: boolean): ChartOptions['plugins'] {
+  return baseLegend(show);
+}
+
 function baseLegend(show: boolean): ChartOptions['plugins'] {
   const mobile = isMobileChart();
   return {
     legend: {
       display: show,
-      position: mobile ? 'bottom' : 'top',
+      position: 'top' as const,
       align: 'end' as const,
       labels: {
-        boxWidth: 10,
-        boxHeight: 10,
-        padding: mobile ? 12 : 16,
-        font: { ...FONT, size: mobile ? 11 : 12 },
+        boxWidth: mobile ? 8 : 10,
+        boxHeight: mobile ? 8 : 10,
+        padding: mobile ? 8 : 14,
+        font: { ...FONT, size: mobile ? 10 : 11 },
         color: CHART_COLORS.muted,
         usePointStyle: true,
-        pointStyle: 'circle',
+        pointStyle: 'circle' as const,
       },
     },
   };
@@ -96,19 +100,20 @@ function baseScales(options?: { currency?: boolean; percent?: boolean; horizonta
   const horizontal = options?.horizontal ?? false;
 
   const valueTicks = {
-    font: { ...FONT, size: mobile ? 10 : 11 },
+    font: { ...FONT, size: mobile ? 9 : 11 },
     color: CHART_COLORS.muted,
     padding: 6,
+    maxTicksLimit: mobile ? 4 : 6,
     callback: (v: string | number) =>
       percent ? `${Number(v)}%` : currency ? formatCurrency(Number(v)) : String(v),
   };
 
   const categoryTicks = {
-    maxRotation: mobile ? 40 : 0,
-    minRotation: mobile ? 40 : 0,
+    maxRotation: mobile ? 35 : 0,
+    minRotation: 0,
     autoSkip: true,
-    maxTicksLimit: mobile ? 7 : 14,
-    font: { ...FONT, size: mobile ? 10 : 11 },
+    maxTicksLimit: mobile ? 5 : 14,
+    font: { ...FONT, size: mobile ? 9 : 11 },
     color: CHART_COLORS.muted,
     padding: 4,
   };
