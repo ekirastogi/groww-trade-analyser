@@ -153,6 +153,7 @@ export class DashboardComponent {
   topStats = computed(() => {
     const report = this.state.report();
     const summary = this.analysis()?.summary;
+    const stockDaySummary = this.stockDayWinRateSummary();
     if (!report) return [];
     return [
       { label: 'Client', value: report.summary.clientName, cls: 'text-slate-900' },
@@ -162,12 +163,43 @@ export class DashboardComponent {
         label: 'Win Rate',
         value: summary ? `${summary.winRate.toFixed(1)}%` : '—',
         cls: 'text-slate-900',
-        sub: summary ? `${summary.winningTrades}W / ${summary.losingTrades}L` : undefined,
+        sub: summary
+          ? `${summary.winningTrades}W / ${summary.losingTrades}L · Stock-Day ${stockDaySummary.rate.toFixed(1)}%`
+          : undefined,
       },
     ];
   });
 
   analysis = computed(() => this.state.analysis());
+
+  stockDayWinRateSummary = computed(() => {
+    const trades = this.analysis()?.filteredTrades ?? [];
+    const stockDayNetPnL = new Map<string, number>();
+
+    for (const trade of trades) {
+      const stockKey = trade.isin || trade.stockName;
+      const key = `${trade.sellDate}::${stockKey}`;
+      stockDayNetPnL.set(key, (stockDayNetPnL.get(key) ?? 0) + trade.realisedPnL);
+    }
+
+    let winning = 0;
+    let losing = 0;
+    let flat = 0;
+    for (const netPnL of stockDayNetPnL.values()) {
+      if (netPnL > 0) winning++;
+      else if (netPnL < 0) losing++;
+      else flat++;
+    }
+
+    const total = stockDayNetPnL.size;
+    return {
+      total,
+      winning,
+      losing,
+      flat,
+      rate: total ? (winning / total) * 100 : 0,
+    };
+  });
 
   activePeriodData = computed(() => {
     const data = this.analysis();
@@ -442,10 +474,17 @@ export class DashboardComponent {
   }
 
   periodCellClass(key: string, row: PeriodBucket): string {
+    if (key === 'period') return 'col-name';
+    const base = 'text-right tabular-nums';
     switch (key) {
-      case 'realisedPnL': return this.pnlClass(row.realisedPnL);
-      case 'netPnL': return this.pnlClass(row.netPnL);
-      default: return '';
+      case 'realisedPnL':
+        return `${base} ${this.pnlClass(row.realisedPnL)}`;
+      case 'allocatedCharges':
+        return `${base} text-red-600`;
+      case 'netPnL':
+        return `${base} font-semibold ${this.pnlClass(row.netPnL)}`;
+      default:
+        return base;
     }
   }
 
@@ -602,9 +641,9 @@ export class DashboardComponent {
 
   private resetSortForTab(tab: TabId): void {
     const defaults: Record<TabId, { column: string; direction: SortDir }> = {
-      daily: { column: 'period', direction: 'asc' },
-      weekly: { column: 'period', direction: 'asc' },
-      monthly: { column: 'period', direction: 'asc' },
+      daily: { column: 'period', direction: 'desc' },
+      weekly: { column: 'period', direction: 'desc' },
+      monthly: { column: 'period', direction: 'desc' },
       stocks: { column: 'realisedPnL', direction: 'desc' },
     };
     const { column, direction } = defaults[tab];
@@ -617,7 +656,7 @@ export class DashboardComponent {
   }
 
   private defaultSortDirection(column: string): SortDir {
-    if (column === 'period' || column === 'stockName' || column === 'label') return 'asc';
+    if (column === 'stockName' || column === 'label') return 'asc';
     return 'desc';
   }
 

@@ -84,7 +84,12 @@
         { label: 'Realised P&L', value: formatCurrency(data.summary.realisedPnL), cls: pnlClass(data.summary.realisedPnL) },
         { label: 'Net P&L', value: formatCurrency(data.summary.netPnL), cls: pnlClass(data.summary.netPnL) },
         { label: 'Charges', value: formatCurrency(data.summary.allocatedCharges), cls: 'text-red-600', link: '/charges' },
-        { label: 'Win Rate', value: (data.summary.winRate | number:'1.1-1') + '%', cls: 'text-slate-900', sub: data.summary.winningTrades + 'W / ' + data.summary.losingTrades + 'L' }
+        {
+          label: 'Win Rate',
+          value: (data.summary.winRate | number:'1.1-1') + '%',
+          cls: 'text-slate-900',
+          sub: data.summary.winningTrades + 'W / ' + data.summary.losingTrades + 'L · Stock-Day ' + (stockDayWinRateSummary().rate | number:'1.1-1') + '%'
+        }
       ]; track stat.label) {
         <div class="card p-4">
           <div class="text-xs font-medium text-slate-500">{{ stat.label }}</div>
@@ -157,12 +162,12 @@
             }
           </div>
           <div class="overflow-x-auto">
-            <table class="data-table">
+            <table class="stock-table">
               <thead>
                 <tr>
                   <th class="w-10 text-center">#</th>
                   @for (col of visiblePeriodColumnList(); track col.key) {
-                    <th>
+                    <th [class]="col.key === 'period' ? 'text-left w-auto' : 'text-right'">
                       <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key, $event)">
                         {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
                       </button>
@@ -182,12 +187,12 @@
                     @for (col of visiblePeriodColumnList(); track col.key) {
                       <td [class]="periodCellClass(col.key, row)">
                         @switch (col.key) {
-                          @case ('period') { <span class="font-semibold text-slate-900">{{ row.label }}</span> }
+                          @case ('period') { <span class="block truncate font-semibold text-slate-900" [title]="row.label">{{ row.label }}</span> }
                           @case ('tradeCount') { {{ row.tradeCount }} }
                           @case ('totalBuyValue') { {{ formatCurrency(row.totalBuyValue) }} }
                           @case ('totalSellValue') { {{ formatCurrency(row.totalSellValue) }} }
                           @case ('realisedPnL') { {{ formatCurrency(row.realisedPnL) }} }
-                          @case ('allocatedCharges') { <span class="text-red-600">{{ formatCurrency(row.allocatedCharges) }}</span> }
+                          @case ('allocatedCharges') { {{ formatCurrency(row.allocatedCharges) }} }
                           @case ('netPnL') { {{ formatCurrency(row.netPnL) }} }
                           @case ('winRate') { {{ row.winRate | number:'1.1-1' }}% }
                         }

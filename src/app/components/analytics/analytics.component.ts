@@ -48,6 +48,98 @@ export class AnalyticsComponent {
 
   analysis = computed(() => this.state.analysis());
 
+  bestWorstDays = computed(() => {
+    const daily = this.analysis()?.daily ?? [];
+    if (!daily.length) return { best: null, worst: null } as const;
+    const best = daily.reduce((max, day) => (day.netPnL > max.netPnL ? day : max), daily[0]);
+    const worst = daily.reduce((min, day) => (day.netPnL < min.netPnL ? day : min), daily[0]);
+    return { best, worst } as const;
+  });
+
+  bestWorstTrades = computed(() => {
+    const trades = this.analysis()?.filteredTrades ?? [];
+    if (!trades.length) return { best: null, worst: null } as const;
+    const best = trades.reduce((max, trade) => (trade.realisedPnL > max.realisedPnL ? trade : max), trades[0]);
+    const worst = trades.reduce((min, trade) => (trade.realisedPnL < min.realisedPnL ? trade : min), trades[0]);
+    return { best, worst } as const;
+  });
+
+  avgPnLPerOutcome = computed(() => {
+    const trades = this.analysis()?.filteredTrades ?? [];
+    const wins = trades.filter((t) => t.realisedPnL > 0);
+    const losses = trades.filter((t) => t.realisedPnL < 0);
+    const avgWinPerTrade = wins.length
+      ? wins.reduce((sum, trade) => sum + trade.realisedPnL, 0) / wins.length
+      : 0;
+    const avgLossPerTrade = losses.length
+      ? losses.reduce((sum, trade) => sum + trade.realisedPnL, 0) / losses.length
+      : 0;
+    return {
+      avgWinPerTrade,
+      avgLossPerTrade,
+      winTrades: wins.length,
+      lossTrades: losses.length,
+    };
+  });
+
+  stockDayWinLossSummary = computed(() => {
+    const trades = this.analysis()?.filteredTrades ?? [];
+    const buckets = new Map<string, { date: string; stock: string; netPnL: number }>();
+    for (const trade of trades) {
+      const stockKey = trade.isin || trade.stockName;
+      const key = `${trade.sellDate}::${stockKey}`;
+      const bucket = buckets.get(key);
+      if (bucket) {
+        bucket.netPnL += trade.realisedPnL;
+      } else {
+        buckets.set(key, { date: trade.sellDate, stock: trade.stockName, netPnL: trade.realisedPnL });
+      }
+    }
+
+    let winningStockDays = 0;
+    let losingStockDays = 0;
+    let flatStockDays = 0;
+    const byDateMap = new Map<string, { winning: number; losing: number; flat: number }>();
+
+    for (const bucket of buckets.values()) {
+      const dateEntry = byDateMap.get(bucket.date) ?? { winning: 0, losing: 0, flat: 0 };
+      if (bucket.netPnL > 0) {
+        winningStockDays++;
+        dateEntry.winning++;
+      } else if (bucket.netPnL < 0) {
+        losingStockDays++;
+        dateEntry.losing++;
+      } else {
+        flatStockDays++;
+        dateEntry.flat++;
+      }
+      byDateMap.set(bucket.date, dateEntry);
+    }
+
+    const byDate = [...byDateMap.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, values]) => ({ date, ...values }));
+
+    const stockDays = [...buckets.values()];
+    const best = stockDays.length
+      ? stockDays.reduce((max, stockDay) => (stockDay.netPnL > max.netPnL ? stockDay : max), stockDays[0])
+      : null;
+    const worst = stockDays.length
+      ? stockDays.reduce((min, stockDay) => (stockDay.netPnL < min.netPnL ? stockDay : min), stockDays[0])
+      : null;
+
+    return {
+      totalStockDays: buckets.size,
+      winningStockDays,
+      losingStockDays,
+      flatStockDays,
+      winRate: buckets.size ? (winningStockDays / buckets.size) * 100 : 0,
+      byDate,
+      best,
+      worst,
+    };
+  });
+
   chartPeriodLabel = computed(() => {
     const p = this.state.chartPeriod();
     return p.charAt(0).toUpperCase() + p.slice(1);
@@ -509,6 +601,66 @@ export class AnalyticsComponent {
             backgroundColor: 'rgba(239,68,68,0.82)',
             borderRadius: 4,
             maxBarThickness: 32,
+          },
+        ],
+      },
+      options: groupedBarChartOptions(''),
+    };
+  });
+
+  winLossByDateChartConfig = computed(() => {
+    this.chartVersion();
+    const days = [...(this.analysis()?.daily ?? [])].sort((a, b) => a.period.localeCompare(b.period));
+    if (!days.length) return null;
+    const mobile = isMobileChart();
+    return {
+      type: 'bar' as const,
+      data: {
+        labels: days.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
+        datasets: [
+          {
+            label: 'Winning Trades',
+            data: days.map((d) => d.winningTrades),
+            backgroundColor: 'rgba(16,185,129,0.82)',
+            borderRadius: 4,
+            maxBarThickness: 24,
+          },
+          {
+            label: 'Losing Trades',
+            data: days.map((d) => d.losingTrades),
+            backgroundColor: 'rgba(239,68,68,0.82)',
+            borderRadius: 4,
+            maxBarThickness: 24,
+          },
+        ],
+      },
+      options: groupedBarChartOptions(''),
+    };
+  });
+
+  winLossByStockDayDateChartConfig = computed(() => {
+    this.chartVersion();
+    const byDate = this.stockDayWinLossSummary().byDate;
+    if (!byDate.length) return null;
+    const mobile = isMobileChart();
+    return {
+      type: 'bar' as const,
+      data: {
+        labels: byDate.map((d) => abbreviateLabel(d.date, mobile ? 8 : 12)),
+        datasets: [
+          {
+            label: 'Winning Stock-Days',
+            data: byDate.map((d) => d.winning),
+            backgroundColor: 'rgba(59,130,246,0.82)',
+            borderRadius: 4,
+            maxBarThickness: 24,
+          },
+          {
+            label: 'Losing Stock-Days',
+            data: byDate.map((d) => d.losing),
+            backgroundColor: 'rgba(249,115,22,0.82)',
+            borderRadius: 4,
+            maxBarThickness: 24,
           },
         ],
       },

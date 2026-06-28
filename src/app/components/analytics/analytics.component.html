@@ -43,6 +43,84 @@
       }
     </div>
 
+    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Advanced Analysis</div>
+    <div class="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div class="card border-l-4 border-l-emerald-500 p-4">
+        <div class="text-xs font-medium text-slate-500">Best Trading Day</div>
+        <div class="mt-1 text-sm font-bold text-slate-900">
+          {{ bestWorstDays().best?.label || '—' }}
+        </div>
+        <div class="mt-0.5 text-xs" [class]="bestWorstDays().best ? pnlClass(bestWorstDays().best!.netPnL) : 'text-slate-400'">
+          {{ bestWorstDays().best ? formatCurrency(bestWorstDays().best!.netPnL) : 'No data' }}
+        </div>
+      </div>
+      <div class="card border-l-4 border-l-red-500 p-4">
+        <div class="text-xs font-medium text-slate-500">Worst Trading Day</div>
+        <div class="mt-1 text-sm font-bold text-slate-900">
+          {{ bestWorstDays().worst?.label || '—' }}
+        </div>
+        <div class="mt-0.5 text-xs" [class]="bestWorstDays().worst ? pnlClass(bestWorstDays().worst!.netPnL) : 'text-slate-400'">
+          {{ bestWorstDays().worst ? formatCurrency(bestWorstDays().worst!.netPnL) : 'No data' }}
+        </div>
+      </div>
+      <div class="card border-l-4 border-l-emerald-500 p-4">
+        <div class="text-xs font-medium text-slate-500">Best Trade</div>
+        <div class="mt-1 truncate text-sm font-bold text-slate-900">
+          {{ bestWorstTrades().best?.stockName || '—' }}
+        </div>
+        <div class="mt-0.5 text-xs" [class]="bestWorstTrades().best ? pnlClass(bestWorstTrades().best!.realisedPnL) : 'text-slate-400'">
+          {{ bestWorstTrades().best ? formatCurrency(bestWorstTrades().best!.realisedPnL) : 'No data' }}
+        </div>
+      </div>
+      <div class="card border-l-4 border-l-red-500 p-4">
+        <div class="text-xs font-medium text-slate-500">Worst Trade</div>
+        <div class="mt-1 truncate text-sm font-bold text-slate-900">
+          {{ bestWorstTrades().worst?.stockName || '—' }}
+        </div>
+        <div class="mt-0.5 text-xs" [class]="bestWorstTrades().worst ? pnlClass(bestWorstTrades().worst!.realisedPnL) : 'text-slate-400'">
+          {{ bestWorstTrades().worst ? formatCurrency(bestWorstTrades().worst!.realisedPnL) : 'No data' }}
+        </div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs font-medium text-slate-500">Avg Win per Trade</div>
+        <div class="mt-1 text-base font-bold text-emerald-600">
+          {{ formatCurrency(avgPnLPerOutcome().avgWinPerTrade) }}
+        </div>
+        <div class="mt-0.5 text-xs text-slate-400">{{ avgPnLPerOutcome().winTrades }} winning trades</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs font-medium text-slate-500">Avg Loss per Trade</div>
+        <div class="mt-1 text-base font-bold text-red-600">
+          {{ formatCurrency(avgPnLPerOutcome().avgLossPerTrade) }}
+        </div>
+        <div class="mt-0.5 text-xs text-slate-400">{{ avgPnLPerOutcome().lossTrades }} losing trades</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs font-medium text-slate-500">Stock-Day Win Rate</div>
+        <div class="mt-1 text-base font-bold text-slate-900">
+          {{ stockDayWinLossSummary().winRate | number:'1.1-1' }}%
+        </div>
+        <div class="mt-0.5 text-xs text-slate-400">
+          {{ stockDayWinLossSummary().winningStockDays }}W / {{ stockDayWinLossSummary().losingStockDays }}L / {{ stockDayWinLossSummary().flatStockDays }} flat
+        </div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs font-medium text-slate-500">Best / Worst Stock-Day</div>
+        <div class="mt-1 truncate text-xs text-slate-600">
+          Best: {{ stockDayWinLossSummary().best?.stock || '—' }} ({{ stockDayWinLossSummary().best?.date || '—' }})
+        </div>
+        <div class="text-xs text-emerald-600">
+          {{ stockDayWinLossSummary().best ? formatCurrency(stockDayWinLossSummary().best!.netPnL) : 'No data' }}
+        </div>
+        <div class="mt-1 truncate text-xs text-slate-600">
+          Worst: {{ stockDayWinLossSummary().worst?.stock || '—' }} ({{ stockDayWinLossSummary().worst?.date || '—' }})
+        </div>
+        <div class="text-xs text-red-600">
+          {{ stockDayWinLossSummary().worst ? formatCurrency(stockDayWinLossSummary().worst!.netPnL) : 'No data' }}
+        </div>
+      </div>
+    </div>
+
     <!-- Performance -->
     <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Performance</div>
     <div class="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-12">
@@ -171,6 +249,18 @@
         [config]="winLossByStockChartConfig()"
         title="Win / Loss by Stock"
         subtitle="Top 12 stocks by trade count — winning vs losing trades"
+        size="lg"
+      />
+      <app-chart-card
+        [config]="winLossByDateChartConfig()"
+        title="Win / Loss by Date"
+        subtitle="Daily count of winning vs losing trades"
+        size="lg"
+      />
+      <app-chart-card
+        [config]="winLossByStockDayDateChartConfig()"
+        title="Win / Loss by Stock per Date"
+        subtitle="Daily count of winning vs losing stock-day outcomes"
         size="lg"
       />
       <app-chart-card
