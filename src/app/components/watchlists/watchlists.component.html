@@ -1,0 +1,58 @@
+<div class="space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-xl font-bold text-slate-900">Watchlists</h2>
+      <p class="text-sm text-slate-500">Manage symbols tracked by your local backend worker</p>
+    </div>
+    @if (!auth.user()) {
+      <button type="button" class="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white" (click)="auth.signInWithGoogle()">
+        Sign in with Google
+      </button>
+    }
+  </div>
+
+  @if (error()) {
+    <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>
+  }
+
+  <div class="flex flex-wrap gap-2">
+    <input [(ngModel)]="newName" placeholder="New watchlist name" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    <button type="button" class="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white" (click)="createWatchlist()">Create</button>
+  </div>
+
+  @for (wl of watchlists(); track wl.id) {
+    <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="mb-3 flex items-center justify-between">
+        <h3 class="font-semibold text-slate-900">
+          <span class="mr-2 inline-block h-3 w-3 rounded-full" [style.background]="wl.color"></span>
+          {{ wl.name }}
+          <span class="ml-2 text-xs font-normal text-slate-400">({{ wl.type }})</span>
+        </h3>
+        @if (wl.type === 'manual') {
+          <button type="button" class="text-xs text-red-500" (click)="deleteWatchlist(wl.id)">Delete</button>
+        }
+      </div>
+
+      <div class="mb-3 flex gap-2">
+        <input [(ngModel)]="newSymbol" placeholder="Add symbol e.g. RELIANCE" class="rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" />
+        <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" (click)="addSymbol(wl)">Add</button>
+      </div>
+
+      <div class="divide-y divide-slate-100">
+        @for (sym of wl.stockSymbols; track sym) {
+          <div class="flex items-center justify-between py-2 text-sm">
+            <a [routerLink]="['/stock', sym]" class="font-medium text-brand-600 hover:underline">{{ sym }}</a>
+            <div class="flex items-center gap-3">
+              <span class="text-slate-500">{{ stockPrice(sym) }}</span>
+              <button type="button" class="text-xs text-red-400" (click)="removeSymbol(wl, sym)">Remove</button>
+            </div>
+          </div>
+        } @empty {
+          <p class="py-4 text-center text-sm text-slate-400">No symbols yet</p>
+        }
+      </div>
+    </div>
+  } @empty {
+    <p class="text-center text-slate-500">No watchlists. Create one to start tracking stocks.</p>
+  }
+</div>

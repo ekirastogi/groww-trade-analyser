@@ -125,3 +125,73 @@ export interface AnalysisOptions {
   endDate?: string;
   tradeTypes?: TradeType[];
 }
+
+export interface StoredTrade extends Trade {
+  dedupeKey: string;
+  uploadId: string;
+  symbol: string;
+  allocatedCharges: number;
+  netPnL: number;
+  createdAt: number;
+}
+
+export interface TradeTypeStats {
+  tradeCount: number;
+  winningTrades: number;
+  losingTrades: number;
+  winRate: number;
+  realisedPnL: number;
+  allocatedCharges: number;
+  netPnL: number;
+}
+
+export interface StockProfileDateRange {
+  first: string;
+  last: string;
+}
+
+export interface StockProfile {
+  symbol: string;
+  stockName: string;
+  isin: string;
+  tradeCount: number;
+  winningTrades: number;
+  losingTrades: number;
+  breakEvenTrades: number;
+  winRate: number;
+  totalBuyValue: number;
+  totalSellValue: number;
+  grossProfit: number;
+  grossLoss: number;
+  realisedPnL: number;
+  allocatedCharges: number;
+  netPnL: number;
+  netPnLPct: number;
+  avgHoldingDays: number;
+  dateRange: StockProfileDateRange;
+  byTradeType: Partial<Record<TradeType, TradeTypeStats>>;
+  uploadIds: string[];
+  updatedAt: number;
+}
+
+export interface UploadRecord {
+  id: string;
+  fileName: string;
+  contentHash: string;
+  uploadedAt: number;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  clientName: string;
+  clientCode: string;
+  reportRealisedPnL: number;
+  reportUnrealisedPnL: number;
+  chargesTotal: number;
+  charges: ChargeItem[];
+  tradeCount: number;
+  newTradesAdded: number;
+  duplicatesSkipped: number;
+  status: 'completed' | 'failed';
+  errorMessage?: string;
+}
+

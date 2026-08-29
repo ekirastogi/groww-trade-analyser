@@ -1,8 +1,10 @@
-import { Component, inject, signal, HostListener } from '@angular/core';
+import { Component, inject, signal, HostListener, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ReportStateService } from '../services/report-state.service';
 import { ReportHistoryComponent } from '../components/shared/report-history/report-history.component';
+import { AuthService } from '../services/auth.service';
+import { NotificationService } from '../services/notification.service';
 
 @Component({
   selector: 'app-admin-layout',
@@ -10,10 +12,18 @@ import { ReportHistoryComponent } from '../components/shared/report-history/repo
   imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ReportHistoryComponent],
   templateUrl: './admin-layout.component.html',
 })
-export class AdminLayoutComponent {
+export class AdminLayoutComponent implements OnInit {
   readonly state = inject(ReportStateService);
+  readonly auth = inject(AuthService);
+  private notifications = inject(NotificationService);
   sidebarOpen = signal(false);
   isMobile = signal(typeof window !== 'undefined' && window.innerWidth < 1024);
+
+  ngOnInit(): void {
+    if (this.auth.user()) {
+      this.notifications.requestPermission();
+    }
+  }
 
   @HostListener('window:resize')
   onResize(): void {
