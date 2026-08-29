@@ -95,33 +95,43 @@
               <thead>
                 <tr>
                   <th class="w-10 text-center">#</th>
-                  <th class="text-left">Stock</th>
-                  <th class="text-right">Trades</th>
-                  <th class="text-right">Buy Value</th>
-                  <th class="text-right">P&amp;L</th>
-                  <th class="text-right">Charges</th>
-                  <th class="text-right">Net P&amp;L</th>
-                  <th class="text-right">Win Rate</th>
-                  <th class="text-right">LTP</th>
+                  @for (col of tierStockColumns; track col.key) {
+                    <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
+                      <button
+                        type="button"
+                        class="sort-btn"
+                        [class.sort-btn-active]="tableSort.isActive(col.key)"
+                        (click)="tableSort.toggle(col.key, $event)"
+                      >
+                        {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
+                      </button>
+                    </th>
+                  }
                 </tr>
               </thead>
               <tbody>
                 @for (stock of tierStocks(); track stock.isin || stock.stockName; let i = $index) {
                   <tr>
                     <td class="text-center tabular-nums text-slate-400">{{ i + 1 }}</td>
-                    <td class="col-name">
-                      <a [routerLink]="['/stock', stockSymbol(stock)]" class="font-medium text-kairo-600 hover:underline">
-                        {{ stock.stockName }}
-                      </a>
-                      <div class="text-xs text-slate-400">{{ stockSymbol(stock) }}</div>
-                    </td>
-                    <td class="text-right tabular-nums">{{ stock.tradeCount }}</td>
-                    <td class="text-right tabular-nums">{{ formatCurrency(stock.buyValue) }}</td>
-                    <td class="text-right tabular-nums" [class]="pnlClass(stock.realisedPnL)">{{ formatCurrency(stock.realisedPnL) }}</td>
-                    <td class="text-right tabular-nums text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</td>
-                    <td class="text-right tabular-nums font-semibold" [class]="pnlClass(stock.netPnL)">{{ formatCurrency(stock.netPnL) }}</td>
-                    <td class="text-right tabular-nums">{{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }}</td>
-                    <td class="text-right text-slate-500">{{ stockPrice(stockSymbol(stock)) }}</td>
+                    @for (col of tierStockColumns; track col.key) {
+                      <td [class]="col.key === 'stockName' ? 'col-name' : tierStockCellClass(col.key, stock)">
+                        @switch (col.key) {
+                          @case ('stockName') {
+                            <a [routerLink]="['/stock', stockSymbol(stock)]" class="font-medium text-kairo-600 hover:underline">
+                              {{ stock.stockName }}
+                            </a>
+                            <div class="text-xs text-slate-400">{{ stockSymbol(stock) }}</div>
+                          }
+                          @case ('tradeCount') { {{ stock.tradeCount }} }
+                          @case ('buyValue') { {{ formatCurrency(stock.buyValue) }} }
+                          @case ('realisedPnL') { {{ formatCurrency(stock.realisedPnL) }} }
+                          @case ('allocatedCharges') { {{ formatCurrency(stock.allocatedCharges) }} }
+                          @case ('netPnL') { {{ formatCurrency(stock.netPnL) }} }
+                          @case ('winRate') { {{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }} }
+                          @case ('ltp') { {{ stockPrice(stockSymbol(stock)) }} }
+                        }
+                      </td>
+                    }
                   </tr>
                 } @empty {
                   <tr>

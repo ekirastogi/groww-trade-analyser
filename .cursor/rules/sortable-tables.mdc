@@ -1,0 +1,34 @@
+---
+description: All data tables must support column-header sorting like the dashboard per-stock table
+globs: src/app/**/*.html,src/app/**/*.ts
+alwaysApply: false
+---
+
+# Sortable tables
+
+Every data table in the app must support sorting via clickable column headers, matching the dashboard per-stock table pattern.
+
+## Required pattern
+
+1. Use `TableSortState` from `src/app/utils/table-sort.utils.ts` (do not duplicate sort logic).
+2. Define a `columns` array with `{ key, label }` for each sortable column.
+3. Expose a `sortedRows` computed that calls `tableSort.sort(rows, getValue)`.
+4. Render headers with the shared `sort-btn` / `sort-btn-active` classes:
+
+```html
+<button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive(col.key)" (click)="tableSort.toggle(col.key, $event)">
+  {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
+</button>
+```
+
+5. Serial number (`#`) columns are not sortable.
+6. Default sort: text columns ascending (`stockName`, `symbol`, `period`, dates); numeric columns descending (`netPnL`, `realisedPnL`, `amount`, etc.) — use `defaultSortDirection()`.
+
+## Nested / accordion tables
+
+Trade detail tables inside accordions must also be sortable using the same pattern (typically `tradeSort` with `sellDate` default).
+
+## Do not
+
+- Hard-code `.sort()` in templates without header toggles.
+- Add new tables without sortable headers.

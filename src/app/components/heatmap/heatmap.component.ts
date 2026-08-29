@@ -9,6 +9,7 @@ import { StockSummary } from '../../models/trade.models';
 import { pnlColor } from '../../utils/chart-theme';
 import { formatCurrency, formatPct } from '../../utils/format.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
+import { TableSortState } from '../../utils/table-sort.utils';
 
 interface HeatmapRow {
   symbol: string;
@@ -33,6 +34,17 @@ export class HeatmapComponent {
 
   private marketStocks = toSignal(this.stockSvc.watchAllStocks(), { initialValue: [] });
   private watchlists = toSignal(this.watchlistSvc.watchAll(), { initialValue: [] });
+
+  readonly tableSort = new TableSortState('netPnL');
+
+  readonly heatmapColumns = [
+    { key: 'symbol', label: 'Symbol', align: 'left' as const },
+    { key: 'dayChangePct', label: 'Day %', align: 'right' as const },
+    { key: 'rsi', label: 'RSI', align: 'right' as const },
+    { key: 'netPnL', label: 'My Net P&L', align: 'right' as const },
+    { key: 'winRate', label: 'Win Rate', align: 'right' as const },
+    { key: 'nearestSupportDist', label: 'Dist to S1', align: 'right' as const },
+  ];
 
   rows = computed((): HeatmapRow[] => {
     const marketMap = new Map(this.marketStocks().map((stock) => [stock.symbol.toUpperCase(), stock]));
@@ -70,8 +82,8 @@ export class HeatmapComponent {
       }));
     }
 
-    return stocksToShow
-      .map((stock): HeatmapRow => {
+    return this.tableSort.sort(
+      stocksToShow.map((stock): HeatmapRow => {
         const symbol = this.stockSymbol(stock);
         const market = marketMap.get(symbol.toUpperCase());
         const support = market?.supportLevels?.[0] ?? market?.ltp ?? 0;
@@ -87,8 +99,26 @@ export class HeatmapComponent {
           winRate: stock.winRate ?? 0,
           nearestSupportDist: dist,
         };
-      })
-      .sort((a, b) => b.netPnL - a.netPnL);
+      }),
+      (row, col) => {
+        switch (col) {
+          case 'symbol':
+            return row.symbol.toLowerCase();
+          case 'dayChangePct':
+            return row.dayChangePct;
+          case 'rsi':
+            return row.rsi;
+          case 'netPnL':
+            return row.netPnL;
+          case 'winRate':
+            return row.winRate;
+          case 'nearestSupportDist':
+            return row.nearestSupportDist;
+          default:
+            return 0;
+        }
+      }
+    );
   });
 
   hasMarketData = computed(() => this.marketStocks().length > 0);

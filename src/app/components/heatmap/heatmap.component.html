@@ -18,35 +18,41 @@
     }
 
     <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-      <table class="w-full text-sm">
-        <thead class="bg-slate-50 text-left text-xs text-slate-500">
+      <table class="stock-table min-w-[640px]">
+        <thead>
           <tr>
-            <th class="px-4 py-2">#</th>
-            <th class="px-4 py-2">Symbol</th>
-            <th class="px-4 py-2 text-right">Day %</th>
-            <th class="px-4 py-2 text-right">RSI</th>
-            <th class="px-4 py-2 text-right">My Net P&L</th>
-            <th class="px-4 py-2 text-right">Win Rate</th>
-            <th class="px-4 py-2 text-right">Dist to S1</th>
+            <th class="w-10 text-center">#</th>
+            @for (col of heatmapColumns; track col.key) {
+              <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  [class.sort-btn-active]="tableSort.isActive(col.key)"
+                  (click)="tableSort.toggle(col.key, $event)"
+                >
+                  {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
+                </button>
+              </th>
+            }
           </tr>
         </thead>
         <tbody>
           @for (row of rows(); track row.symbol; let i = $index) {
-            <tr class="border-t border-slate-100">
-              <td class="px-4 py-2 text-slate-400">{{ i + 1 }}</td>
-              <td class="px-4 py-2">
+            <tr>
+              <td class="text-center text-slate-400">{{ i + 1 }}</td>
+              <td class="col-name">
                 <a [routerLink]="['/stock', row.symbol]" class="font-medium text-kairo-600 hover:underline">{{ row.symbol }}</a>
                 <div class="text-xs text-slate-400">{{ row.name }}</div>
               </td>
-              <td class="px-4 py-2 text-right font-mono" [style.color]="cellColor(row.dayChangePct)">{{ row.dayChangePct.toFixed(2) }}%</td>
-              <td class="px-4 py-2 text-right font-mono" [class.text-red-600]="row.rsi > 70" [class.text-emerald-600]="row.rsi < 30">{{ row.rsi.toFixed(1) }}</td>
-              <td class="px-4 py-2 text-right font-mono" [style.color]="cellColor(row.netPnL)">{{ fmt(row.netPnL) }}</td>
-              <td class="px-4 py-2 text-right">{{ row.winRate.toFixed(0) }}%</td>
-              <td class="px-4 py-2 text-right">{{ row.nearestSupportDist.toFixed(1) }}%</td>
+              <td class="text-right font-mono" [style.color]="cellColor(row.dayChangePct)">{{ row.dayChangePct.toFixed(2) }}%</td>
+              <td class="text-right font-mono" [class.text-red-600]="row.rsi > 70" [class.text-emerald-600]="row.rsi < 30">{{ row.rsi.toFixed(1) }}</td>
+              <td class="text-right font-mono" [style.color]="cellColor(row.netPnL)">{{ fmt(row.netPnL) }}</td>
+              <td class="text-right tabular-nums">{{ row.winRate.toFixed(0) }}%</td>
+              <td class="text-right tabular-nums">{{ row.nearestSupportDist.toFixed(1) }}%</td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="7" class="px-4 py-12 text-center text-slate-400">
+              <td colspan="7" class="py-12 text-center text-slate-400">
                 No stocks found. Upload a P&amp;L file or add symbols to a watchlist.
               </td>
             </tr>

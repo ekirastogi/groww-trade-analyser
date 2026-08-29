@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -6,6 +6,7 @@ import { RecommendationService } from '../../services/recommendation.service';
 import { AuthService } from '../../services/auth.service';
 import { TradeSuggestion } from '../../models/signal.models';
 import { formatCurrency } from '../../utils/format.utils';
+import { TableSortState } from '../../utils/table-sort.utils';
 
 @Component({
   selector: 'app-signals',
@@ -21,6 +22,16 @@ export class SignalsComponent {
   processing = signal<string | null>(null);
   error = signal<string | null>(null);
   fmt = formatCurrency;
+  readonly tableSort = new TableSortState('createdAt', 'desc');
+
+  readonly historyColumns = [
+    { key: 'createdAt', label: 'Time', align: 'left' as const },
+    { key: 'symbol', label: 'Symbol', align: 'left' as const },
+    { key: 'side', label: 'Side', align: 'left' as const },
+    { key: 'entry', label: 'Entry', align: 'left' as const },
+    { key: 'status', label: 'Status', align: 'left' as const },
+    { key: 'outcomePct', label: 'Outcome', align: 'right' as const },
+  ];
 
   pending(recs: TradeSuggestion[]) {
     return recs.filter((r) => r.approvalStatus === 'pending' || r.status === 'pending_approval');
@@ -29,6 +40,27 @@ export class SignalsComponent {
   history(recs: TradeSuggestion[]) {
     return recs.filter((r) => r.approvalStatus !== 'pending' && r.status !== 'pending_approval');
   }
+
+  sortedHistory = computed(() =>
+    this.tableSort.sort(this.history(this.recommendations()), (rec, col) => {
+      switch (col) {
+        case 'createdAt':
+          return rec.createdAt ?? 0;
+        case 'symbol':
+          return rec.symbol.toLowerCase();
+        case 'side':
+          return rec.side;
+        case 'entry':
+          return rec.entry;
+        case 'status':
+          return rec.approvalStatus ?? rec.status;
+        case 'outcomePct':
+          return rec.outcomePct ?? -Infinity;
+        default:
+          return 0;
+      }
+    })
+  );
 
   async approve(rec: TradeSuggestion): Promise<void> {
     this.processing.set(rec.id);

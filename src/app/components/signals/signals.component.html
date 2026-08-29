@@ -51,22 +51,35 @@
   <section>
     <h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">History</h3>
     <div class="card overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-slate-50 text-left text-xs text-slate-500">
-          <tr><th class="px-4 py-2">Time</th><th class="px-4 py-2">Symbol</th><th class="px-4 py-2">Side</th><th class="px-4 py-2">Entry</th><th class="px-4 py-2">Status</th><th class="px-4 py-2 text-right">Outcome</th></tr>
+      <table class="stock-table min-w-[640px]">
+        <thead>
+          <tr>
+            @for (col of historyColumns; track col.key) {
+              <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  [class.sort-btn-active]="tableSort.isActive(col.key)"
+                  (click)="tableSort.toggle(col.key, $event)"
+                >
+                  {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
+                </button>
+              </th>
+            }
+          </tr>
         </thead>
         <tbody>
-          @for (rec of history(recommendations()); track rec.id) {
-            <tr class="border-t border-slate-100">
-              <td class="px-4 py-2">{{ rec.createdAt | date:'short' }}</td>
-              <td class="px-4 py-2"><a [routerLink]="['/stock', rec.symbol]" class="font-medium text-kairo-600">{{ rec.symbol }}</a></td>
-              <td class="px-4 py-2">{{ rec.side }}</td>
-              <td class="px-4 py-2">{{ fmt(rec.entry) }}</td>
-              <td class="px-4 py-2"><span class="rounded-full px-2 py-0.5 text-xs" [class]="statusClass(rec)">{{ rec.approvalStatus ?? rec.status }}</span></td>
-              <td class="px-4 py-2 text-right">{{ rec.outcomePct != null ? rec.outcomePct.toFixed(2) + '%' : '—' }}</td>
+          @for (rec of sortedHistory(); track rec.id) {
+            <tr>
+              <td>{{ rec.createdAt | date:'short' }}</td>
+              <td><a [routerLink]="['/stock', rec.symbol]" class="font-medium text-kairo-600">{{ rec.symbol }}</a></td>
+              <td>{{ rec.side }}</td>
+              <td>{{ fmt(rec.entry) }}</td>
+              <td><span class="rounded-full px-2 py-0.5 text-xs" [class]="statusClass(rec)">{{ rec.approvalStatus ?? rec.status }}</span></td>
+              <td class="text-right tabular-nums">{{ rec.outcomePct != null ? rec.outcomePct.toFixed(2) + '%' : '—' }}</td>
             </tr>
           } @empty {
-            <tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">No history yet</td></tr>
+            <tr><td colspan="6" class="py-8 text-center text-slate-400">No history yet</td></tr>
           }
         </tbody>
       </table>

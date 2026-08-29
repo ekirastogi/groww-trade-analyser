@@ -20,6 +20,7 @@ import {
   tierShortLabel,
 } from '../../utils/pnl-watchlist.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
+import { TableSortState } from '../../utils/table-sort.utils';
 
 type WatchlistTab = 'profitable' | 'losing' | 'custom';
 
@@ -74,6 +75,18 @@ export class WatchlistsComponent {
 
   readonly formatCurrency = formatCurrency;
   readonly pnlClass = pnlClass;
+  readonly tableSort = new TableSortState('netPnL');
+
+  readonly tierStockColumns = [
+    { key: 'stockName', label: 'Stock', align: 'left' as const },
+    { key: 'tradeCount', label: 'Trades', align: 'right' as const },
+    { key: 'buyValue', label: 'Buy Value', align: 'right' as const },
+    { key: 'realisedPnL', label: 'P&L', align: 'right' as const },
+    { key: 'allocatedCharges', label: 'Charges', align: 'right' as const },
+    { key: 'netPnL', label: 'Net P&L', align: 'right' as const },
+    { key: 'winRate', label: 'Win Rate', align: 'right' as const },
+    { key: 'ltp', label: 'LTP', align: 'right' as const },
+  ];
 
   isPnlTab = computed(() => this.activeTab() === 'profitable' || this.activeTab() === 'losing');
 
@@ -160,14 +173,17 @@ export class WatchlistsComponent {
     if (!watchlist) return [] as StockSummary[];
 
     const tier = getPnlWatchlistTier(watchlist.id);
+    let stocks: StockSummary[];
     if (tier) {
-      return stockSummariesForPnlTier(stockSummaries, tier, this.tierMode());
+      stocks = stockSummariesForPnlTier(stockSummaries, tier, this.tierMode());
+    } else {
+      stocks = watchlist.stockSymbols
+        .map((symbol) => this.findStockSummary(stockSummaries, symbol))
+        .filter((stock): stock is StockSummary => !!stock)
+        .sort((a, b) => b.netPnL - a.netPnL);
     }
 
-    return watchlist.stockSymbols
-      .map((symbol) => this.findStockSummary(stockSummaries, symbol))
-      .filter((stock): stock is StockSummary => !!stock)
-      .sort((a, b) => b.netPnL - a.netPnL);
+    return this.tableSort.sort(stocks, (stock, col) => this.tierStockSortValue(stock, col));
   });
 
   tierSummary = computed((): TierSummary | null => {
@@ -287,6 +303,49 @@ export class WatchlistsComponent {
   stockPrice(symbol: string): string {
     const s = this.stocks().find((x) => x.symbol === symbol);
     return s ? `₹${s.ltp?.toFixed(2)} (${s.changePct?.toFixed(2)}%)` : '—';
+  }
+
+  tierStockCellClass(key: string, stock: StockSummary): string {
+    const base = 'text-right tabular-nums';
+    switch (key) {
+      case 'realisedPnL':
+        return `${base} ${this.pnlClass(stock.realisedPnL)}`;
+      case 'allocatedCharges':
+        return `${base} text-red-600`;
+      case 'netPnL':
+        return `${base} font-semibold ${this.pnlClass(stock.netPnL)}`;
+      case 'ltp':
+        return 'text-right text-slate-500';
+      default:
+        return base;
+    }
+  }
+
+  private tierStockSortValue(stock: StockSummary, col: string): string | number {
+    switch (col) {
+      case 'stockName':
+        return stock.stockName.toLowerCase();
+      case 'tradeCount':
+        return stock.tradeCount;
+      case 'buyValue':
+        return stock.buyValue;
+      case 'realisedPnL':
+        return stock.realisedPnL;
+      case 'allocatedCharges':
+        return stock.allocatedCharges;
+      case 'netPnL':
+        return stock.netPnL;
+      case 'winRate':
+        return stock.winRate ?? -1;
+      case 'ltp':
+        return this.stockLtp(this.stockSymbol(stock));
+      default:
+        return 0;
+    }
+  }
+
+  private stockLtp(symbol: string): number {
+    return this.stocks().find((x) => x.symbol === symbol)?.ltp ?? -1;
   }
 
   stockSymbol(stock: StockSummary): string {
