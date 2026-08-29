@@ -26,7 +26,9 @@ import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type
 import { MarketCapFilterComponent } from '../shared/market-cap-filter/market-cap-filter.component';
 import { MARKET_CAP_LABELS, MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
 
-type WatchlistTab = 'all' | 'losing' | 'profitable' | 'custom';
+const ALL_SUBTAB_ID = '__all__';
+
+type WatchlistTab = 'losing' | 'profitable' | 'custom';
 
 interface TierSummary {
   stockCount: number;
@@ -48,6 +50,14 @@ interface AutoTierTab {
   count: number;
 }
 
+interface CustomSubTab {
+  id: string;
+  label: string;
+  fullLabel: string;
+  count: number;
+  color: string;
+}
+
 @Component({
   selector: 'app-watchlists',
   standalone: true,
@@ -64,11 +74,12 @@ export class WatchlistsComponent {
   stocks = toSignal(this.stockSvc.watchAllStocks(), { initialValue: [] });
 
   readonly mainTabs: { id: WatchlistTab; label: string }[] = [
-    { id: 'all', label: 'All' },
     { id: 'losing', label: 'Loss making' },
     { id: 'profitable', label: 'Profitable' },
     { id: 'custom', label: 'Custom' },
   ];
+
+  readonly allSubtabId = ALL_SUBTAB_ID;
 
   activeTab = signal<WatchlistTab>('losing');
   tierMode = signal<PnlTierMode>(loadPnlTierMode());
@@ -93,9 +104,11 @@ export class WatchlistsComponent {
     { key: 'winRate', label: 'Win Rate', align: 'right' as const, mobile: false },
   ];
 
-  isStockTab = computed(() => this.activeTab() === 'all' || this.activeTab() === 'profitable' || this.activeTab() === 'losing');
-
   isPnlTab = computed(() => this.activeTab() === 'profitable' || this.activeTab() === 'losing');
+
+  showStockTable = computed(
+    () => this.isPnlTab() || (this.activeTab() === 'custom' && this.state.hasReport())
+  );
 
   customWatchlists = computed(() =>
     this.watchlists()
@@ -154,64 +167,125 @@ export class WatchlistsComponent {
     this.autoTierTabs().filter((tab) => getPnlWatchlistTier(tab.watchlist.id)?.side === 'profit')
   );
 
-  visibleAutoTierTabs = computed(() =>
-    this.activeTab() === 'profitable' ? this.profitTierTabs() : this.lossTierTabs()
-  );
+  visibleAutoTierTabs = computed((): AutoTierTab[] => {
+    const tiers =
+      this.activeTab() === 'profitable' ? this.profitTierTabs() : this.lossTierTabs();
+    const summaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
+    const allCount = summaries.filter((stock) =>
+      this.activeTab() === 'profitable' ? stock.netPnL > 0 : stock.netPnL < 0
+    ).length;
+
+    const allTab: AutoTierTab = {
+      watchlist: {
+        id: ALL_SUBTAB_ID,
+        name: 'All',
+        type: 'pnl_derived',
+        color: this.activeTab() === 'profitable' ? '#22c55e' : '#ef4444',
+        sortOrder: -1,
+        stockSymbols: [],
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      shortLabel: 'All',
+      fullLabel:
+        this.activeTab() === 'profitable' ? 'All profitable stocks' : 'All loss-making stocks',
+      count: allCount,
+    };
+
+    return [allTab, ...tiers];
+  });
+
+  visibleCustomSubTabs = computed((): CustomSubTab[] => {
+    const lists = this.customWatchlists();
+    const summaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
+    const allSymbols = new Set(lists.flatMap((wl) => wl.stockSymbols.map((s) => s.toUpperCase())));
+    const allCount = [...allSymbols].filter((symbol) => this.findStockSummary(summaries, symbol)).length;
+
+    return [
+      {
+        id: ALL_SUBTAB_ID,
+        label: `All (${allCount})`,
+        fullLabel: 'All custom stocks',
+        count: allCount,
+        color: '#6366f1',
+      },
+      ...lists.map((wl) => ({
+        id: wl.id,
+        label: `${wl.name} (${wl.stockSymbols.length})`,
+        fullLabel: wl.name,
+        count: wl.stockSymbols.length,
+        color: wl.color,
+      })),
+    ];
+  });
+
+  activeCustomSubTabId = computed(() => this.selectedCustomWatchlistId() ?? ALL_SUBTAB_ID);
 
   activeAutoWatchlist = computed(() => {
     if (!this.isPnlTab()) return null;
 
     const tabs = this.visibleAutoTierTabs();
-    const selected = this.selectedAutoTierId();
-    if (selected) {
-      const match = tabs.find((tab) => tab.watchlist.id === selected);
-      if (match) return match.watchlist;
-    }
-    return tabs.find((tab) => tab.count > 0)?.watchlist ?? tabs[0]?.watchlist ?? null;
+    const selected = this.selectedAutoTierId() ?? ALL_SUBTAB_ID;
+    return tabs.find((tab) => tab.watchlist.id === selected)?.watchlist ?? tabs[0]?.watchlist ?? null;
   });
 
   activeAutoTierMeta = computed(() => {
     const watchlist = this.activeAutoWatchlist();
     if (!watchlist) return null;
-    return this.autoTierTabs().find((tab) => tab.watchlist.id === watchlist.id) ?? null;
+    return this.visibleAutoTierTabs().find((tab) => tab.watchlist.id === watchlist.id) ?? null;
   });
 
   activeViewLabel = computed(() => {
-    if (this.activeTab() === 'all') return 'All stocks';
+    if (this.activeTab() === 'custom') {
+      return (
+        this.visibleCustomSubTabs().find((tab) => tab.id === this.activeCustomSubTabId())?.fullLabel ??
+        'All custom stocks'
+      );
+    }
     return this.activeAutoTierMeta()?.fullLabel ?? '';
   });
 
   activeCustomWatchlist = computed(() => {
-    const lists = this.customWatchlists();
-    const selected = this.selectedCustomWatchlistId();
-    if (selected) {
-      const match = lists.find((wl) => wl.id === selected);
-      if (match) return match;
-    }
-    return lists[0] ?? null;
+    const id = this.activeCustomSubTabId();
+    if (id === ALL_SUBTAB_ID) return null;
+    return this.customWatchlists().find((wl) => wl.id === id) ?? null;
   });
 
   tierStocks = computed(() => {
     const stockSummaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
 
-    if (this.activeTab() === 'all') {
-      const stocks = [...stockSummaries].sort((a, b) => b.netPnL - a.netPnL);
+    if (this.activeTab() === 'custom') {
+      const lists = this.customWatchlists();
+      const selected = this.activeCustomSubTabId();
+      const symbols =
+        selected === ALL_SUBTAB_ID
+          ? [...new Set(lists.flatMap((wl) => wl.stockSymbols.map((s) => s.toUpperCase())))]
+          : (lists.find((wl) => wl.id === selected)?.stockSymbols ?? []);
+
+      const stocks = symbols
+        .map((symbol) => this.findStockSummary(stockSummaries, symbol))
+        .filter((stock): stock is StockSummary => !!stock)
+        .sort((a, b) => b.netPnL - a.netPnL);
+
       return this.tableSort.sort(stocks, (stock, col) => this.tierStockSortValue(stock, col));
     }
 
     const watchlist = this.activeAutoWatchlist();
     if (!watchlist) return [] as StockSummary[];
 
-    const tier = getPnlWatchlistTier(watchlist.id);
-    let stocks: StockSummary[];
-    if (tier) {
-      stocks = stockSummariesForPnlTier(stockSummaries, tier, this.tierMode());
-    } else {
-      stocks = watchlist.stockSymbols
-        .map((symbol) => this.findStockSummary(stockSummaries, symbol))
-        .filter((stock): stock is StockSummary => !!stock)
+    if (watchlist.id === ALL_SUBTAB_ID) {
+      const stocks = stockSummaries
+        .filter((stock) =>
+          this.activeTab() === 'profitable' ? stock.netPnL > 0 : stock.netPnL < 0
+        )
         .sort((a, b) => b.netPnL - a.netPnL);
+      return this.tableSort.sort(stocks, (stock, col) => this.tierStockSortValue(stock, col));
     }
+
+    const tier = getPnlWatchlistTier(watchlist.id);
+    const stocks = tier
+      ? stockSummariesForPnlTier(stockSummaries, tier, this.tierMode())
+      : [];
 
     return this.tableSort.sort(stocks, (stock, col) => this.tierStockSortValue(stock, col));
   });
@@ -252,6 +326,7 @@ export class WatchlistsComponent {
   setTab(tab: WatchlistTab): void {
     this.activeTab.set(tab);
     this.selectedAutoTierId.set(null);
+    this.selectedCustomWatchlistId.set(null);
     this.error.set(null);
   }
 

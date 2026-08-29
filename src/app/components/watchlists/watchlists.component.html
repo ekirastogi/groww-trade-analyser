@@ -26,14 +26,20 @@
     }
   </div>
 
-  @if (isStockTab()) {
-    @if (!state.hasReport()) {
+  @if (activeTab() === 'custom') {
+    <div class="flex flex-wrap gap-2">
+      <input [(ngModel)]="newName" placeholder="New watchlist name" class="input-field max-w-xs" />
+      <button type="button" class="btn-primary" (click)="createWatchlist()">Create watchlist</button>
+    </div>
+  }
+
+  @if (isPnlTab() && !state.hasReport()) {
       <div class="card overflow-hidden p-8 text-center">
         <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
         <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to generate watchlists and tier summaries.</p>
-        <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
-      </div>
-    } @else {
+      <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
+    </div>
+  } @else if (showStockTable()) {
       <div class="watchlist-sticky-toolbar">
         <button
           type="button"
@@ -100,12 +106,40 @@
                   [class.tier-segment-item-active]="activeAutoWatchlist()?.id === tab.watchlist.id"
                   (click)="selectAutoTier(tab.watchlist.id)"
                 >
-                  <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.watchlist.color"></span>
+                  @if (tab.watchlist.id !== allSubtabId) {
+                    <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.watchlist.color"></span>
+                  }
                   {{ tierTabLabel(tab) }}
                 </button>
               }
             </div>
           </div>
+        } @else {
+          <div class="watchlist-tier-tabs">
+            <div class="tier-segmented-control">
+              @for (tab of visibleCustomSubTabs(); track tab.id) {
+                <button
+                  type="button"
+                  class="tier-segment-item"
+                  [class.tier-segment-item-active]="activeCustomSubTabId() === tab.id"
+                  (click)="selectCustomWatchlist(tab.id)"
+                >
+                  <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.color"></span>
+                  {{ tab.label }}
+                </button>
+              }
+            </div>
+          </div>
+
+          @if (activeCustomWatchlist(); as wl) {
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <div class="flex min-w-0 flex-1 gap-2">
+                <input [(ngModel)]="newSymbol" placeholder="Add symbol e.g. RELIANCE" class="input-field min-w-0 flex-1 uppercase" />
+                <button type="button" class="btn-secondary shrink-0" (click)="addSymbol(wl)">Add</button>
+              </div>
+              <button type="button" class="text-xs text-red-500" (click)="deleteWatchlist(wl.id)">Delete list</button>
+            </div>
+          }
         }
       </div>
 
@@ -222,7 +256,13 @@
                 } @empty {
                   <tr>
                     <td [attr.colspan]="tierStockColumns.length + 2" class="py-10 text-center text-sm text-slate-400">
-                      {{ activeTab() === 'all' ? 'No stocks found.' : 'No stocks in this tier yet.' }}
+                      @if (activeTab() === 'custom') {
+                        No stocks in this view yet.
+                      } @else if (activeAutoWatchlist()?.id === allSubtabId) {
+                        No {{ activeTab() === 'profitable' ? 'profitable' : 'loss-making' }} stocks found.
+                      } @else {
+                        No stocks in this tier yet.
+                      }
                     </td>
                   </tr>
                 }
@@ -265,64 +305,7 @@
           </div>
         </div>
       }
-    }
-  } @else {
-    <div class="flex flex-wrap gap-2">
-      <input [(ngModel)]="newName" placeholder="New watchlist name" class="input-field max-w-xs" />
-      <button type="button" class="btn-primary" (click)="createWatchlist()">Create watchlist</button>
-    </div>
-
-    @if (!customWatchlists().length) {
-      <p class="text-center text-slate-500">No custom watchlists yet. Create one above.</p>
-    } @else {
-      @if (customWatchlists().length > 1) {
-        <div class="overflow-x-auto">
-          <div class="tier-segmented-control inline-flex min-w-full">
-            @for (wl of customWatchlists(); track wl.id) {
-              <button
-                type="button"
-                class="tier-segment-item"
-                [class.tier-segment-item-active]="activeCustomWatchlist().id === wl.id"
-                (click)="selectCustomWatchlist(wl.id)"
-              >
-                {{ wl.name }} ({{ wl.stockSymbols.length }})
-              </button>
-            }
-          </div>
-        </div>
-      }
-
-      @if (activeCustomWatchlist(); as wl) {
-        <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div class="mb-3 flex items-center justify-between gap-3">
-            <h3 class="font-semibold text-slate-900">
-              <span class="mr-2 inline-block h-3 w-3 rounded-full" [style.background]="wl.color"></span>
-              {{ wl.name }}
-              <span class="ml-2 text-xs font-normal text-slate-400">({{ wl.stockSymbols.length }} stocks)</span>
-            </h3>
-            <button type="button" class="text-xs text-red-500" (click)="deleteWatchlist(wl.id)">Delete</button>
-          </div>
-
-          <div class="mb-3 flex gap-2">
-            <input [(ngModel)]="newSymbol" placeholder="Add symbol e.g. RELIANCE" class="rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" />
-            <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" (click)="addSymbol(wl)">Add</button>
-          </div>
-
-          <div class="divide-y divide-slate-100">
-            @for (sym of wl.stockSymbols; track sym) {
-              <div class="flex items-center justify-between py-2 text-sm">
-                <a [routerLink]="['/stock', sym]" class="font-medium text-kairo-600 hover:underline">{{ sym }}</a>
-                <div class="flex items-center gap-3">
-                  <span class="text-slate-500">{{ stockPrice(sym) }}</span>
-                  <button type="button" class="text-xs text-red-400" (click)="removeSymbol(wl, sym)">Remove</button>
-                </div>
-              </div>
-            } @empty {
-              <p class="py-4 text-center text-sm text-slate-400">No symbols yet</p>
-            }
-          </div>
-        </div>
-      }
-    }
+  } @else if (activeTab() === 'custom' && !customWatchlists().length) {
+    <p class="text-center text-slate-500">No custom watchlists yet. Create one above.</p>
   }
 </div>
