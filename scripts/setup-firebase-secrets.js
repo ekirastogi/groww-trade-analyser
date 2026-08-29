@@ -8,10 +8,12 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { projectId: defaultProject, secretName } = require('./firebase-project');
 
-const project = process.argv.includes('--project')
-  ? process.argv[process.argv.indexOf('--project') + 1]
-  : 'growtrader-628a0';
+const project =
+  process.argv.includes('--project') ?
+    process.argv[process.argv.indexOf('--project') + 1]
+  : defaultProject;
 
 const configPath = path.join(__dirname, '../src/environments/firebase.config.ts');
 if (!fs.existsSync(configPath)) {
@@ -39,12 +41,16 @@ const json = JSON.stringify(config);
 const tmp = path.join(__dirname, '../.firebase-web-config.secret.json');
 fs.writeFileSync(tmp, json);
 
+function run(command) {
+  execSync(command, { stdio: 'inherit' });
+}
+
 try {
-  console.log(`Setting FIREBASE_WEB_CONFIG secret on project ${project}...`);
-  execSync(`firebase functions:secrets:set FIREBASE_WEB_CONFIG --project ${project} --data-file ${tmp}`, {
-    stdio: 'inherit',
-  });
-  console.log('Secret saved. Deploy functions: firebase deploy --only functions');
+  console.log(`Uploading Firebase web config to Secret Manager (${project})...`);
+  run(
+    `firebase functions:secrets:set ${secretName} --project=${project} --data-file=${tmp}`
+  );
+  console.log('Secret saved. Production builds fetch it via: npm run secrets:fetch');
 } finally {
   fs.unlinkSync(tmp);
 }

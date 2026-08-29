@@ -1,8 +1,5 @@
 {
   "projects": {
-    "groww": "growtrader-628a0"
-  },
-  "targets": {},
-  "etags": {},
-  "dataconnectEmulatorConfig": {}
+    "default": "kairo-trade"
+  }
 }

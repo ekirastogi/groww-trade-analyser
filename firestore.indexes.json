@@ -9,10 +9,11 @@
       ]
     },
     {
-      "collectionGroup": "clients",
+      "collectionGroup": "recommendations",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "lastUploadAt", "order": "DESCENDING" }
+        { "fieldPath": "approvalStatus", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     },
     {
@@ -21,27 +22,6 @@
       "fields": [
         { "fieldPath": "symbol", "order": "ASCENDING" },
         { "fieldPath": "sellDate", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "trades",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "sellDate", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "stockProfiles",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "netPnL", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "uploads",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "contentHash", "order": "ASCENDING" }
       ]
     }
   ],

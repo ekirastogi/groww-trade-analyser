@@ -1,6 +1,6 @@
 /**
- * Template for local development only.
- * Production uses Google Secret Manager via /api/firebase-config Cloud Function.
+ * Template for local development.
+ * Production builds fetch config from Google Secret Manager at build time.
  */
 export const firebaseConfig = {
   apiKey: 'YOUR_API_KEY',

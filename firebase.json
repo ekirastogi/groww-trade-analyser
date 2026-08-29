@@ -1,23 +1,27 @@
 {
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "hosting": {
     "public": "dist/frontend/browser",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
+    "headers": [
       {
-        "source": "/api/firebase-config",
-        "function": "getFirebaseConfig"
-      },
+        "source": "**",
+        "headers": [
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "same-origin-allow-popups"
+          }
+        ]
+      }
+    ],
+    "rewrites": [
       {
         "source": "**",
         "destination": "/index.html"
       }
     ]
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
-    }
-  ]
+  }
 }
