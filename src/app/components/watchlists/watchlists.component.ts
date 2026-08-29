@@ -218,23 +218,6 @@ export class WatchlistsComponent {
     };
   });
 
-  tierSummaryStats = computed(() => {
-    const summary = this.tierSummary();
-    if (!summary) return [];
-    return [
-      { label: 'Realised P&L', value: formatCurrency(summary.realisedPnL), cls: pnlClass(summary.realisedPnL) },
-      { label: 'Charges', value: formatCurrency(summary.allocatedCharges), cls: 'text-red-500' },
-      { label: 'Trades', value: String(summary.tradeCount), cls: 'text-white' },
-      { label: 'Stocks', value: String(summary.stockCount), cls: 'text-white' },
-    ];
-  });
-
-  tierModeDescription = computed(() =>
-    this.tierMode() === 'cumulative'
-      ? 'Each tier includes every stock up to that P&L level.'
-      : 'Each stock appears in exactly one band — no repeats across tiers.'
-  );
-
   setTab(tab: WatchlistTab): void {
     this.activeTab.set(tab);
     this.selectedAutoTierId.set(null);

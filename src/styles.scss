@@ -187,47 +187,31 @@
   }
 
   .tier-summary-bar {
-    @apply fixed bottom-[4.5rem] left-0 right-0 z-20 border-t border-slate-800/80 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 shadow-[0_-16px_48px_rgba(15,23,42,0.35)] backdrop-blur-xl lg:bottom-0 lg:left-72;
+    @apply fixed bottom-[4.5rem] left-0 right-0 z-20 border-t border-slate-800/80 bg-slate-900/95 shadow-[0_-4px_20px_rgba(15,23,42,0.25)] backdrop-blur-md lg:bottom-0 lg:left-72;
   }
 
-  .tier-summary-inner {
-    @apply mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between;
+  .tier-summary-compact {
+    @apply mx-auto flex max-w-6xl items-center gap-3 overflow-x-auto px-3 py-2 text-xs sm:gap-4 sm:px-4;
   }
 
-  .tier-summary-hero {
-    @apply min-w-0 flex-1;
+  .tier-summary-tier {
+    @apply max-w-[7rem] shrink-0 font-semibold text-kairo-300 sm:max-w-[10rem];
   }
 
-  .tier-summary-badge {
-    @apply inline-flex rounded-full bg-kairo-500/20 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-kairo-300;
+  .tier-summary-kpi {
+    @apply inline-flex shrink-0 items-baseline gap-1;
   }
 
-  .tier-summary-winbar {
-    @apply mt-3 h-1 overflow-hidden rounded-full bg-slate-700;
-
-    &::after {
-      content: '';
-      @apply block h-full rounded-full bg-gradient-to-r from-kairo-400 to-emerald-400;
-      width: var(--win-pct, 0%);
-      max-width: 100%;
-      transition: width 0.3s ease;
-    }
+  .tier-summary-kpi-label {
+    @apply text-[10px] font-medium uppercase tracking-wide text-slate-500;
   }
 
-  .tier-summary-metrics {
-    @apply grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-700/80 bg-slate-700/80 sm:grid-cols-4;
+  .tier-summary-kpi-value {
+    @apply text-sm font-bold;
   }
 
-  .tier-summary-metric {
-    @apply bg-slate-900/90 px-4 py-3;
-  }
-
-  .tier-summary-metric-label {
-    @apply block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500;
-  }
-
-  .tier-summary-metric-value {
-    @apply mt-1 block text-sm font-bold sm:text-base;
+  .tier-summary-kpi-sub {
+    @apply text-[10px] text-slate-500;
   }
 
   .heatmap-grid {
