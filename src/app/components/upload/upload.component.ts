@@ -60,7 +60,7 @@ export class UploadComponent {
         }
 
         const result = await this.ledger.uploadReport(file);
-        await this.state.loadFromClient(result.clientCode);
+        this.state.applyUploadResult(result);
 
         if (result.fileDuplicate) {
           this.pushResult.set(

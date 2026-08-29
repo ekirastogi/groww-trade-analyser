@@ -10,6 +10,7 @@ import {
   query,
   setDoc,
   updateDoc,
+  writeBatch,
 } from '@angular/fire/firestore';
 import { Observable, of, switchMap } from 'rxjs';
 import { StockProfile } from '../models/trade.models';
@@ -79,35 +80,35 @@ export class WatchlistService {
     if (!uid) return;
 
     const now = Date.now();
-    await Promise.all(
-      PNL_WATCHLIST_TIERS.map((tier) => {
-        const stockSymbols = symbolsForPnlTier(profiles, tier);
-        return setDoc(
-          doc(this.firestore, 'users', uid, 'watchlists', tier.id),
-          {
-            name: tier.name,
-            type: 'pnl_derived',
-            color: tier.color,
-            sortOrder: tier.sortOrder,
-            stockSymbols,
-            createdAt: now,
-            updatedAt: now,
-          },
-          { merge: true }
-        );
-      })
-    );
+    const batch = writeBatch(this.firestore);
+    for (const tier of PNL_WATCHLIST_TIERS) {
+      const stockSymbols = symbolsForPnlTier(profiles, tier);
+      batch.set(
+        doc(this.firestore, 'users', uid, 'watchlists', tier.id),
+        {
+          name: tier.name,
+          type: 'pnl_derived',
+          color: tier.color,
+          sortOrder: tier.sortOrder,
+          stockSymbols,
+          createdAt: now,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+    }
+    await batch.commit();
   }
 
   async deleteAutoWatchlists(): Promise<void> {
     const uid = this.auth.uid;
     if (!uid) return;
 
-    await Promise.all(
-      PNL_WATCHLIST_TIERS.map((tier) =>
-        deleteDoc(doc(this.firestore, 'users', uid, 'watchlists', tier.id)).catch(() => undefined)
-      )
-    );
+    const batch = writeBatch(this.firestore);
+    for (const tier of PNL_WATCHLIST_TIERS) {
+      batch.delete(doc(this.firestore, 'users', uid, 'watchlists', tier.id));
+    }
+    await batch.commit().catch(() => undefined);
   }
 
   isAutoWatchlist(watchlist: Watchlist): boolean {

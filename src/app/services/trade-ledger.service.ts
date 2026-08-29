@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import {
   CollectionReference,
+  DocumentReference,
   Firestore,
   collection,
   deleteDoc,
@@ -44,6 +45,7 @@ export interface UploadResult {
   duplicatesSkipped: number;
   fileDuplicate: boolean;
   affectedSymbols: string[];
+  report?: Report;
 }
 
 export interface UploadOptions {
@@ -92,7 +94,7 @@ export class TradeLedgerService {
         query(uploadsCol, where('contentHash', '==', contentHash), limit(1))
       );
       if (!existingFile.empty) {
-        await this.syncDerivedData(clientCode, clientName);
+        const syncedReport = await this.syncDerivedData(clientCode, clientName);
         return {
           uploadId: existingFile.docs[0].id,
           clientCode,
@@ -101,6 +103,7 @@ export class TradeLedgerService {
           duplicatesSkipped: 0,
           fileDuplicate: true,
           affectedSymbols: [],
+          report: syncedReport ?? undefined,
         };
       }
     }
@@ -109,27 +112,27 @@ export class TradeLedgerService {
     const totalSellValue = report.trades.reduce((s, t) => s + t.sellValue, 0);
     const chargeRatio = computeChargeRatio(totalSellValue, report.charges.total);
 
+    const tradesCol = this.clientSvc.clientCol(clientCode, 'trades');
+    const now = Date.now();
+    const existingKeys =
+      options.forceReingest ? new Set<string>() : await this.loadExistingTradeKeys(tradesCol);
+
     let newTradesAdded = 0;
     let duplicatesSkipped = 0;
     const affectedSymbols = new Set<string>();
-    const tradesCol = this.clientSvc.clientCol(clientCode, 'trades');
-    const now = Date.now();
-    const pendingWrites: Array<{ ref: ReturnType<typeof doc>; data: StoredTrade }> = [];
+    const pendingWrites: Array<{ ref: DocumentReference; data: StoredTrade }> = [];
 
     for (const trade of report.trades) {
       const dedupeKey = await computeTradeDedupeKey(trade, clientCode);
-      const symbol = normalizeSymbol(trade.stockName);
-      const enriched = enrichTradeWithCharges(trade, chargeRatio);
-      const tradeRef = doc(tradesCol, dedupeKey);
-
-      const existingTrade = await getDoc(tradeRef);
-      if (existingTrade.exists()) {
+      if (existingKeys.has(dedupeKey)) {
         duplicatesSkipped++;
         continue;
       }
 
+      const symbol = normalizeSymbol(trade.stockName);
+      const enriched = enrichTradeWithCharges(trade, chargeRatio);
       pendingWrites.push({
-        ref: tradeRef,
+        ref: doc(tradesCol, dedupeKey),
         data: {
           ...trade,
           dedupeKey,
@@ -168,7 +171,11 @@ export class TradeLedgerService {
     };
     await setDoc(doc(uploadsCol, uploadId), uploadRecord);
 
-    await this.syncDerivedData(clientCode, clientName, [...affectedSymbols]);
+    const uploadedTrades = pendingWrites.map((entry) => entry.data);
+    const syncedReport = await this.syncDerivedData(clientCode, clientName, {
+      trades: options.forceReingest ? uploadedTrades : undefined,
+      uploadMeta: uploadRecord,
+    });
 
     return {
       uploadId,
@@ -178,6 +185,7 @@ export class TradeLedgerService {
       duplicatesSkipped,
       fileDuplicate: false,
       affectedSymbols: [...affectedSymbols],
+      report: syncedReport ?? undefined,
     };
   }
 
@@ -218,8 +226,70 @@ export class TradeLedgerService {
     );
     const lastUpload = uploadsSnap.docs[0]?.data() as UploadRecord | undefined;
     const stockProfiles = await this.getStockProfiles(clientCode);
-    const stockSummary = stockProfiles.map((profile) => this.profileToStockSummary(profile));
 
+    return this.buildReportFromStoredData(
+      trades,
+      clientCode,
+      clientName,
+      lastUpload,
+      stockProfiles
+    );
+  }
+
+  async getStockProfiles(clientCode: string): Promise<StockProfile[]> {
+    const snap = await getDocs(
+      query(this.clientSvc.clientCol(clientCode, 'stockProfiles'), orderBy('netPnL', 'desc'))
+    );
+    return snap.docs.map((d) => d.data() as StockProfile);
+  }
+
+  private async syncDerivedData(
+    clientCode: string,
+    clientName: string,
+    options: {
+      trades?: StoredTrade[];
+      uploadMeta?: Omit<UploadRecord, 'id'>;
+    } = {}
+  ): Promise<Report | null> {
+    const trades = options.trades ?? (await this.getAllTrades(clientCode));
+    if (!trades.length) return null;
+
+    const uploadMeta =
+      options.uploadMeta ??
+      ((
+        await getDocs(
+          query(this.clientSvc.clientCol(clientCode, 'uploads'), orderBy('uploadedAt', 'desc'), limit(1))
+        )
+      ).docs[0]?.data() as UploadRecord | undefined);
+
+    await this.clientSvc.registerClient(clientCode, clientName, trades.length, {
+      totalRealisedPnL: trades.reduce((sum, trade) => sum + trade.realisedPnL, 0),
+      totalNetPnL: trades.reduce((sum, trade) => sum + trade.netPnL, 0),
+      totalCharges: trades.reduce((sum, trade) => sum + trade.allocatedCharges, 0),
+      periodLabel: uploadMeta?.periodLabel,
+    });
+
+    const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
+    await this.writeStockProfiles(clientCode, profiles);
+    await this.watchlists.syncPnlTierWatchlists(profiles);
+
+    return this.buildReportFromStoredData(
+      trades,
+      clientCode,
+      clientName,
+      uploadMeta,
+      profiles
+    );
+  }
+
+  private buildReportFromStoredData(
+    trades: StoredTrade[],
+    clientCode: string,
+    clientName: string,
+    uploadMeta: UploadRecord | Omit<UploadRecord, 'id'> | undefined,
+    stockProfiles: StockProfile[]
+  ): Report {
+    const stockSummary = stockProfiles.map((profile) => this.profileToStockSummary(profile));
     const plainTrades: Trade[] = trades.map(
       ({
         stockName,
@@ -266,13 +336,13 @@ export class TradeLedgerService {
       summary: {
         clientName,
         clientCode,
-        period: lastUpload?.periodLabel ?? 'All trades',
+        period: uploadMeta?.periodLabel ?? 'All trades',
         realisedPnL,
-        unrealisedPnL: lastUpload?.reportUnrealisedPnL ?? 0,
+        unrealisedPnL: uploadMeta?.reportUnrealisedPnL ?? 0,
       },
       charges: {
-        items: lastUpload?.charges ?? [],
-        total: lastUpload?.chargesTotal ?? allocatedCharges,
+        items: uploadMeta?.charges ?? [],
+        total: uploadMeta?.chargesTotal ?? allocatedCharges,
       },
       trades: plainTrades,
       stockSummary,
@@ -283,85 +353,31 @@ export class TradeLedgerService {
     };
   }
 
-  async getStockProfiles(clientCode: string): Promise<StockProfile[]> {
-    const snap = await getDocs(
-      query(this.clientSvc.clientCol(clientCode, 'stockProfiles'), orderBy('netPnL', 'desc'))
-    );
-    return snap.docs.map((d) => d.data() as StockProfile);
-  }
-
-  private async syncDerivedData(
+  private buildStockProfilesFromTrades(
+    trades: StoredTrade[],
     clientCode: string,
-    clientName: string,
-    affectedSymbols?: string[]
-  ): Promise<void> {
-    const trades = await this.getAllTrades(clientCode);
-    const uploadsSnap = await getDocs(
-      query(this.clientSvc.clientCol(clientCode, 'uploads'), orderBy('uploadedAt', 'desc'), limit(1))
-    );
-    const lastUpload = uploadsSnap.docs[0]?.data() as UploadRecord | undefined;
-
-    await this.clientSvc.registerClient(clientCode, clientName, trades.length, {
-      totalRealisedPnL: trades.reduce((sum, trade) => sum + trade.realisedPnL, 0),
-      totalNetPnL: trades.reduce((sum, trade) => sum + trade.netPnL, 0),
-      totalCharges: trades.reduce((sum, trade) => sum + trade.allocatedCharges, 0),
-      periodLabel: lastUpload?.periodLabel,
-    });
-
-    const symbols =
-      affectedSymbols?.length ?
-        affectedSymbols
-      : [...new Set(trades.map((trade) => trade.symbol))];
-
-    for (const symbol of symbols) {
-      await this.recomputeStockProfile(clientCode, clientName, symbol);
+    clientName: string
+  ): StockProfile[] {
+    const bySymbol = new Map<string, StoredTrade[]>();
+    for (const trade of trades) {
+      const list = bySymbol.get(trade.symbol) ?? [];
+      list.push(trade);
+      bySymbol.set(trade.symbol, list);
     }
 
-    const profiles = await this.getStockProfiles(clientCode);
-    await this.watchlists.syncPnlTierWatchlists(profiles);
+    return [...bySymbol.entries()]
+      .map(([symbol, symbolTrades]) =>
+        this.buildStockProfile(symbol, symbolTrades, clientCode, clientName)
+      )
+      .sort((a, b) => b.netPnL - a.netPnL);
   }
 
-  private profileToStockSummary(profile: StockProfile): StockSummary {
-    return {
-      stockName: profile.stockName,
-      isin: profile.isin,
-      symbol: profile.symbol,
-      quantity: profile.tradeCount,
-      avgBuyPrice: profile.tradeCount ? profile.totalBuyValue / profile.tradeCount : 0,
-      buyValue: profile.totalBuyValue,
-      avgSellPrice: profile.tradeCount ? profile.totalSellValue / profile.tradeCount : 0,
-      sellValue: profile.totalSellValue,
-      realisedPnL: profile.realisedPnL,
-      realisedPnLPct: profile.netPnLPct,
-      tradeCount: profile.tradeCount,
-      allocatedCharges: profile.allocatedCharges,
-      netPnL: profile.netPnL,
-      winRate: profile.winRate,
-    };
-  }
-
-  private async commitInChunks(
-    writes: Array<{ ref: ReturnType<typeof doc>; data: StoredTrade }>
-  ): Promise<void> {
-    for (let i = 0; i < writes.length; i += FIRESTORE_BATCH_LIMIT) {
-      const batch = writeBatch(this.firestore);
-      const chunk = writes.slice(i, i + FIRESTORE_BATCH_LIMIT);
-      chunk.forEach(({ ref, data }) => batch.set(ref, data));
-      await batch.commit();
-    }
-  }
-
-  private async recomputeStockProfile(
+  private buildStockProfile(
+    symbol: string,
+    trades: StoredTrade[],
     clientCode: string,
-    clientName: string,
-    symbol: string
-  ): Promise<void> {
-    const snap = await getDocs(
-      query(this.clientSvc.clientCol(clientCode, 'trades'), where('symbol', '==', symbol))
-    );
-    const trades = snap.docs.map((d) => d.data() as StoredTrade);
-    if (!trades.length) return;
-
+    clientName: string
+  ): StockProfile {
     let winningTrades = 0,
       losingTrades = 0,
       breakEvenTrades = 0;
@@ -406,7 +422,7 @@ export class TradeLedgerService {
       if (type !== 'all') byTradeType[type] = buildTradeTypeStats(typeTrades);
     }
 
-    const profile: StockProfile = {
+    return {
       symbol,
       stockName: trades[0].stockName,
       isin: trades[0].isin,
@@ -431,8 +447,56 @@ export class TradeLedgerService {
       uploadIds: [...uploadIds],
       updatedAt: Date.now(),
     };
+  }
 
-    await setDoc(doc(this.clientSvc.clientCol(clientCode, 'stockProfiles'), symbol), profile);
+  private async loadExistingTradeKeys(
+    tradesCol: ReturnType<ClientAccountService['clientCol']>
+  ): Promise<Set<string>> {
+    const keys = new Set<string>();
+    const snap = await getDocs(tradesCol);
+    snap.forEach((docSnap) => keys.add(docSnap.id));
+    return keys;
+  }
+
+  private profileToStockSummary(profile: StockProfile): StockSummary {
+    return {
+      stockName: profile.stockName,
+      isin: profile.isin,
+      symbol: profile.symbol,
+      quantity: profile.tradeCount,
+      avgBuyPrice: profile.tradeCount ? profile.totalBuyValue / profile.tradeCount : 0,
+      buyValue: profile.totalBuyValue,
+      avgSellPrice: profile.tradeCount ? profile.totalSellValue / profile.tradeCount : 0,
+      sellValue: profile.totalSellValue,
+      realisedPnL: profile.realisedPnL,
+      realisedPnLPct: profile.netPnLPct,
+      tradeCount: profile.tradeCount,
+      allocatedCharges: profile.allocatedCharges,
+      netPnL: profile.netPnL,
+      winRate: profile.winRate,
+    };
+  }
+
+  private async commitInChunks(
+    writes: Array<{ ref: DocumentReference; data: StoredTrade }>
+  ): Promise<void> {
+    for (let i = 0; i < writes.length; i += FIRESTORE_BATCH_LIMIT) {
+      const batch = writeBatch(this.firestore);
+      const chunk = writes.slice(i, i + FIRESTORE_BATCH_LIMIT);
+      chunk.forEach(({ ref, data }) => batch.set(ref, data));
+      await batch.commit();
+    }
+  }
+
+  private async writeStockProfiles(clientCode: string, profiles: StockProfile[]): Promise<void> {
+    for (let i = 0; i < profiles.length; i += FIRESTORE_BATCH_LIMIT) {
+      const batch = writeBatch(this.firestore);
+      const chunk = profiles.slice(i, i + FIRESTORE_BATCH_LIMIT);
+      chunk.forEach((profile) =>
+        batch.set(doc(this.clientSvc.clientCol(clientCode, 'stockProfiles'), profile.symbol), profile)
+      );
+      await batch.commit();
+    }
   }
 
   private async deleteClientData(clientCode: string): Promise<void> {

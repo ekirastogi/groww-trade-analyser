@@ -206,6 +206,17 @@ export class ReportStateService {
     this.error.set(null);
   }
 
+  applyUploadResult(result: { clientCode: string; report?: Report | null }): void {
+    if (result.report) {
+      this.clientSvc.selectClient(result.clientCode);
+      this.activeClientCode.set(result.clientCode);
+      this.dataSource.set('firebase');
+      this.applyFirebaseReport(result.report);
+      return;
+    }
+    void this.loadFromClient(result.clientCode);
+  }
+
   applyFilters(
     start: string,
     end: string,

@@ -171,7 +171,7 @@ export class AdminLayoutComponent implements OnInit {
       const file = this.reingestFile();
       if (file) {
         const upload = await this.ledger.uploadReport(file, { forceReingest: true });
-        await this.state.loadFromClient(upload.clientCode);
+        this.state.applyUploadResult(upload);
         this.resetSuccess.set(
           `Reset complete. Re-ingested ${upload.newTradesAdded} trades for ${upload.clientName}.`
         );

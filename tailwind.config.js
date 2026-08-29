@@ -40,4 +40,5 @@ module.exports = {
     },
   },
   plugins: [],
+  safelist: ['lg:ml-72', 'lg:ml-0'],
 };
