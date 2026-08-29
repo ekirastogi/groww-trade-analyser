@@ -1,15 +1,11 @@
 <div class="space-y-4 pb-[5.5rem] lg:pb-14">
-  <div class="page-header flex flex-wrap items-center justify-between gap-3">
-    <div>
-      <h2 class="page-title">Watchlists</h2>
-      <p class="page-subtitle">Profitable and loss-making stocks from your P&amp;L, or custom lists.</p>
-    </div>
-    @if (!auth.user()) {
+  @if (!auth.user()) {
+    <div class="flex justify-end">
       <button type="button" class="btn-primary" (click)="auth.signInWithGoogle()">
         Sign in with Google
       </button>
-    }
-  </div>
+    </div>
+  }
 
   @if (error()) {
     <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>

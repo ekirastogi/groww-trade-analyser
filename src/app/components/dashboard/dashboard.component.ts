@@ -1,9 +1,10 @@
-import { Component, signal, computed, inject, HostListener } from '@angular/core';
+import { Component, signal, computed, inject, HostListener, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReportStateService } from '../../services/report-state.service';
+import { PageShellService } from '../../services/page-shell.service';
 import { ClientAccountService } from '../../services/client-account.service';
 import {
   PeriodBucket,
@@ -79,6 +80,7 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 })
 export class DashboardComponent {
   readonly state = inject(ReportStateService);
+  private pageShell = inject(PageShellService);
   private clientSvc = inject(ClientAccountService);
   readonly clients = toSignal(this.clientSvc.watchClients(), { initialValue: [] });
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
@@ -87,6 +89,13 @@ export class DashboardComponent {
   readonly formatDate = formatDate;
   readonly pnlClass = pnlClass;
   readonly groupTradesByStock = groupTradesByStock;
+
+  private readonly _syncPageHeader = effect(() => {
+    const report = this.state.report();
+    if (report) {
+      this.pageShell.setHeader('Dashboard', report.summary.period);
+    }
+  });
 
   activeTab = signal<TabId>('stocks');
   dragOver = signal(false);

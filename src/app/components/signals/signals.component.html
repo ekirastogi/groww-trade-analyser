@@ -1,13 +1,9 @@
 <div class="space-y-6">
-  <div class="page-header flex flex-wrap items-center justify-between gap-3">
-    <div>
-      <h2 class="page-title">Trade Recommendations</h2>
-      <p class="page-subtitle">Review signals from your local engine · Approve to execute via broker</p>
-    </div>
-    @if (!auth.user()) {
+  @if (!auth.user()) {
+    <div class="flex justify-end">
       <button type="button" class="btn-primary" (click)="auth.signInWithGoogle()">Sign in</button>
-    }
-  </div>
+    </div>
+  }
 
   @if (error()) {
     <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>

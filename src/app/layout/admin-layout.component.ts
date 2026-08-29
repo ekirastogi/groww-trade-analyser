@@ -1,7 +1,9 @@
-import { Component, inject, signal, HostListener, OnInit, computed } from '@angular/core';
+import { Component, inject, signal, HostListener, OnInit, computed, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
+import { filter, Subscription } from 'rxjs';
 import { ReportStateService } from '../services/report-state.service';
+import { PageShellService } from '../services/page-shell.service';
 import { AuthService } from '../services/auth.service';
 import { NotificationService } from '../services/notification.service';
 import { TradeLedgerService } from '../services/trade-ledger.service';
@@ -33,13 +35,16 @@ interface MobileNavItem {
   imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, BrandLogoComponent],
   templateUrl: './admin-layout.component.html',
 })
-export class AdminLayoutComponent implements OnInit {
+export class AdminLayoutComponent implements OnInit, OnDestroy {
   readonly state = inject(ReportStateService);
+  readonly pageShell = inject(PageShellService);
   readonly auth = inject(AuthService);
   readonly brand = BRAND;
   private notifications = inject(NotificationService);
   private ledger = inject(TradeLedgerService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private navSub?: Subscription;
 
   sidebarOpen = signal(true);
   isMobile = signal(typeof window !== 'undefined' && window.innerWidth < 1024);
@@ -136,6 +141,11 @@ export class AdminLayoutComponent implements OnInit {
   canConfirmReset = computed(() => this.resetConfirmChecked() && !this.resetBusy());
 
   async ngOnInit(): Promise<void> {
+    this.syncPageHeader();
+    this.navSub = this.router.events
+      .pipe(filter((event) => event instanceof NavigationEnd))
+      .subscribe(() => this.syncPageHeader());
+
     if (this.auth.user()) {
       this.notifications.requestPermission();
     }
@@ -147,6 +157,19 @@ export class AdminLayoutComponent implements OnInit {
     if (this.auth.currentUser) {
       await this.state.ensureLoadedFromFirebase();
     }
+  }
+
+  ngOnDestroy(): void {
+    this.navSub?.unsubscribe();
+  }
+
+  private syncPageHeader(): void {
+    let child = this.route.firstChild;
+    while (child?.firstChild) {
+      child = child.firstChild;
+    }
+    const data = child?.snapshot.data ?? {};
+    this.pageShell.setRouteHeader(data['title'] ?? '', data['subtitle'] ?? null);
   }
 
   @HostListener('window:resize')

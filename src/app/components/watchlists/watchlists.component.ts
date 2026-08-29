@@ -248,10 +248,6 @@ export class WatchlistsComponent {
     this.expandedStockKey.set(this.expandedStockKey() === key ? null : key);
   }
 
-  tierModeLabel(): string {
-    return this.tierMode() === 'cumulative' ? 'Cumulative' : 'Exclusive bands';
-  }
-
   selectCustomWatchlist(id: string): void {
     this.selectedCustomWatchlistId.set(id);
   }

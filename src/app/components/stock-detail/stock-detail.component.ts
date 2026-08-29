@@ -1,10 +1,11 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, effect } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { switchMap, of } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { ReportStateService } from '../../services/report-state.service';
+import { PageShellService } from '../../services/page-shell.service';
 import { TradingChartComponent } from '../trading-chart/trading-chart.component';
 import { formatCurrency, formatPct } from '../../utils/format.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
@@ -20,6 +21,7 @@ export class StockDetailComponent {
   private route = inject(ActivatedRoute);
   private stockSvc = inject(StockFirestoreService);
   private location = inject(Location);
+  private pageShell = inject(PageShellService);
   readonly reportState = inject(ReportStateService);
 
   readonly tableSort = new TableSortState('sellDate', 'desc');
@@ -46,6 +48,13 @@ export class StockDetailComponent {
   activeTab = signal<'market' | 'my-trades'>('market');
   fmt = formatCurrency;
   fmtPct = formatPct;
+
+  private readonly _syncPageHeader = effect(() => {
+    const sym = this.symbol();
+    const s = this.stock();
+    const subtitle = s ? `${s.name} · ${s.exchange}` : 'Market data and your trades';
+    this.pageShell.setHeader(sym || 'Stock', subtitle);
+  });
 
   myTrades = computed(() => {
     const sym = this.symbol();

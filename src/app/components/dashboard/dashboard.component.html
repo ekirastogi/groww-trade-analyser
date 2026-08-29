@@ -26,11 +26,7 @@
   }
 } @else {
   @if (state.report(); as report) {
-    <div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h2 class="text-lg font-bold text-slate-900 sm:text-xl">Dashboard</h2>
-        <p class="text-sm text-slate-500">{{ report.summary.period }}</p>
-      </div>
+    <div class="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-end">
       <div class="flex gap-2">
         <a routerLink="/analytics" class="btn-secondary flex-1 sm:flex-none">📊 Charts</a>
         @if (state.hasHistory()) {

@@ -14,15 +14,11 @@
   }
 } @else {
   @if (analysis(); as data) {
-    <div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h2 class="text-lg font-bold text-slate-900 sm:text-xl">Charges</h2>
-        <p class="text-sm text-slate-500">Breakdown of trading charges from your report</p>
-      </div>
+    <div class="mb-4 flex justify-end sm:mb-5">
       <a routerLink="/" class="btn-secondary hidden sm:inline-flex">← Dashboard</a>
     </div>
 
-    <app-filter-panel class="mb-4 block sm:mb-6" [collapsible]="true" />
+    <app-filter-panel class="mb-4 block sm:mb-5" [collapsible]="true" />
 
     <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-3">
       @for (stat of [
