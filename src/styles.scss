@@ -5,6 +5,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
 
 @layer base {
+  :root {
+    --mobile-tab-height: calc(3.625rem + env(safe-area-inset-bottom, 0px));
+    --tier-summary-height: 2.75rem;
+  }
+
   body {
     @apply bg-slate-50 text-slate-900 antialiased font-sans;
   }
@@ -113,6 +118,14 @@
     }
   }
 
+  .watchlist-page {
+    padding-bottom: calc(var(--mobile-tab-height) + var(--tier-summary-height) + 0.75rem);
+
+    @screen lg {
+      padding-bottom: 4rem;
+    }
+  }
+
   .watchlist-sticky-toolbar {
     @apply sticky top-12 z-20 -mx-3 space-y-2 border-b border-slate-200/80 bg-slate-50/95 px-3 py-2 backdrop-blur-md sm:-mx-5 sm:top-14 sm:px-5;
   }
@@ -142,7 +155,9 @@
   }
 
   .mobile-tab-bar {
-    @apply fixed bottom-0 left-0 right-0 z-30 flex items-stretch border-t border-slate-800/60 bg-slate-900/95 px-1 pb-safe pt-1 shadow-[0_-12px_40px_rgba(15,23,42,0.45)] backdrop-blur-xl lg:hidden;
+    @apply fixed bottom-0 left-0 right-0 z-30 flex items-stretch border-t border-slate-800/60 bg-slate-900/95 px-1 pb-safe pt-1 backdrop-blur-xl lg:hidden;
+    min-height: var(--mobile-tab-height);
+    box-shadow: none;
   }
 
   .mobile-tab-item {
@@ -215,15 +230,19 @@
   }
 
   .tier-summary-bar {
-    @apply fixed bottom-[4.5rem] left-0 right-0 z-40 border-t border-slate-800/80 bg-slate-900/95 shadow-[0_-4px_20px_rgba(15,23,42,0.25)] backdrop-blur-md lg:bottom-0 lg:left-72;
+    @apply fixed left-0 right-0 z-40 border-t border-slate-800/80 bg-slate-900/95 backdrop-blur-xl lg:bottom-0 lg:left-72;
+    bottom: var(--mobile-tab-height);
+    min-height: var(--tier-summary-height);
+    box-shadow: none;
   }
 
   .tier-summary-compact {
-    @apply mx-auto flex max-w-6xl items-center gap-3 overflow-x-auto px-3 py-2 text-xs sm:gap-4 sm:px-4;
+    @apply mx-auto flex max-w-6xl items-center gap-2 overflow-x-auto px-3 text-xs sm:gap-4 sm:px-4;
+    min-height: var(--tier-summary-height);
   }
 
   .tier-summary-tier {
-    @apply max-w-[7rem] shrink-0 font-semibold text-kairo-300 sm:max-w-[10rem];
+    @apply max-w-[5.5rem] shrink-0 font-semibold text-kairo-300 sm:max-w-[10rem];
   }
 
   .tier-summary-kpi {

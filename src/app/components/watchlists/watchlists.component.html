@@ -1,4 +1,4 @@
-<div class="watchlist-page space-y-4 pb-28 lg:pb-16">
+<div class="watchlist-page space-y-4">
   @if (!auth.user()) {
     <div class="flex justify-end">
       <button type="button" class="btn-primary" (click)="auth.signInWithGoogle()">
@@ -26,7 +26,7 @@
     }
   </div>
 
-  @if (isPnlTab()) {
+  @if (isStockTab()) {
     @if (!state.hasReport()) {
       <div class="card overflow-hidden p-8 text-center">
         <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
@@ -65,55 +65,58 @@
             />
           </div>
           <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bands</span>
-            <div class="segmented-control">
-              <button
-                type="button"
-                class="segment-item !px-2.5 !py-1.5 text-xs"
-                [class.segment-item-active]="tierMode() === 'cumulative'"
-                (click)="setTierMode('cumulative')"
-              >
-                Cumulative
-              </button>
-              <button
-                type="button"
-                class="segment-item !px-2.5 !py-1.5 text-xs"
-                [class.segment-item-active]="tierMode() === 'band'"
-                (click)="setTierMode('band')"
-              >
-                Exclusive
-              </button>
+          @if (isPnlTab()) {
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bands</span>
+              <div class="segmented-control">
+                <button
+                  type="button"
+                  class="segment-item !px-2.5 !py-1.5 text-xs"
+                  [class.segment-item-active]="tierMode() === 'cumulative'"
+                  (click)="setTierMode('cumulative')"
+                >
+                  Cumulative
+                </button>
+                <button
+                  type="button"
+                  class="segment-item !px-2.5 !py-1.5 text-xs"
+                  [class.segment-item-active]="tierMode() === 'band'"
+                  (click)="setTierMode('band')"
+                >
+                  Exclusive
+                </button>
+              </div>
             </div>
-          </div>
+          }
         </div>
 
-        <div class="watchlist-tier-tabs">
-          <div class="tier-segmented-control">
-            @for (tab of visibleAutoTierTabs(); track tab.watchlist.id) {
-              <button
-                type="button"
-                class="tier-segment-item"
-                [class.tier-segment-item-active]="activeAutoWatchlist()?.id === tab.watchlist.id"
-                (click)="selectAutoTier(tab.watchlist.id)"
-              >
-                <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.watchlist.color"></span>
-                {{ tierTabLabel(tab) }}
-              </button>
-            }
+        @if (isPnlTab()) {
+          <div class="watchlist-tier-tabs">
+            <div class="tier-segmented-control">
+              @for (tab of visibleAutoTierTabs(); track tab.watchlist.id) {
+                <button
+                  type="button"
+                  class="tier-segment-item"
+                  [class.tier-segment-item-active]="activeAutoWatchlist()?.id === tab.watchlist.id"
+                  (click)="selectAutoTier(tab.watchlist.id)"
+                >
+                  <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.watchlist.color"></span>
+                  {{ tierTabLabel(tab) }}
+                </button>
+              }
+            </div>
           </div>
-        </div>
+        }
       </div>
 
       <div class="card overflow-hidden">
-        @if (activeAutoWatchlist(); as wl) {
-          <div class="overflow-x-auto">
-            <table class="stock-table min-w-[520px]">
+        <div class="overflow-x-auto">
+            <table class="stock-table w-full md:min-w-[520px]">
               <thead>
                 <tr>
                   <th class="w-10 text-center">#</th>
                   @for (col of tierStockColumns; track col.key) {
-                    <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
+                    <th [class]="tierColumnClass(col)">
                       <button
                         type="button"
                         class="sort-btn"
@@ -124,7 +127,7 @@
                       </button>
                     </th>
                   }
-                  <th class="w-8"></th>
+                  <th class="w-8 md:hidden"></th>
                 </tr>
               </thead>
               <tbody>
@@ -136,7 +139,7 @@
                   >
                     <td class="text-center tabular-nums text-slate-400">{{ i + 1 }}</td>
                     @for (col of tierStockColumns; track col.key) {
-                      <td [class]="col.key === 'stockName' ? 'col-name' : tierStockCellClass(col.key, stock)">
+                      <td [class]="tierColumnClass(col, stock, col.key)">
                         @switch (col.key) {
                           @case ('stockName') {
                             <span class="block truncate font-semibold text-slate-900" [title]="stock.stockName">{{ stock.stockName }}</span>
@@ -149,7 +152,7 @@
                         }
                       </td>
                     }
-                    <td class="text-slate-400">
+                    <td class="text-slate-400 md:hidden">
                       <svg class="h-4 w-4 transition" [class.rotate-180]="isStockExpanded(stock)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                       </svg>
@@ -169,6 +172,20 @@
                               View {{ stock.stockName }} details →
                             </a>
                             <span class="text-xs text-slate-400">{{ stock.isin || '—' }}</span>
+                          </div>
+                          <div class="mb-3 grid grid-cols-3 gap-2 md:hidden">
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L</div>
+                              <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="pnlClass(stock.realisedPnL)">{{ formatCurrency(stock.realisedPnL) }}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Charges</div>
+                              <div class="mt-0.5 text-sm font-bold tabular-nums text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Win rate</div>
+                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }}</div>
+                            </div>
                           </div>
                           <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                             <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
@@ -205,21 +222,20 @@
                 } @empty {
                   <tr>
                     <td [attr.colspan]="tierStockColumns.length + 2" class="py-10 text-center text-sm text-slate-400">
-                      No stocks in this tier yet.
+                      {{ activeTab() === 'all' ? 'No stocks found.' : 'No stocks in this tier yet.' }}
                     </td>
                   </tr>
                 }
               </tbody>
             </table>
-          </div>
-        }
+        </div>
       </div>
 
       @if (tierSummary(); as summary) {
         <div class="tier-summary-bar" aria-live="polite">
           <div class="tier-summary-compact">
-            <span class="tier-summary-tier truncate" [title]="activeAutoTierMeta()?.fullLabel ?? ''">
-              {{ activeAutoTierMeta()?.fullLabel }}
+            <span class="tier-summary-tier truncate" [title]="activeViewLabel()">
+              {{ activeViewLabel() }}
             </span>
             <span class="tier-summary-kpi">
               <span class="tier-summary-kpi-label">Net</span>
@@ -241,7 +257,7 @@
               <span class="tier-summary-kpi-label">Trades</span>
               <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.tradeCount }}</span>
             </span>
-            <span class="tier-summary-kpi">
+            <span class="tier-summary-kpi hidden sm:inline-flex">
               <span class="tier-summary-kpi-label">Win</span>
               <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.winRate.toFixed(1) }}%</span>
               <span class="tier-summary-kpi-sub">{{ summary.winningTrades }}W/{{ summary.losingTrades }}L</span>

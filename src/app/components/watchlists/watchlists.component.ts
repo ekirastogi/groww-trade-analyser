@@ -26,7 +26,7 @@ import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type
 import { MarketCapFilterComponent } from '../shared/market-cap-filter/market-cap-filter.component';
 import { MARKET_CAP_LABELS, MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
 
-type WatchlistTab = 'profitable' | 'losing' | 'custom';
+type WatchlistTab = 'all' | 'losing' | 'profitable' | 'custom';
 
 interface TierSummary {
   stockCount: number;
@@ -64,8 +64,9 @@ export class WatchlistsComponent {
   stocks = toSignal(this.stockSvc.watchAllStocks(), { initialValue: [] });
 
   readonly mainTabs: { id: WatchlistTab; label: string }[] = [
-    { id: 'profitable', label: 'Profitable' },
+    { id: 'all', label: 'All' },
     { id: 'losing', label: 'Loss making' },
+    { id: 'profitable', label: 'Profitable' },
     { id: 'custom', label: 'Custom' },
   ];
 
@@ -85,12 +86,14 @@ export class WatchlistsComponent {
   readonly tableSort = new TableSortState('netPnL');
 
   readonly tierStockColumns = [
-    { key: 'stockName', label: 'Stock', align: 'left' as const },
-    { key: 'realisedPnL', label: 'P&L', align: 'right' as const },
-    { key: 'allocatedCharges', label: 'Charges', align: 'right' as const },
-    { key: 'netPnL', label: 'Net P&L', align: 'right' as const },
-    { key: 'winRate', label: 'Win Rate', align: 'right' as const },
+    { key: 'stockName', label: 'Stock', align: 'left' as const, mobile: true },
+    { key: 'netPnL', label: 'Net P&L', align: 'right' as const, mobile: true },
+    { key: 'realisedPnL', label: 'P&L', align: 'right' as const, mobile: false },
+    { key: 'allocatedCharges', label: 'Charges', align: 'right' as const, mobile: false },
+    { key: 'winRate', label: 'Win Rate', align: 'right' as const, mobile: false },
   ];
+
+  isStockTab = computed(() => this.activeTab() === 'all' || this.activeTab() === 'profitable' || this.activeTab() === 'losing');
 
   isPnlTab = computed(() => this.activeTab() === 'profitable' || this.activeTab() === 'losing');
 
@@ -173,6 +176,11 @@ export class WatchlistsComponent {
     return this.autoTierTabs().find((tab) => tab.watchlist.id === watchlist.id) ?? null;
   });
 
+  activeViewLabel = computed(() => {
+    if (this.activeTab() === 'all') return 'All stocks';
+    return this.activeAutoTierMeta()?.fullLabel ?? '';
+  });
+
   activeCustomWatchlist = computed(() => {
     const lists = this.customWatchlists();
     const selected = this.selectedCustomWatchlistId();
@@ -184,8 +192,14 @@ export class WatchlistsComponent {
   });
 
   tierStocks = computed(() => {
-    const watchlist = this.activeAutoWatchlist();
     const stockSummaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
+
+    if (this.activeTab() === 'all') {
+      const stocks = [...stockSummaries].sort((a, b) => b.netPnL - a.netPnL);
+      return this.tableSort.sort(stocks, (stock, col) => this.tierStockSortValue(stock, col));
+    }
+
+    const watchlist = this.activeAutoWatchlist();
     if (!watchlist) return [] as StockSummary[];
 
     const tier = getPnlWatchlistTier(watchlist.id);
@@ -282,6 +296,14 @@ export class WatchlistsComponent {
 
   tierTabLabel(tab: AutoTierTab): string {
     return `${tab.shortLabel} (${tab.count})`;
+  }
+
+  tierColumnClass(col: { align: 'left' | 'right'; mobile: boolean }, stock?: StockSummary, key?: string): string {
+    const align = col.align === 'left' ? 'text-left' : 'text-right';
+    const visibility = col.mobile ? '' : 'hidden md:table-cell';
+    if (!stock || !key) return `${align} ${visibility}`.trim();
+    if (key === 'stockName') return `col-name ${visibility}`.trim();
+    return `${this.tierStockCellClass(key, stock)} ${visibility}`.trim();
   }
 
   async createWatchlist(): Promise<void> {
