@@ -113,6 +113,34 @@
     }
   }
 
+  .watchlist-sticky-toolbar {
+    @apply sticky top-12 z-20 -mx-3 space-y-2 border-b border-slate-200/80 bg-slate-50/95 px-3 py-2 backdrop-blur-md sm:-mx-5 sm:top-14 sm:px-5;
+  }
+
+  .watchlist-filter-toggle {
+    @apply flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-sm text-slate-700 shadow-sm;
+  }
+
+  .watchlist-filter-summary {
+    @apply min-w-0 flex-1 truncate text-xs text-slate-500;
+  }
+
+  .watchlist-filters {
+    @apply flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2;
+  }
+
+  .watchlist-filters-collapsed {
+    @apply hidden lg:flex;
+  }
+
+  .watchlist-tier-tabs {
+    @apply overflow-x-auto rounded-xl border border-slate-200 bg-white px-2 py-2;
+  }
+
+  .watchlist-tier-tabs .tier-segmented-control {
+    @apply min-w-max;
+  }
+
   .mobile-tab-bar {
     @apply fixed bottom-0 left-0 right-0 z-30 flex items-stretch border-t border-slate-800/60 bg-slate-900/95 px-1 pb-safe pt-1 shadow-[0_-12px_40px_rgba(15,23,42,0.45)] backdrop-blur-xl lg:hidden;
   }
@@ -187,7 +215,7 @@
   }
 
   .tier-summary-bar {
-    @apply fixed bottom-[4.5rem] left-0 right-0 z-20 border-t border-slate-800/80 bg-slate-900/95 shadow-[0_-4px_20px_rgba(15,23,42,0.25)] backdrop-blur-md lg:bottom-0 lg:left-72;
+    @apply fixed bottom-[4.5rem] left-0 right-0 z-40 border-t border-slate-800/80 bg-slate-900/95 shadow-[0_-4px_20px_rgba(15,23,42,0.25)] backdrop-blur-md lg:bottom-0 lg:left-72;
   }
 
   .tier-summary-compact {

@@ -8,11 +8,12 @@ import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { AuthService } from '../../services/auth.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { Watchlist } from '../../models/watchlist.models';
-import { StockSummary } from '../../models/trade.models';
+import { StockSummary, TRADE_TYPE_LABELS } from '../../models/trade.models';
 import { formatCurrency, pnlClass } from '../../utils/format.utils';
 import {
   getPnlWatchlistTier,
   loadPnlTierMode,
+  PNL_WATCHLIST_TIERS,
   PnlTierMode,
   savePnlTierMode,
   stockSummariesForPnlTier,
@@ -23,7 +24,7 @@ import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { MarketCapFilterComponent } from '../shared/market-cap-filter/market-cap-filter.component';
-import { MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
+import { MARKET_CAP_LABELS, MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
 
 type WatchlistTab = 'profitable' | 'losing' | 'custom';
 
@@ -74,6 +75,7 @@ export class WatchlistsComponent {
   selectedCustomWatchlistId = signal<string | null>(null);
   expandedStockKey = signal<string | null>(null);
   selectedMarketCapTiers = signal<MarketCapTier[]>([]);
+  mobileFiltersOpen = signal(false);
   newName = '';
   newSymbol = '';
   error = signal<string | null>(null);
@@ -108,18 +110,19 @@ export class WatchlistsComponent {
     const summaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
     const mode = this.tierMode();
 
-    return this.autoWatchlists().map((watchlist) => {
-      const tier = getPnlWatchlistTier(watchlist.id);
-      if (!tier) {
-        return {
-          watchlist,
-          shortLabel: watchlist.name,
-          fullLabel: watchlist.name,
-          count: watchlist.stockSymbols.length,
-        };
-      }
-
+    return PNL_WATCHLIST_TIERS.map((tier) => {
       const stocks = stockSummariesForPnlTier(summaries, tier, mode);
+      const watchlist: Watchlist = {
+        id: tier.id,
+        name: tier.name,
+        type: 'pnl_derived',
+        color: tier.color,
+        sortOrder: tier.sortOrder,
+        stockSymbols: stocks.map((stock) => this.stockSymbol(stock)),
+        createdAt: 0,
+        updatedAt: 0,
+      };
+
       return {
         watchlist,
         shortLabel: tierShortLabel(tier, mode),
@@ -127,6 +130,17 @@ export class WatchlistsComponent {
         count: stocks.length,
       };
     });
+  });
+
+  filterSummary = computed(() => {
+    const tradeTypes = this.state.selectedTradeTypes();
+    const trade = tradeTypes.includes('all')
+      ? 'All trades'
+      : tradeTypes.map((type) => TRADE_TYPE_LABELS[type] || type).join(', ');
+    const band = this.tierMode() === 'band' ? 'Exclusive' : 'Cumulative';
+    const caps = this.selectedMarketCapTiers();
+    const cap = caps.length ? caps.map((tier) => MARKET_CAP_LABELS[tier]).join(', ') : 'All caps';
+    return `${trade} · ${band} · ${cap}`;
   });
 
   lossTierTabs = computed(() =>
@@ -230,6 +244,11 @@ export class WatchlistsComponent {
   setTierMode(mode: PnlTierMode): void {
     this.tierMode.set(mode);
     savePnlTierMode(mode);
+    this.selectedAutoTierId.set(null);
+  }
+
+  toggleMobileFilters(): void {
+    this.mobileFiltersOpen.update((open) => !open);
   }
 
   setMarketCapTiers(tiers: MarketCapTier[]): void {

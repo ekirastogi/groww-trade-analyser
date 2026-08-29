@@ -1,4 +1,4 @@
-<div class="space-y-4 pb-[5.5rem] lg:pb-14">
+<div class="watchlist-page space-y-4 pb-28 lg:pb-16">
   @if (!auth.user()) {
     <div class="flex justify-end">
       <button type="button" class="btn-primary" (click)="auth.signInWithGoogle()">
@@ -33,48 +33,62 @@
         <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to generate watchlists and tier summaries.</p>
         <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
       </div>
-    } @else if (!autoWatchlists().length) {
-      <p class="text-center text-slate-500">No watchlists yet. Upload a P&amp;L file to generate them.</p>
     } @else {
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-        <div class="flex min-w-0 flex-wrap items-center gap-2">
-          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
-          <app-trade-type-filter [compact]="true" />
-        </div>
-        <div class="hidden h-5 w-px bg-slate-200 sm:block"></div>
-        <div class="flex min-w-0 flex-wrap items-center gap-2">
-          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cap</span>
-          <app-market-cap-filter
-            [selected]="selectedMarketCapTiers()"
-            (selectedChange)="setMarketCapTiers($event)"
-          />
-        </div>
-        <div class="hidden h-5 w-px bg-slate-200 sm:block"></div>
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bands</span>
-          <div class="segmented-control">
-            <button
-              type="button"
-              class="segment-item !px-2.5 !py-1.5 text-xs"
-              [class.segment-item-active]="tierMode() === 'cumulative'"
-              (click)="setTierMode('cumulative')"
-            >
-              Cumulative
-            </button>
-            <button
-              type="button"
-              class="segment-item !px-2.5 !py-1.5 text-xs"
-              [class.segment-item-active]="tierMode() === 'band'"
-              (click)="setTierMode('band')"
-            >
-              Exclusive
-            </button>
+      <div class="watchlist-sticky-toolbar">
+        <button
+          type="button"
+          class="watchlist-filter-toggle lg:hidden"
+          (click)="toggleMobileFilters()"
+          [attr.aria-expanded]="mobileFiltersOpen()"
+        >
+          <span class="font-semibold">Filters</span>
+          <span class="watchlist-filter-summary">{{ filterSummary() }}</span>
+          <svg class="h-4 w-4 shrink-0 transition" [class.rotate-180]="mobileFiltersOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <div
+          class="watchlist-filters"
+          [class.watchlist-filters-collapsed]="!mobileFiltersOpen()"
+        >
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
+            <app-trade-type-filter [compact]="true" />
+          </div>
+          <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cap</span>
+            <app-market-cap-filter
+              [selected]="selectedMarketCapTiers()"
+              (selectedChange)="setMarketCapTiers($event)"
+            />
+          </div>
+          <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bands</span>
+            <div class="segmented-control">
+              <button
+                type="button"
+                class="segment-item !px-2.5 !py-1.5 text-xs"
+                [class.segment-item-active]="tierMode() === 'cumulative'"
+                (click)="setTierMode('cumulative')"
+              >
+                Cumulative
+              </button>
+              <button
+                type="button"
+                class="segment-item !px-2.5 !py-1.5 text-xs"
+                [class.segment-item-active]="tierMode() === 'band'"
+                (click)="setTierMode('band')"
+              >
+                Exclusive
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="card overflow-hidden">
-        <div class="overflow-x-auto border-b border-slate-200 bg-slate-50/50 px-2 py-2">
+        <div class="watchlist-tier-tabs">
           <div class="tier-segmented-control">
             @for (tab of visibleAutoTierTabs(); track tab.watchlist.id) {
               <button
@@ -89,7 +103,9 @@
             }
           </div>
         </div>
+      </div>
 
+      <div class="card overflow-hidden">
         @if (activeAutoWatchlist(); as wl) {
           <div class="overflow-x-auto">
             <table class="stock-table min-w-[520px]">
@@ -200,7 +216,7 @@
       </div>
 
       @if (tierSummary(); as summary) {
-        <div class="tier-summary-bar">
+        <div class="tier-summary-bar" aria-live="polite">
           <div class="tier-summary-compact">
             <span class="tier-summary-tier truncate" [title]="activeAutoTierMeta()?.fullLabel ?? ''">
               {{ activeAutoTierMeta()?.fullLabel }}
