@@ -1,9 +1,11 @@
 import { Component, computed, inject, signal, effect } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { switchMap, of } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
+import { StockLevelsService } from '../../services/stock-levels.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { TradingChartComponent } from '../trading-chart/trading-chart.component';
@@ -14,17 +16,22 @@ import { Trade } from '../../models/trade.models';
 @Component({
   selector: 'app-stock-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, TradingChartComponent],
+  imports: [CommonModule, FormsModule, RouterLink, TradingChartComponent],
   templateUrl: './stock-detail.component.html',
 })
 export class StockDetailComponent {
   private route = inject(ActivatedRoute);
   private stockSvc = inject(StockFirestoreService);
+  private levelsSvc = inject(StockLevelsService);
   private location = inject(Location);
   private pageShell = inject(PageShellService);
   readonly reportState = inject(ReportStateService);
 
   readonly tableSort = new TableSortState('sellDate', 'desc');
+  newLevelPrice = '';
+  newLevelLabel = '';
+  newLevelType: 'support' | 'resistance' = 'support';
+  levelError = signal<string | null>(null);
 
   readonly tradeColumns = [
     { key: 'buyDate', label: 'Buy', align: 'left' as const },
@@ -35,6 +42,7 @@ export class StockDetailComponent {
   ];
 
   symbol = toSignal(this.route.paramMap.pipe(switchMap((p) => of(p.get('symbol')?.toUpperCase() ?? ''))), { initialValue: '' });
+
   stock = toSignal(
     this.route.paramMap.pipe(
       switchMap((p) => {
@@ -45,9 +53,37 @@ export class StockDetailComponent {
     { initialValue: undefined }
   );
 
+  chartView = toSignal(
+    this.route.paramMap.pipe(
+      switchMap((p) => {
+        const sym = p.get('symbol')?.toUpperCase() ?? '';
+        return sym ? this.stockSvc.watchChart(sym) : of(undefined);
+      })
+    ),
+    { initialValue: undefined }
+  );
+
+  userLevels = toSignal(
+    this.route.paramMap.pipe(
+      switchMap((p) => {
+        const sym = p.get('symbol')?.toUpperCase() ?? '';
+        return sym ? this.levelsSvc.watch(sym) : of(undefined);
+      })
+    ),
+    { initialValue: undefined }
+  );
+
   activeTab = signal<'market' | 'my-trades'>('market');
   fmt = formatCurrency;
   fmtPct = formatPct;
+
+  week52Position = computed(() => {
+    const s = this.stock();
+    if (!s?.week52High || !s?.week52Low || !s.ltp) return 50;
+    const range = s.week52High - s.week52Low;
+    if (range <= 0) return 50;
+    return ((s.ltp - s.week52Low) / range) * 100;
+  });
 
   private readonly _syncPageHeader = effect(() => {
     const sym = this.symbol();
@@ -65,18 +101,12 @@ export class StockDetailComponent {
     );
     return this.tableSort.sort(trades, (trade, col) => {
       switch (col) {
-        case 'buyDate':
-          return trade.buyDate;
-        case 'sellDate':
-          return trade.sellDate;
-        case 'quantity':
-          return trade.quantity;
-        case 'tradeType':
-          return trade.tradeType;
-        case 'realisedPnL':
-          return trade.realisedPnL;
-        default:
-          return 0;
+        case 'buyDate': return trade.buyDate;
+        case 'sellDate': return trade.sellDate;
+        case 'quantity': return trade.quantity;
+        case 'tradeType': return trade.tradeType;
+        case 'realisedPnL': return trade.realisedPnL;
+        default: return 0;
       }
     });
   });
@@ -99,5 +129,21 @@ export class StockDetailComponent {
 
   macdHist(s: { indicators?: { macdHist?: number } }): number {
     return s.indicators?.macdHist ?? 0;
+  }
+
+  async addUserLevel(): Promise<void> {
+    const price = parseFloat(this.newLevelPrice);
+    if (!price || price <= 0) {
+      this.levelError.set('Enter a valid price');
+      return;
+    }
+    this.levelError.set(null);
+    try {
+      await this.levelsSvc.addLevel(this.symbol(), this.newLevelType, price, this.newLevelLabel || (this.newLevelType === 'support' ? 'Support' : 'Resistance'));
+      this.newLevelPrice = '';
+      this.newLevelLabel = '';
+    } catch (e) {
+      this.levelError.set(e instanceof Error ? e.message : 'Failed to save level');
+    }
   }
 }

@@ -13,13 +13,33 @@
       </div>
     </div>
 
+    @if (s.week52High && s.week52Low) {
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <div class="mb-2 flex justify-between text-xs text-slate-500">
+          <span>52W Low {{ fmt(s.week52Low) }}</span>
+          <span>52W High {{ fmt(s.week52High) }}</span>
+        </div>
+        <div class="relative h-2 rounded-full bg-slate-100">
+          <div class="absolute top-0 h-2 rounded-full bg-kairo-500" [style.width.%]="week52Position()"></div>
+          <div class="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-kairo-600 shadow" [style.left.%]="week52Position()"></div>
+        </div>
+      </div>
+    }
+
     <div class="flex gap-2 border-b border-slate-200">
       <button type="button" class="px-4 py-2 text-sm font-medium" [class.border-b-2]="activeTab() === 'market'" [class.border-kairo-500]="activeTab() === 'market'" (click)="activeTab.set('market')">Market</button>
-      <button type="button" class="px-4 py-2 text-sm font-medium" [class.border-b-2]="activeTab() === 'my-trades'" [class.border-b-2]="activeTab() === 'my-trades'" [class.border-kairo-500]="activeTab() === 'my-trades'" (click)="activeTab.set('my-trades')">My Trades</button>
+      <button type="button" class="px-4 py-2 text-sm font-medium" [class.border-b-2]="activeTab() === 'my-trades'" [class.border-kairo-500]="activeTab() === 'my-trades'" (click)="activeTab.set('my-trades')">My Trades</button>
     </div>
 
     @if (activeTab() === 'market') {
-      <app-trading-chart [candles]="s.candles ?? []" [supportLevels]="s.supportLevels ?? []" [resistanceLevels]="s.resistanceLevels ?? []" />
+      <app-trading-chart
+        [chartView]="chartView()"
+        [supportLevels]="(s.supportLevels ?? []).slice(0, 3)"
+        [resistanceLevels]="(s.resistanceLevels ?? []).slice(0, 3)"
+        [userSupports]="userLevels()?.supports ?? []"
+        [userResistances]="userLevels()?.resistances ?? []"
+        [showSma]="true"
+      />
 
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div class="rounded-xl border border-slate-200 bg-white p-4">
@@ -31,55 +51,76 @@
           <div class="text-lg font-bold">{{ macdHist(s) ? macdHist(s).toFixed(2) : '—' }}</div>
         </div>
         <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <div class="text-xs text-slate-500">P/E</div>
+          <div class="text-lg font-bold">{{ s.pe ? s.pe.toFixed(1) : '—' }}</div>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
           <div class="text-xs text-slate-500">Market Cap</div>
           <div class="text-lg font-bold">{{ s.marketCap ? (s.marketCap / 1e7).toFixed(0) + ' Cr' : '—' }}</div>
         </div>
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <div class="text-xs text-slate-500">YTD / Qtr</div>
-          <div class="text-lg font-bold">{{ fmtPct(s.yearlyPerf / 100) }} / {{ fmtPct(s.quarterlyPerf / 100) }}</div>
-        </div>
       </div>
+
+      @if (s.vsNiftyPct != null || s.vsCapIndexPct != null) {
+        <div class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+          <span class="font-semibold text-slate-900">Relative strength:</span>
+          @if (s.vsNiftyPct != null) { Nifty {{ s.vsNiftyPct >= 0 ? '+' : '' }}{{ s.vsNiftyPct.toFixed(2) }}% }
+          @if (s.vsCapIndexPct != null) { · Cap index {{ s.vsCapIndexPct >= 0 ? '+' : '' }}{{ s.vsCapIndexPct.toFixed(2) }}% }
+          @if (s.vsSectorPct != null) { · {{ s.sector ?? 'Sector' }} {{ s.vsSectorPct >= 0 ? '+' : '' }}{{ s.vsSectorPct.toFixed(2) }}% }
+        </div>
+      }
 
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <h3 class="mb-3 font-semibold text-slate-900">Support Levels</h3>
+          <h3 class="mb-3 font-semibold text-slate-900">System Support (3)</h3>
           <div class="space-y-1">
-            @for (level of s.supportLevels; track $index) {
+            @for (level of (s.supportLevels ?? []).slice(0, 3); track $index) {
               <div class="flex justify-between text-sm"><span>S{{ $index + 1 }}</span><span class="font-mono text-emerald-600">{{ fmt(level) }}</span></div>
             }
           </div>
         </div>
         <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <h3 class="mb-3 font-semibold text-slate-900">Resistance Levels</h3>
+          <h3 class="mb-3 font-semibold text-slate-900">System Resistance (3)</h3>
           <div class="space-y-1">
-            @for (level of s.resistanceLevels; track $index) {
+            @for (level of (s.resistanceLevels ?? []).slice(0, 3); track $index) {
               <div class="flex justify-between text-sm"><span>R{{ $index + 1 }}</span><span class="font-mono text-red-600">{{ fmt(level) }}</span></div>
             }
           </div>
         </div>
       </div>
 
-      @if (s.targets) {
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <h3 class="mb-3 font-semibold text-slate-900">Analyst Targets</h3>
-          <div class="grid grid-cols-3 gap-4 text-center text-sm">
-            <div><div class="text-slate-500">Low</div><div class="font-bold">{{ fmt(s.targets.low) }}</div></div>
-            <div><div class="text-slate-500">Avg</div><div class="font-bold">{{ fmt(s.targets.avg) }}</div></div>
-            <div><div class="text-slate-500">High</div><div class="font-bold">{{ fmt(s.targets.high) }}</div></div>
-          </div>
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 class="mb-3 font-semibold text-slate-900">Your levels</h3>
+        @if (levelError()) {
+          <p class="mb-2 text-sm text-red-600">{{ levelError() }}</p>
+        }
+        <div class="mb-4 flex flex-wrap gap-2">
+          <select class="rounded-lg border border-slate-200 px-2 py-1 text-sm" [(ngModel)]="newLevelType">
+            <option value="support">Support</option>
+            <option value="resistance">Resistance</option>
+          </select>
+          <input class="rounded-lg border border-slate-200 px-2 py-1 text-sm" placeholder="Price" [(ngModel)]="newLevelPrice" />
+          <input class="rounded-lg border border-slate-200 px-2 py-1 text-sm" placeholder="Label" [(ngModel)]="newLevelLabel" />
+          <button type="button" class="btn-primary !py-1 !text-sm" (click)="addUserLevel()">Add</button>
         </div>
-      }
-
-      @if (s.news?.length) {
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <h3 class="mb-3 font-semibold text-slate-900">Latest News</h3>
-          <div class="space-y-3">
-            @for (n of s.news; track n.id) {
-              <a [href]="n.url" target="_blank" class="block text-sm text-kairo-600 hover:underline">{{ n.title }}</a>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <h4 class="mb-2 text-xs font-semibold uppercase text-slate-500">Your supports</h4>
+            @for (l of userLevels()?.supports ?? []; track l.id) {
+              <div class="flex justify-between text-sm"><span>{{ l.label }}</span><span class="font-mono text-emerald-600">{{ fmt(l.price) }}</span></div>
+            } @empty {
+              <p class="text-xs text-slate-400">None yet</p>
+            }
+          </div>
+          <div>
+            <h4 class="mb-2 text-xs font-semibold uppercase text-slate-500">Your resistances</h4>
+            @for (l of userLevels()?.resistances ?? []; track l.id) {
+              <div class="flex justify-between text-sm"><span>{{ l.label }}</span><span class="font-mono text-red-600">{{ fmt(l.price) }}</span></div>
+            } @empty {
+              <p class="text-xs text-slate-400">None yet</p>
             }
           </div>
         </div>
-      }
+      </div>
     } @else {
       @if (myStockSummary(); as summary) {
         <div class="grid gap-4 sm:grid-cols-3">
@@ -94,12 +135,7 @@
                 <th class="w-10 text-center">#</th>
                 @for (col of tradeColumns; track col.key) {
                   <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
-                    <button
-                      type="button"
-                      class="sort-btn"
-                      [class.sort-btn-active]="tableSort.isActive(col.key)"
-                      (click)="tableSort.toggle(col.key, $event)"
-                    >
+                    <button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive(col.key)" (click)="tableSort.toggle(col.key, $event)">
                       {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
                     </button>
                   </th>
@@ -121,13 +157,13 @@
           </table>
         </div>
       } @else {
-        <p class="text-center text-slate-500">No trades for this stock in the loaded report. Upload a P&amp;L export from the Upload page.</p>
+        <p class="text-center text-slate-500">No trades for this stock in the loaded report.</p>
       }
     }
   </div>
 } @else {
   <div class="py-12 text-center text-slate-500">
     <p>Waiting for market data from local backend...</p>
-    <p class="mt-2 text-sm">Start the backend worker and ensure {{ symbol() }} is in a watchlist.</p>
+    <p class="mt-2 text-sm">Start the backend worker. Symbol {{ symbol() }} will hydrate from universe + P&amp;L upload.</p>
   </div>
 }

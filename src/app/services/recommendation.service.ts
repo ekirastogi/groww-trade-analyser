@@ -4,6 +4,8 @@ import {
   collection,
   collectionData,
   doc,
+  docData,
+  limit,
   orderBy,
   query,
   updateDoc,
@@ -19,25 +21,42 @@ export class RecommendationService {
   private auth = inject(AuthService);
   private col = collection(this.firestore, 'recommendations');
 
+  watchTopPending(limitCount = 20): Observable<TradeSuggestion[]> {
+    const q = query(
+      this.col,
+      where('approvalStatus', '==', 'pending'),
+      orderBy('confidence', 'desc'),
+      limit(limitCount)
+    );
+    return collectionData(q, { idField: 'id' }) as Observable<TradeSuggestion[]>;
+  }
+
+  watchByHorizon(horizon: 'intraday' | 'btst', limitCount = 20): Observable<TradeSuggestion[]> {
+    const q = query(
+      this.col,
+      where('approvalStatus', '==', 'pending'),
+      where('horizon', '==', horizon),
+      orderBy('confidence', 'desc'),
+      limit(limitCount)
+    );
+    return collectionData(q, { idField: 'id' }) as Observable<TradeSuggestion[]>;
+  }
+
   watchAll(): Observable<TradeSuggestion[]> {
-    const q = query(this.col, orderBy('createdAt', 'desc'));
+    const q = query(this.col, orderBy('createdAt', 'desc'), limit(100));
     return collectionData(q, { idField: 'id' }) as Observable<TradeSuggestion[]>;
   }
 
   watchPending(): Observable<TradeSuggestion[]> {
-    const q = query(
-      this.col,
-      where('approvalStatus', '==', 'pending'),
-      orderBy('createdAt', 'desc')
-    );
-    return collectionData(q, { idField: 'id' }) as Observable<TradeSuggestion[]>;
+    return this.watchTopPending(50);
   }
 
   watchHistory(): Observable<TradeSuggestion[]> {
     const q = query(
       this.col,
       where('status', 'in', ['executed', 'hit_target', 'hit_sl', 'expired', 'rejected']),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(50)
     );
     return collectionData(q, { idField: 'id' }) as Observable<TradeSuggestion[]>;
   }

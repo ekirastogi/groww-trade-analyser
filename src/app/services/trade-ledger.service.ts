@@ -28,6 +28,7 @@ import { AuthService } from './auth.service';
 import { ClientAccountService } from './client-account.service';
 import { ParserService } from './parser.service';
 import { WatchlistService } from './watchlist.service';
+import { UniverseService } from './universe.service';
 import {
   buildTradeTypeStats,
   computeChargeRatio,
@@ -65,6 +66,7 @@ export class TradeLedgerService {
   private clientSvc = inject(ClientAccountService);
   private parser = inject(ParserService);
   private watchlists = inject(WatchlistService);
+  private universe = inject(UniverseService);
 
   async uploadReport(file: File, options: UploadOptions = {}): Promise<UploadResult> {
     await this.auth.whenReady();
@@ -272,6 +274,10 @@ export class TradeLedgerService {
     const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
     await this.writeStockProfiles(clientCode, profiles);
     await this.watchlists.syncPnlTierWatchlists(profiles);
+    await this.universe.syncSymbols(
+      profiles.map((p) => ({ symbol: p.symbol, name: p.stockName, isin: p.isin })),
+      'pnl_upload'
+    );
 
     return this.buildReportFromStoredData(
       trades,

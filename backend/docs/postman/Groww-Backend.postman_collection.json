@@ -1,0 +1,106 @@
+{
+  "info": {
+    "_postman_id": "a7c3e1d0-4b2f-4e8a-9c11-groww-backend-api",
+    "name": "Groww Trading Worker",
+    "description": "Local P&L HTTP API for the Go worker. Import this file into Postman. Set `baseUrl` to the worker (default http://localhost:8080).\n\nThe Angular UI does not use these routes; it reads Firebase. Market ingest and trade approvals are not HTTP — they run inside the worker process.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "reportId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "Worker liveness plus SQLite path, Firebase project, and market provider."
+          }
+        },
+        {
+          "name": "OpenAPI spec",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/openapi.yaml"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Upload P&L file",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.id) { pm.collectionVariables.set('reportId', json.id); }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Groww P&L .xlsx or .csv"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/reports",
+            "description": "Saves parsed trades in memory. Copies `id` into collection variable `reportId`."
+          }
+        },
+        {
+          "name": "Get report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/reports/{{reportId}}"
+          }
+        },
+        {
+          "name": "Analyze report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/{{reportId}}/analyze?startDate=2024-01-01&endDate=2024-12-31&tradeTypes=intraday",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reports", "{{reportId}}", "analyze"],
+              "query": [
+                { "key": "startDate", "value": "2024-01-01" },
+                { "key": "endDate", "value": "2024-12-31" },
+                { "key": "tradeTypes", "value": "intraday" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

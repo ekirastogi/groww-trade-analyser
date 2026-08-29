@@ -46,3 +46,13 @@ src/environments/firebase.config.ts
 .firebase-web-config.secret.json
 .env
 .env.local
+
+# Go backend
+/backend/.env
+/backend/groww-pnl-analyzer
+/backend/bin/
+/backend/*.exe
+
+# Logs
+firepit-log.txt
+firebase-debug.log

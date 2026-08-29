@@ -3,10 +3,13 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RecommendationService } from '../../services/recommendation.service';
+import { VolumeShockerService } from '../../services/stock-levels.service';
 import { AuthService } from '../../services/auth.service';
-import { TradeSuggestion } from '../../models/signal.models';
-import { formatCurrency } from '../../utils/format.utils';
+import { TradeHorizon, TradeSuggestion } from '../../models/signal.models';
+import { formatCurrency, formatPct } from '../../utils/format.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
+
+type HorizonFilter = 'all' | TradeHorizon;
 
 @Component({
   selector: 'app-signals',
@@ -16,51 +19,37 @@ import { TableSortState } from '../../utils/table-sort.utils';
 })
 export class SignalsComponent {
   private recSvc = inject(RecommendationService);
+  private shockerSvc = inject(VolumeShockerService);
   readonly auth = inject(AuthService);
 
-  recommendations = toSignal(this.recSvc.watchAll(), { initialValue: [] as TradeSuggestion[] });
+  recommendations = toSignal(this.recSvc.watchTopPending(30), { initialValue: [] as TradeSuggestion[] });
+  shockers = toSignal(this.shockerSvc.watchActive(), { initialValue: undefined });
+  horizonFilter = signal<HorizonFilter>('all');
   processing = signal<string | null>(null);
   error = signal<string | null>(null);
   fmt = formatCurrency;
+  fmtPct = formatPct;
   readonly tableSort = new TableSortState('createdAt', 'desc');
 
   readonly historyColumns = [
     { key: 'createdAt', label: 'Time', align: 'left' as const },
     { key: 'symbol', label: 'Symbol', align: 'left' as const },
-    { key: 'side', label: 'Side', align: 'left' as const },
+    { key: 'horizon', label: 'Style', align: 'left' as const },
     { key: 'entry', label: 'Entry', align: 'left' as const },
     { key: 'status', label: 'Status', align: 'left' as const },
     { key: 'outcomePct', label: 'Outcome', align: 'right' as const },
   ];
 
-  pending(recs: TradeSuggestion[]) {
-    return recs.filter((r) => r.approvalStatus === 'pending' || r.status === 'pending_approval');
-  }
+  ranked = computed(() => {
+    const filter = this.horizonFilter();
+    let recs = [...this.recommendations()];
+    if (filter !== 'all') {
+      recs = recs.filter((r) => (r.horizon ?? 'intraday') === filter);
+    }
+    return recs.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+  });
 
-  history(recs: TradeSuggestion[]) {
-    return recs.filter((r) => r.approvalStatus !== 'pending' && r.status !== 'pending_approval');
-  }
-
-  sortedHistory = computed(() =>
-    this.tableSort.sort(this.history(this.recommendations()), (rec, col) => {
-      switch (col) {
-        case 'createdAt':
-          return rec.createdAt ?? 0;
-        case 'symbol':
-          return rec.symbol.toLowerCase();
-        case 'side':
-          return rec.side;
-        case 'entry':
-          return rec.entry;
-        case 'status':
-          return rec.approvalStatus ?? rec.status;
-        case 'outcomePct':
-          return rec.outcomePct ?? -Infinity;
-        default:
-          return 0;
-      }
-    })
-  );
+  shockerList = computed(() => this.shockers()?.symbols ?? []);
 
   async approve(rec: TradeSuggestion): Promise<void> {
     this.processing.set(rec.id);
@@ -81,6 +70,22 @@ export class SignalsComponent {
     } finally {
       this.processing.set(null);
     }
+  }
+
+  setHorizon(h: HorizonFilter): void {
+    this.horizonFilter.set(h);
+  }
+
+  horizonLabel(rec: TradeSuggestion): string {
+    return (rec.horizon ?? 'intraday').toUpperCase();
+  }
+
+  vsIndexLine(rec: TradeSuggestion): string {
+    const parts: string[] = [];
+    if (rec.vsNiftyPct != null) parts.push(`Nifty ${rec.vsNiftyPct >= 0 ? '+' : ''}${rec.vsNiftyPct.toFixed(2)}%`);
+    if (rec.vsCapIndexPct != null) parts.push(`Cap ${rec.vsCapIndexPct >= 0 ? '+' : ''}${rec.vsCapIndexPct.toFixed(2)}%`);
+    if (rec.vsSectorPct != null) parts.push(`${rec.sector ?? 'Sector'} ${rec.vsSectorPct >= 0 ? '+' : ''}${rec.vsSectorPct.toFixed(2)}%`);
+    return parts.join(' · ');
   }
 
   statusClass(rec: TradeSuggestion): string {

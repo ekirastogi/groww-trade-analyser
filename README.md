@@ -1,55 +1,86 @@
-# Kairo
+# Groww Trader
 
-**Trade at the right moment** — a personal trading workstation for signals, portfolio analytics, and market intelligence.
+Personal trading workstation: **local Go worker** ingests market data into **SQLite**, publishes slim snapshots to **Firebase Firestore**, and the **Angular UI** reads Firestore only.
 
-## Stack
+Groww P&L report analysis runs **in the browser** (upload `.xlsx`/`.csv` on Dashboard). Uploaded symbols are written to `universe/{SYMBOL}` for the worker to hydrate.
 
-- **Frontend**: Angular 17, Tailwind CSS, Firebase (Auth, Firestore, Hosting)
-- **Local engine**: Go worker with SQLite (market data, indicators, signals) — publishes to Firestore
+## Architecture
 
-The UI talks only to Firebase. The local backend runs on your machine and syncs recommendations and market snapshots to the cloud.
+```
+P&L upload ──► universe/{SYMBOL} ──► Go worker (local)
+Stooq/Yahoo ──► SQLite (~/.groww-trader/market.db) ──► Firestore (slim) ◄── Angular
+```
 
-## Development
+| Layer | What |
+|---|---|
+| **SQLite** | Years of OHLC, fundamentals, PE history, volume shocker rankings, symbol meta |
+| **Firestore** | Slim `stocks/{sym}`, chart at `stocks/{sym}/views/chart`, `recommendations`, `volumeShockers/active`, `universe` |
+| **Worker** | EOD full book (~200+ symbols), hot-set quotes during market hours, relative-strength INTRADAY/BTST signals |
+
+- **Raw candles** never go on the main `stocks/{symbol}` doc — chart data lives in `views/chart`.
+- **Volume shockers** — top N by volume vs 20d avg, held in hot set for 5 trading days.
+- **Signals** — scored vs Nifty/Midcap/Smallcap (by cap) + sector index + volume + MACD/RSI/S/R.
+
+## Quick start
+
+### 1. Firebase setup
+
+1. Create a project at https://console.firebase.google.com
+2. Enable **Authentication** (Google sign-in) and **Firestore**
+3. Create a **service account** key for the local worker
+4. Update `src/environments/environment.ts` with your Firebase web config
+5. Update `.firebaserc` with your project ID
+6. Deploy rules: `firebase deploy --only firestore:rules,firestore:indexes`
+
+### 2. Backend worker (local)
 
 ```bash
-npm install
-cp src/environments/firebase.config.example.ts src/environments/firebase.config.ts
-# Add your Firebase web app values to firebase.config.ts
+cd backend
+cp .env.example .env
+# Edit: FIREBASE_PROJECT_ID, GOOGLE_APPLICATION_CREDENTIALS
+
+export MARKET_DATA_PROVIDER=stooq+yahoo
+export WATCH_SYMBOLS=RELIANCE,TCS,INFY
+
+go run .
+```
+
+See [`backend/README.md`](backend/README.md) for ingest tiers, env vars, and HTTP API (`/docs`).
+
+### 3. Frontend
+
+```bash
+npm install --legacy-peer-deps
 npm start
 ```
 
-Open [http://localhost:4200](http://localhost:4200).
+Open http://localhost:4200 — sign in with Google.
 
-## Firebase & secrets
+## UI pages
 
-Firebase web config is stored in **Google Secret Manager** (via Firebase CLI) so it stays out of git. No Cloud Functions are used — config is fetched at **build time**.
+| Route | Description |
+|-------|-------------|
+| `/` | **Recommended trades** — ranked INTRADAY/BTST signals + volume shocker strip |
+| `/dashboard` | Upload Groww P&L exports (client-side) |
+| `/watchlists` | Manage symbol lists |
+| `/stock/:symbol` | Groww-like chart (SMA, MACD, RSI, system + user S/R), 52w range, PE |
+| `/heatmap` | P&L treemap from uploaded report |
+| `/analytics` | P&L charts |
 
-**One-time project setup** (requires [Firebase CLI](https://firebase.google.com/docs/cli) logged in):
+## Swapping market data provider
 
-```bash
-npm run firebase:setup
-```
+Set `MARKET_DATA_PROVIDER=stooq+yahoo|yahoo|stooq|nse|groww` in backend `.env`. Groww live feed plugs in later via the same `market.Provider` interface.
 
-This creates the Firestore database, deploys security rules/indexes, and uploads your local `firebase.config.ts` to Secret Manager.
+## Groww trading (future)
 
-**Production deploy**:
-
-```bash
-npm run deploy
-```
-
-Hosted at [kairo-trade.web.app](https://kairo-trade.web.app).
-
-> **Note:** Firebase web API keys are public by design (they end up in the browser bundle). Secret Manager keeps them out of git and centralizes config for CI/CD. Real secrets (Groww API token, service account keys) belong only in the **backend** `.env`, never in the frontend.
+Set `GROWW_API_TOKEN` and implement `GrowwProvider.PlaceOrder()`. Approved recommendations execute automatically (dry-run until wired).
 
 ## Project structure
 
-| Path | Purpose |
-|------|---------|
-| `src/app/components/` | Pages: signals, dashboard, upload, analytics, watchlists |
-| `src/app/services/` | Firestore, auth, trade ledger, recommendations |
-| `scripts/` | Firebase setup, Secret Manager upload/fetch |
-
-## Broker uploads
-
-P&amp;L files from supported brokers (e.g. Groww exports) can be uploaded and optionally synced to Firestore with incremental deduplication per client account.
+```
+├── backend/           # Local worker (Go + SQLite + Firestore sync)
+├── src/               # Angular SPA (Firestore only)
+├── firestore.rules
+├── firestore.indexes.json
+└── package.json
+```

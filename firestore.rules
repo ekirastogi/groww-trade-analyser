@@ -16,10 +16,25 @@ service cloud.firestore {
       }
     }
 
-    // Market snapshots — written by local backend service account, read by owner only
+    match /universe/{symbol} {
+      allow read: if isOwner();
+      allow create, update: if isOwner();
+      allow delete: if false;
+    }
+
+    match /volumeShockers/{id} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
     match /stocks/{symbol} {
       allow read: if isOwner();
       allow write: if false;
+
+      match /views/{viewId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
     }
 
     match /watchlists/{id} {

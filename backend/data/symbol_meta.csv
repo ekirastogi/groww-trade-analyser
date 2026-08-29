@@ -1,0 +1,199 @@
+symbol,name,cap,sector
+RELIANCE,Reliance Industries,large,energy
+TCS,Tata Consultancy Services,large,it
+INFY,Infosys,large,it
+HDFCBANK,HDFC Bank,large,bank
+ICICIBANK,ICICI Bank,large,bank
+HINDUNILVR,Hindustan Unilever,large,fmcg
+ITC,ITC,large,fmcg
+SBIN,State Bank of India,large,bank
+BHARTIARTL,Bharti Airtel,large,telecom
+KOTAKBANK,Kotak Mahindra Bank,large,bank
+LT,Larsen & Toubro,large,infra
+AXISBANK,Axis Bank,large,bank
+ASIANPAINT,Asian Paints,large,fmcg
+MARUTI,Maruti Suzuki,large,auto
+TITAN,Titan Company,large,fmcg
+SUNPHARMA,Sun Pharmaceutical,large,pharma
+BAJFINANCE,Bajaj Finance,large,finance
+WIPRO,Wipro,large,it
+HCLTECH,HCL Technologies,large,it
+ULTRACEMCO,UltraTech Cement,large,infra
+NESTLEIND,Nestle India,large,fmcg
+POWERGRID,Power Grid,large,energy
+NTPC,NTPC,large,energy
+TATAMOTORS,Tata Motors,large,auto
+M&M,Mahindra & Mahindra,large,auto
+ADANIENT,Adani Enterprises,large,energy
+ADANIPORTS,Adani Ports,large,infra
+JSWSTEEL,JSW Steel,large,metal
+TATASTEEL,Tata Steel,large,metal
+COALINDIA,Coal India,large,energy
+ONGC,Oil & Natural Gas,large,energy
+DIVISLAB,Divi's Laboratories,large,pharma
+DRREDDY,Dr Reddy's Laboratories,large,pharma
+CIPLA,Cipla,large,pharma
+APOLLOHOSP,Apollo Hospitals,large,healthcare
+EICHERMOT,Eicher Motors,large,auto
+HEROMOTOCO,Hero MotoCorp,large,auto
+BAJAJFINSV,Bajaj Finserv,large,finance
+INDUSINDBK,IndusInd Bank,mid,bank
+PIDILITIND,Pidilite Industries,mid,fmcg
+DABUR,Dabur India,mid,fmcg
+GODREJCP,Godrej Consumer,mid,fmcg
+BERGEPAINT,Berger Paints,mid,fmcg
+HAVELLS,Havells India,mid,fmcg
+TORNTPHARM,Torrent Pharmaceuticals,mid,pharma
+LUPIN,Lupin,mid,pharma
+BIOCON,Biocon,mid,pharma
+AUROPHARMA,Aurobindo Pharma,mid,pharma
+PERSISTENT,Persistent Systems,mid,it
+COFORGE,Coforge,mid,it
+MPHASIS,Mphasis,mid,it
+LTIM,LTIMindtree,large,it
+TECHM,Tech Mahindra,large,it
+VEDL,Vedanta,large,metal
+HINDALCO,Hindalco Industries,large,metal
+GRASIM,Grasim Industries,large,infra
+SBILIFE,SBI Life Insurance,large,finance
+HDFCLIFE,HDFC Life Insurance,large,finance
+ICICIPRULI,ICICI Prudential Life,large,finance
+BRITANNIA,Britannia Industries,large,fmcg
+TATACONSUM,Tata Consumer,large,fmcg
+MARICO,Marico,mid,fmcg
+COLPAL,Colgate Palmolive,mid,fmcg
+DMART,Avenue Supermarts,mid,fmcg
+ZOMATO,Zomato,mid,it
+PAYTM,One 97 Communications,small,it
+IRCTC,Indian Railway Catering,small,infra
+IRFC,Indian Railway Finance,small,finance
+RVNL,Rail Vikas Nigam,small,infra
+NHPC,NHPC,mid,energy
+SJVN,SJVN,mid,energy
+TATAPOWER,Tata Power,mid,energy
+ADANIGREEN,Adani Green Energy,mid,energy
+SUZLON,Suzlon Energy,small,energy
+YESBANK,Yes Bank,small,bank
+BANDHANBNK,Bandhan Bank,mid,bank
+FEDERALBNK,Federal Bank,mid,bank
+IDFCFIRSTB,IDFC First Bank,mid,bank
+AUBANK,AU Small Finance Bank,small,bank
+PNB,Punjab National Bank,large,bank
+BANKBARODA,Bank of Baroda,large,bank
+CANBK,Canara Bank,large,bank
+UNIONBANK,Union Bank of India,large,bank
+INDIANB,Indian Bank,mid,bank
+IOB,Indian Overseas Bank,small,bank
+CENTRALBK,Central Bank of India,small,bank
+UCOBANK,UCO Bank,small,bank
+BHEL,BHEL,mid,infra
+BEL,Bharat Electronics,mid,defence
+HAL,Hindustan Aeronautics,mid,defence
+COCHINSHIP,Cochin Shipyard,small,defence
+MAZDOCK,Mazagon Dock,mid,defence
+POLYCAB,Polycab India,mid,fmcg
+CROMPTON,Crompton Greaves,mid,fmcg
+VOLTAS,Voltas,mid,fmcg
+BLUESTARCO,Blue Star,mid,fmcg
+WHIRLPOOL,Whirlpool India,mid,fmcg
+DIXON,Dixon Technologies,mid,it
+AMBER,Amber Enterprises,mid,auto
+MOTHERSON,Samvardhana Motherson,mid,auto
+BOSCHLTD,Bosch,mid,auto
+EXIDEIND,Exide Industries,mid,auto
+MRF,MRF,mid,auto
+APOLLOTYRE,Apollo Tyres,mid,auto
+CEATLTD,CEAT,mid,auto
+ASHOKLEY,Ashok Leyland,mid,auto
+ESCORTS,Escorts Kubota,mid,auto
+TVSMOTOR,TVS Motor,mid,auto
+BAJAJ-AUTO,Bajaj Auto,large,auto
+PAGEIND,Page Industries,mid,fmcg
+TRENT,Trent,mid,fmcg
+SHOPERSTOP,Shoppers Stop,small,fmcg
+ABFRL,Aditya Birla Fashion,mid,fmcg
+JUBLFOOD,Jubilant Foodworks,mid,fmcg
+DEVYANI,Devyani International,mid,fmcg
+SAPPHIRE,Sapphire Foods,small,fmcg
+NAUKRI,Info Edge,mid,it
+POLICYBZR,PB Fintech,mid,finance
+ANGELONE,Angel One,mid,finance
+CDSL,Central Depository Services,mid,finance
+CAMS,Computer Age Management,mid,finance
+MCX,Multi Commodity Exchange,mid,finance
+BSE,BSE,mid,finance
+NMDC,NMDC,mid,metal
+SAIL,Steel Authority of India,mid,metal
+NATIONALUM,National Aluminium,mid,metal
+HINDZINC,Hindustan Zinc,large,metal
+JINDALSTEL,Jindal Steel,mid,metal
+JSWENERGY,JSW Energy,mid,energy
+RECLTD,REC,mid,finance
+PFC,Power Finance Corporation,mid,finance
+IRB,IRB Infrastructure,mid,infra
+ADANIPOWER,Adani Power,mid,energy
+TORNTPOWER,Torrent Power,mid,energy
+CUMMINSIND,Cummins India,mid,auto
+SIEMENS,Siemens,mid,infra
+ABB,ABB India,mid,infra
+THERMAX,Thermax,mid,infra
+AIAENG,AIA Engineering,mid,infra
+KEI,KEI Industries,mid,infra
+FINPIPE,Finolex Industries,mid,infra
+ASTRAL,Astral,mid,infra
+SUPREMEIND,Supreme Industries,mid,infra
+DEEPAKNTR,Deepak Nitrite,mid,chemical
+PIIND,PI Industries,mid,chemical
+SRF,SRF,mid,chemical
+UPL,UPL,large,chemical
+TATACHEM,Tata Chemicals,mid,chemical
+ATUL,Atul,mid,chemical
+ALKEM,Alkem Laboratories,mid,pharma
+GLENMARK,Glenmark Pharmaceuticals,mid,pharma
+LAURUSLABS,Laurus Labs,mid,pharma
+GRANULES,Granules India,mid,pharma
+NATCOPHARM,Natco Pharma,mid,pharma
+IPCALAB,IPCA Laboratories,mid,pharma
+ALKYLAMINE,Alkyl Amines,mid,chemical
+CLEAN,Clean Science,mid,chemical
+FINEORG,Fine Organic,mid,chemical
+GALAXYSURF,Galaxy Surfactants,mid,chemical
+SUMICHEM,Sumitomo Chemical,mid,chemical
+SYNGENE,Syngene International,mid,pharma
+METROPOLIS,Metropolis Healthcare,mid,healthcare
+LALPATHLAB,Dr Lal PathLabs,mid,healthcare
+MAXHEALTH,Max Healthcare,mid,healthcare
+FORTIS,Fortis Healthcare,mid,healthcare
+NH,Narayana Hrudayalaya,mid,healthcare
+KIMS,Krishna Institute,mid,healthcare
+RAINBOW,Rainbow Children's,mid,healthcare
+STARHEALTH,Star Health Insurance,mid,finance
+GICRE,General Insurance Corporation,mid,finance
+LICI,Life Insurance Corporation,large,finance
+MUTHOOTFIN,Muthoot Finance,mid,finance
+MANAPPURAM,Manappuram Finance,mid,finance
+CHOLAFIN,Cholamandalam Investment,mid,finance
+SHRIRAMFIN,Shriram Finance,large,finance
+M&MFIN,Mahindra & Mahindra Financial,mid,finance
+LICHSGFIN,LIC Housing Finance,mid,finance
+PNBHOUSING,PNB Housing Finance,mid,finance
+AAVAS,Aavas Financiers,mid,finance
+HOMEFIRST,Home First Finance,mid,finance
+CREDITACC,CreditAccess Grameen,small,finance
+CAPLIPOINT,Caplin Point Laboratories,mid,pharma
+VIJAYA,Vijaya Diagnostic,mid,healthcare
+KAYNES,Kaynes Technology,mid,it
+CYIENT,Cyient,mid,it
+KPITTECH,KPIT Technologies,mid,it
+TATAELXSI,Tata Elxsi,mid,it
+SONACOMS,Sona BLW,mid,auto
+CRAFTSMAN,Craftsman Automation,mid,auto
+SCHAEFFLER,Schaeffler India,mid,auto
+TIMKEN,Timken India,mid,auto
+SKFINDIA,SKF India,mid,auto
+GRINDWELL,Grindwell Norton,mid,infra
+CARBORUNIV,Carborundum Universal,mid,infra
+FINCABLES,Finolex Cables,mid,infra
+RRKABEL,RR Kabel,mid,infra
+HONAUT,Honeywell Automation,mid,it
+PERSISTENT,Persistent Systems,mid,it

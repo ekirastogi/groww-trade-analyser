@@ -1,4 +1,5 @@
 export type SignalSide = 'BUY' | 'SELL';
+export type TradeHorizon = 'intraday' | 'btst' | 'delivery';
 export type SuggestionStatus = 'open' | 'pending_approval' | 'hit_target' | 'hit_sl' | 'expired' | 'executed' | 'rejected' | 'executing';
 
 export interface SignalCondition {
@@ -35,6 +36,13 @@ export interface TradeSuggestion {
   sl: number;
   targets: number[];
   confidence: number;
+  horizon?: TradeHorizon;
+  capBucket?: string;
+  sector?: string;
+  vsNiftyPct?: number;
+  vsCapIndexPct?: number;
+  vsSectorPct?: number;
+  volumeRatio?: number;
   status: SuggestionStatus;
   approvalStatus?: 'pending' | 'approved' | 'rejected' | 'executing' | 'executed';
   createdAt: string;

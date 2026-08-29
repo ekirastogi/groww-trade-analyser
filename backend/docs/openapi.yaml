@@ -1,0 +1,426 @@
+openapi: 3.0.3
+info:
+  title: Groww Trading Worker API
+  description: |
+    Local backend for Kairo / Groww Trader.
+
+    The process is primarily a **market-data worker** (SQLite + Firestore).
+    These HTTP routes are a **P&L helper API**: upload a Groww export, then
+    fetch the parsed report or a filtered analysis. Reports are stored **in memory**
+    and are lost when the process exits.
+
+    The Angular UI does not call this API; it talks to Firebase. Use this API for
+    local tools, Postman, or debugging parsers.
+  version: 1.0.0
+  contact:
+    name: Kairo
+
+servers:
+  - url: http://localhost:8080
+    description: Local worker (default HTTP_ADDR)
+
+tags:
+  - name: Health
+    description: Process liveness and dependency status
+  - name: Reports
+    description: Groww P&L upload and analysis (in-memory)
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health and dependency status
+      operationId: getHealth
+      responses:
+        "200":
+          description: Worker is running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /openapi.yaml:
+    get:
+      tags: [Health]
+      summary: OpenAPI specification
+      operationId: getOpenAPI
+      responses:
+        "200":
+          description: OpenAPI 3 YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /api/v1/reports:
+    post:
+      tags: [Reports]
+      summary: Upload a Groww P&L file
+      description: |
+        Multipart form field `file` must be a Groww P&L `.xlsx` / `.xls` or `.csv`.
+        Maximum size 32 MB. Returns a report id for later GET calls.
+      operationId: uploadReport
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Groww P&L export
+      responses:
+        "200":
+          description: File parsed and stored in memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          description: Missing file, unsupported type, or parse error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/reports/{id}:
+    get:
+      tags: [Reports]
+      summary: Get a parsed report
+      operationId: getReport
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      responses:
+        "200":
+          description: Full parsed report including trades
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "404":
+          description: Unknown id (or process restarted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/reports/{id}/analyze:
+    get:
+      tags: [Reports]
+      summary: Analyze a report with optional filters
+      operationId: analyzeReport
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+            example: "2024-01-01"
+          description: Inclusive sell-date start (YYYY-MM-DD)
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+            example: "2024-12-31"
+          description: Inclusive sell-date end (YYYY-MM-DD)
+        - name: tradeTypes
+          in: query
+          schema:
+            type: string
+            example: intraday,delivery
+          description: |
+            Comma-separated trade types. Omit or `all` for every type.
+            Values: `all`, `intraday`, `delivery`, `same_day`, `mtf`, `fno`.
+      responses:
+        "200":
+          description: Aggregated P&L
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResult"
+        "404":
+          description: Unknown id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  parameters:
+    ReportId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: file is required
+
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: groww-trading-worker
+        sqlitePath:
+          type: string
+          example: /Users/you/.groww-trader/market.db
+        firebaseProject:
+          type: string
+          example: kairo-trade
+        firebaseEnabled:
+          type: boolean
+        marketProvider:
+          type: string
+          enum: [yahoo, nse, groww]
+        ingestInterval:
+          type: string
+          example: 5m
+
+    UploadResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        summary:
+          $ref: "#/components/schemas/ReportSummary"
+        dateRange:
+          $ref: "#/components/schemas/DateRange"
+        tradeTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TradeType"
+        tradeCount:
+          type: integer
+        stockCount:
+          type: integer
+
+    ReportSummary:
+      type: object
+      properties:
+        clientName:
+          type: string
+        clientCode:
+          type: string
+        period:
+          type: string
+        realisedPnL:
+          type: number
+        unrealisedPnL:
+          type: number
+
+    DateRange:
+      type: object
+      properties:
+        min:
+          type: string
+        max:
+          type: string
+
+    TradeType:
+      type: string
+      enum: [all, intraday, delivery, same_day, mtf, fno]
+
+    ChargeItem:
+      type: object
+      properties:
+        label:
+          type: string
+        amount:
+          type: number
+
+    ChargesSummary:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChargeItem"
+        total:
+          type: number
+
+    Trade:
+      type: object
+      properties:
+        stockName:
+          type: string
+        isin:
+          type: string
+        quantity:
+          type: number
+        buyDate:
+          type: string
+          format: date-time
+        buyPrice:
+          type: number
+        buyValue:
+          type: number
+        sellDate:
+          type: string
+          format: date-time
+        sellPrice:
+          type: number
+        sellValue:
+          type: number
+        realisedPnL:
+          type: number
+        remark:
+          type: string
+        tradeType:
+          $ref: "#/components/schemas/TradeType"
+        holdingDays:
+          type: integer
+
+    StockSummary:
+      type: object
+      properties:
+        stockName:
+          type: string
+        isin:
+          type: string
+        quantity:
+          type: number
+        avgBuyPrice:
+          type: number
+        buyValue:
+          type: number
+        avgSellPrice:
+          type: number
+        sellValue:
+          type: number
+        realisedPnL:
+          type: number
+        realisedPnLPct:
+          type: number
+        tradeCount:
+          type: integer
+        allocatedCharges:
+          type: number
+        netPnL:
+          type: number
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+        summary:
+          $ref: "#/components/schemas/ReportSummary"
+        charges:
+          $ref: "#/components/schemas/ChargesSummary"
+        trades:
+          type: array
+          items:
+            $ref: "#/components/schemas/Trade"
+        stockSummary:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockSummary"
+        dateRange:
+          $ref: "#/components/schemas/DateRange"
+        tradeTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TradeType"
+
+    PeriodBucket:
+      type: object
+      properties:
+        period:
+          type: string
+        label:
+          type: string
+        tradeCount:
+          type: integer
+        totalBuyValue:
+          type: number
+        totalSellValue:
+          type: number
+        realisedPnL:
+          type: number
+        winningTrades:
+          type: integer
+        losingTrades:
+          type: integer
+        winRate:
+          type: number
+        allocatedCharges:
+          type: number
+        netPnL:
+          type: number
+
+    AnalysisSummary:
+      type: object
+      properties:
+        tradeCount:
+          type: integer
+        totalBuyValue:
+          type: number
+        totalSellValue:
+          type: number
+        realisedPnL:
+          type: number
+        winningTrades:
+          type: integer
+        losingTrades:
+          type: integer
+        winRate:
+          type: number
+        allocatedCharges:
+          type: number
+        netPnL:
+          type: number
+
+    FilterState:
+      type: object
+      properties:
+        startDate:
+          type: string
+        endDate:
+          type: string
+        tradeTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TradeType"
+
+    AnalysisResult:
+      type: object
+      properties:
+        summary:
+          $ref: "#/components/schemas/AnalysisSummary"
+        daily:
+          type: array
+          items:
+            $ref: "#/components/schemas/PeriodBucket"
+        weekly:
+          type: array
+          items:
+            $ref: "#/components/schemas/PeriodBucket"
+        monthly:
+          type: array
+          items:
+            $ref: "#/components/schemas/PeriodBucket"
+        stocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockSummary"
+        charges:
+          $ref: "#/components/schemas/ChargesSummary"
+        filters:
+          $ref: "#/components/schemas/FilterState"

@@ -63,21 +63,39 @@ export interface StockSnapshot {
   symbol: string;
   name: string;
   exchange: string;
-  isin: string;
+  isin?: string;
   ltp: number;
   change: number;
   changePct: number;
   marketCap: number;
+  pe?: number;
+  week52High?: number;
+  week52Low?: number;
   supportLevels?: number[];
   resistanceLevels?: number[];
-  targets: { high: number; low: number; avg: number };
+  targets?: { high: number; low: number; avg: number };
   quarterlyPerf: number;
   yearlyPerf: number;
   indicators?: IndicatorSnapshot;
-  candles?: Candle[];
+  peSeries?: number[];
+  vsNiftyPct?: number;
+  vsCapIndexPct?: number;
+  vsSectorPct?: number;
+  capBucket?: string;
+  sector?: string;
+  volumeRatio?: number;
   news?: NewsItem[];
   lastUpdated: string;
   dataSource: string;
+}
+
+export interface ChartView {
+  symbol: string;
+  candles: Candle[];
+  sma20?: number[];
+  sma50?: number[];
+  sma200?: number[];
+  updatedAt?: string;
 }
 
 export interface OHLCResponse {
