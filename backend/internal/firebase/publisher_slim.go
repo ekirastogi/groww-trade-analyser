@@ -2,6 +2,8 @@ package firebase
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -140,6 +142,21 @@ func rollingSMA(values []float64, period int) []float64 {
 }
 
 func (p *Publisher) GetUniverseSymbols(ctx context.Context) ([]string, error) {
+	cacheTTL := 30 * time.Minute
+	if v := os.Getenv("UNIVERSE_CACHE_MINUTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cacheTTL = time.Duration(n) * time.Minute
+		}
+	}
+
+	p.universeMu.Lock()
+	if len(p.universeCache) > 0 && time.Since(p.universeCacheAt) < cacheTTL {
+		out := append([]string(nil), p.universeCache...)
+		p.universeMu.Unlock()
+		return out, nil
+	}
+	p.universeMu.Unlock()
+
 	set := make(map[string]bool)
 	iter := p.client.Collection("universe").Documents(ctx)
 	for {
@@ -148,6 +165,13 @@ func (p *Publisher) GetUniverseSymbols(ctx context.Context) ([]string, error) {
 			break
 		}
 		if err != nil {
+			p.universeMu.Lock()
+			if len(p.universeCache) > 0 {
+				out := append([]string(nil), p.universeCache...)
+				p.universeMu.Unlock()
+				return out, nil
+			}
+			p.universeMu.Unlock()
 			return nil, err
 		}
 		id := strings.ToUpper(doc.Ref.ID)
@@ -163,15 +187,49 @@ func (p *Publisher) GetUniverseSymbols(ctx context.Context) ([]string, error) {
 	for s := range set {
 		out = append(out, s)
 	}
+
+	p.universeMu.Lock()
+	p.universeCache = append([]string(nil), out...)
+	p.universeCacheAt = time.Now()
+	p.universeMu.Unlock()
+
 	return out, nil
 }
 
 func (p *Publisher) GetActiveVolumeShockers(ctx context.Context) (map[string]int, error) {
+	cacheTTL := 5 * time.Minute
+	if v := os.Getenv("SHOCKERS_CACHE_MINUTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cacheTTL = time.Duration(n) * time.Minute
+		}
+	}
+
+	p.shockersMu.Lock()
+	if len(p.shockersCache) > 0 && time.Since(p.shockersCacheAt) < cacheTTL {
+		out := make(map[string]int, len(p.shockersCache))
+		for k, v := range p.shockersCache {
+			out[k] = v
+		}
+		p.shockersMu.Unlock()
+		return out, nil
+	}
+	p.shockersMu.Unlock()
+
 	doc, err := p.client.Collection("volumeShockers").Doc("active").Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return map[string]int{}, nil
 		}
+		p.shockersMu.Lock()
+		if len(p.shockersCache) > 0 {
+			out := make(map[string]int, len(p.shockersCache))
+			for k, v := range p.shockersCache {
+				out[k] = v
+			}
+			p.shockersMu.Unlock()
+			return out, nil
+		}
+		p.shockersMu.Unlock()
 		return nil, err
 	}
 	data := doc.Data()
@@ -191,6 +249,12 @@ func (p *Publisher) GetActiveVolumeShockers(ctx context.Context) (map[string]int
 			out[strings.ToUpper(sym)] = days
 		}
 	}
+
+	p.shockersMu.Lock()
+	p.shockersCache = out
+	p.shockersCacheAt = time.Now()
+	p.shockersMu.Unlock()
+
 	return out, nil
 }
 

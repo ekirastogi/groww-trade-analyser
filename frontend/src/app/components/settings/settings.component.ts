@@ -1,27 +1,31 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ReportStateService } from '../../services/report-state.service';
 import { AuthService } from '../../services/auth.service';
 import { TradeLedgerService } from '../../services/trade-ledger.service';
-import { BackendWorkerService } from '../../services/backend-worker.service';
+import { WorkerJobService } from '../../services/worker-job.service';
+import { UploadComponent } from '../upload/upload.component';
 
-type SettingsTab = 'backfill' | 'reset';
+type SettingsTab = 'upload' | 'backfill' | 'reset';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, UploadComponent],
   templateUrl: './settings.component.html',
 })
-export class SettingsComponent implements OnInit {
+export class SettingsComponent implements OnInit, OnDestroy {
   private ledger = inject(TradeLedgerService);
   private router = inject(Router);
-  private worker = inject(BackendWorkerService);
+  private workerJobs = inject(WorkerJobService);
   readonly state = inject(ReportStateService);
   readonly auth = inject(AuthService);
 
-  activeTab = signal<SettingsTab>('backfill');
+  private workerSub?: Subscription;
+
+  activeTab = signal<SettingsTab>('upload');
 
   resetConfirmChecked = signal(false);
   resetBusy = signal(false);
@@ -35,31 +39,32 @@ export class SettingsComponent implements OnInit {
   rebuildProfiles = signal(false);
   triggerIngest = signal(true);
   workerOnline = signal(false);
-  backendUrl = signal('http://localhost:8080');
 
   canConfirmReset = computed(() => this.resetConfirmChecked() && !this.resetBusy());
   canRunBackfill = computed(() => !this.backfillBusy());
 
   ngOnInit(): void {
-    this.worker.loadSavedBaseUrl();
-    this.backendUrl.set(this.worker.getBaseUrl());
-    void this.refreshWorkerStatus();
+    this.refreshWorkerPolling();
+  }
+
+  ngOnDestroy(): void {
+    this.workerSub?.unsubscribe();
   }
 
   setTab(tab: SettingsTab): void {
     this.activeTab.set(tab);
+    this.refreshWorkerPolling();
   }
 
-  onBackendUrlChange(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    this.backendUrl.set(value);
-    this.worker.setBaseUrl(value);
-    void this.refreshWorkerStatus();
-  }
-
-  async refreshWorkerStatus(): Promise<void> {
-    const health = await this.worker.checkHealth();
-    this.workerOnline.set(health?.status === 'ok');
+  private refreshWorkerPolling(): void {
+    this.workerSub?.unsubscribe();
+    if (this.activeTab() === 'backfill') {
+      this.workerSub = this.workerJobs.watchWorkerOnline().subscribe((online) => {
+        this.workerOnline.set(online);
+      });
+    } else {
+      this.workerOnline.set(false);
+    }
   }
 
   onReingestFileSelected(event: Event): void {
@@ -85,16 +90,19 @@ export class SettingsComponent implements OnInit {
       }
 
       if (this.triggerIngest()) {
-        await this.refreshWorkerStatus();
-        if (this.workerOnline()) {
-          const ingest = await this.worker.triggerHotIngest();
-          if (ingest) {
-            message += ` Local worker ingested ${ingest.symbolsIngested} symbol(s).`;
-          } else {
-            message += ' Could not trigger local worker ingest.';
-          }
+        const online = await this.workerJobs.getWorkerOnline();
+        if (!online) {
+          message +=
+            ' Worker is offline — start it locally (`cd backend && go run .`). It will pick up universe changes on its next cycle.';
         } else {
-          message += ' Start the local backend worker to fetch market data.';
+          const jobId = await this.workerJobs.requestHotIngest();
+          message += ' Ingest requested via Firebase…';
+          const job = await this.workerJobs.waitForJob(jobId);
+          if (job.status === 'completed') {
+            message += ` Worker ingested ${job.symbolsIngested ?? 0} symbol(s).`;
+          } else {
+            message += ` Ingest failed: ${job.error ?? 'unknown error'}.`;
+          }
         }
       }
 

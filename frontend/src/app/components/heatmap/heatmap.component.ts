@@ -89,7 +89,7 @@ export class HeatmapComponent {
       observer.observe(el);
       this.updatePaneSize(el);
       onCleanup(() => observer.disconnect());
-    });
+    }, { allowSignalWrites: true });
   }
 
   othersTooltip(symbols: string[]): string {

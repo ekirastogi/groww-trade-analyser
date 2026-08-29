@@ -2,7 +2,24 @@
   <div class="space-y-6">
     <div class="flex flex-wrap items-start justify-between gap-4">
       <button type="button" class="text-sm text-kairo-600 hover:underline" (click)="goBack()">← Back</button>
-      <div class="text-right">
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          class="btn-secondary !py-1.5 !text-xs"
+          [disabled]="backfillBusy() || !auth.hasAccess"
+          (click)="backfillStock()"
+        >
+          @if (backfillBusy()) {
+            Backfilling…
+          } @else {
+            Backfill stock data
+          }
+        </button>
+        @if (!workerOnline()) {
+          <span class="text-[10px] text-amber-600">Worker offline</span>
+        }
+      </div>
+      <div class="w-full text-right sm:ml-auto sm:w-auto">
         <div class="text-2xl font-bold" [class.text-emerald-600]="s.change >= 0" [class.text-red-600]="s.change < 0">
           {{ fmt(s.ltp) }}
         </div>
@@ -12,6 +29,13 @@
         <div class="text-xs text-slate-400">Updated {{ s.lastUpdated | date:'short' }}</div>
       </div>
     </div>
+
+    @if (backfillError()) {
+      <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ backfillError() }}</div>
+    }
+    @if (backfillSuccess()) {
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ backfillSuccess() }}</div>
+    }
 
     @if (s.week52High && s.week52Low) {
       <div class="rounded-xl border border-slate-200 bg-white p-4">
@@ -162,8 +186,31 @@
     }
   </div>
 } @else {
-  <div class="py-12 text-center text-slate-500">
-    <p>Waiting for market data from local backend...</p>
-    <p class="mt-2 text-sm">Start the backend worker. Symbol {{ symbol() }} will hydrate from universe + P&amp;L upload.</p>
+  <div class="space-y-4 py-12 text-center">
+    <p class="text-slate-500">Waiting for market data from local backend…</p>
+    <p class="text-sm text-slate-400">Symbol {{ symbol() }} will hydrate from universe + P&amp;L upload.</p>
+    <div class="flex flex-wrap items-center justify-center gap-2">
+      <button
+        type="button"
+        class="btn-primary"
+        [disabled]="backfillBusy() || !auth.hasAccess"
+        (click)="backfillStock()"
+      >
+        @if (backfillBusy()) {
+          Backfilling {{ symbol() }}…
+        } @else {
+          Backfill {{ symbol() }} via backend
+        }
+      </button>
+      @if (!workerOnline()) {
+        <span class="text-xs text-amber-600">Worker offline</span>
+      }
+    </div>
+    @if (backfillError()) {
+      <p class="text-sm text-red-600">{{ backfillError() }}</p>
+    }
+    @if (backfillSuccess()) {
+      <p class="text-sm text-emerald-700">{{ backfillSuccess() }}</p>
+    }
   </div>
 }

@@ -89,6 +89,24 @@ export interface StockSnapshot {
   dataSource: string;
 }
 
+export interface MarketCatalogEntry {
+  symbol: string;
+  name: string;
+  ltp: number;
+  changePct: number;
+  marketCap: number;
+  pe?: number;
+  sector?: string;
+  lastUpdated: string;
+  dataSource: string;
+}
+
+export interface MarketCatalogSummary {
+  updatedAt: number;
+  count: number;
+  stocks: MarketCatalogEntry[];
+}
+
 export interface ChartView {
   symbol: string;
   candles: Candle[];

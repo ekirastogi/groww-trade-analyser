@@ -10,11 +10,39 @@ import {
   where,
 } from '@angular/fire/firestore';
 import { Observable, map, of } from 'rxjs';
-import { ChartView, StockSnapshot } from '../models/market.models';
+import { ChartView, MarketCatalogSummary, StockSnapshot } from '../models/market.models';
 
 @Injectable({ providedIn: 'root' })
 export class StockFirestoreService {
   private firestore = inject(Firestore);
+
+  /** Single-doc catalog — 1 read per update instead of N stock listeners. */
+  watchMarketCatalog(): Observable<StockSnapshot[]> {
+    const ref = doc(this.firestore, 'marketCatalog', 'summary');
+    return docData(ref).pipe(
+      map((data) => {
+        const summary = data as MarketCatalogSummary | undefined;
+        const rows = summary?.stocks ?? [];
+        return rows
+          .map((s) => ({
+            symbol: s.symbol,
+            name: s.name,
+            exchange: 'NSE',
+            ltp: s.ltp,
+            change: 0,
+            changePct: s.changePct,
+            marketCap: s.marketCap,
+            pe: s.pe,
+            sector: s.sector,
+            quarterlyPerf: 0,
+            yearlyPerf: 0,
+            lastUpdated: s.lastUpdated,
+            dataSource: s.dataSource,
+          }))
+          .sort((a, b) => a.symbol.localeCompare(b.symbol));
+      })
+    );
+  }
 
   watchStock(symbol: string): Observable<StockSnapshot | undefined> {
     const ref = doc(this.firestore, 'stocks', symbol.toUpperCase());

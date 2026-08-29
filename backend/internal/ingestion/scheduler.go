@@ -2,7 +2,7 @@ package ingestion
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"sort"
 	"strconv"
@@ -11,25 +11,28 @@ import (
 
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/firebase"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/indicators"
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/logx"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/market"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/signals"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/store"
 )
 
 type Scheduler struct {
-	provider    market.Provider
-	db          *store.SQLiteStore
-	publisher   *firebase.Publisher
-	rules       []signals.Rule
-	interval    time.Duration
-	fullBook    []string
-	hotSet      map[string]bool
+	provider     market.Provider
+	db           *store.SQLiteStore
+	publisher    *firebase.Publisher
+	rules        []signals.Rule
+	interval     time.Duration
+	fullBook     []string
+	hotSet       map[string]bool
 	indexCandles map[string][]market.Candle
-	lastEOD     string
+	lastEOD      string
+	catalogCache map[string]firebase.CatalogEntry
+	lastCatalogFlush time.Time
 }
 
 func NewScheduler(provider market.Provider, db *store.SQLiteStore, pub *firebase.Publisher, symbols []string) *Scheduler {
-	iv := 5 * time.Minute
+	iv := 15 * time.Minute
 	if v := os.Getenv("INGEST_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			iv = d
@@ -44,20 +47,23 @@ func NewScheduler(provider market.Provider, db *store.SQLiteStore, pub *firebase
 		fullBook:     symbols,
 		hotSet:       make(map[string]bool),
 		indexCandles: make(map[string][]market.Candle),
+		catalogCache: make(map[string]firebase.CatalogEntry),
 	}
 }
 
 func (s *Scheduler) Run(ctx context.Context) {
 	s.bootstrap(ctx)
-	log.Printf("Ingestion scheduler started (interval=%s, fullBook=%d)", s.interval, len(s.fullBook))
+	logx.Info("Ingestion scheduler started (interval=%s, fullBook=%d symbols)", s.interval, len(s.fullBook))
 	s.tick(ctx)
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			logx.Info("Ingestion scheduler stopping")
 			return
 		case <-ticker.C:
+			logx.Verbosef("Scheduled tick — refreshing universe and hot set")
 			s.refreshUniverse(ctx)
 			s.tick(ctx)
 		}
@@ -65,15 +71,29 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 func (s *Scheduler) bootstrap(ctx context.Context) {
+	logx.Info("Bootstrap: loading symbol meta and universe")
 	s.loadMetaCSV()
+	s.loadCatalogCache(ctx)
 	s.refreshUniverse(ctx)
+	s.refreshHotSet(ctx)
+	logx.Info("Bootstrap: warming %d index symbols", len(market.IndexSymbols))
 	for _, idx := range market.IndexSymbols {
+		logx.Verbosef("Bootstrap index OHLC: %s", idx)
 		_ = s.fetchIncrementalOHLC(ctx, idx)
 		candles, _ := s.db.GetCandles(idx, "1d", 260)
 		s.indexCandles[idx] = candles
 	}
-	// Initial EOD pass for full book
-	s.runEOD(ctx)
+	loc, _ := time.LoadLocation("Asia/Kolkata")
+	today := time.Now().In(loc).Format("2006-01-02")
+	lastEOD, _ := s.db.GetIngestState("last_eod")
+	if lastEOD == today {
+		s.lastEOD = today
+		logx.Info("Bootstrap: skipping EOD pass (already completed today)")
+	} else {
+		eodSyms := s.eodSymbolList(ctx)
+		logx.Info("Bootstrap: initial EOD pass for %d symbols (universe + hot set, not full CSV book)", len(eodSyms))
+		s.runEOD(ctx, eodSyms)
+	}
 }
 
 func (s *Scheduler) loadMetaCSV() {
@@ -83,25 +103,32 @@ func (s *Scheduler) loadMetaCSV() {
 	}
 	rows, err := store.LoadSymbolMetaCSV(path)
 	if err != nil {
-		log.Printf("symbol meta csv: %v", err)
+		logx.Warn("symbol meta csv: %v", err)
 		return
 	}
 	for _, m := range rows {
 		_ = s.db.UpsertSymbolMeta(m)
 	}
-	log.Printf("Loaded %d symbol meta rows", len(rows))
+	logx.Info("Loaded %d symbol meta rows from %s", len(rows), path)
 }
 
 func (s *Scheduler) refreshUniverse(ctx context.Context) {
+	before := len(s.fullBook)
 	set := make(map[string]bool)
+	fromSeed := 0
+	fromCSV := 0
+	fromFirestore := 0
+
 	for _, sym := range s.fullBook {
 		set[strings.ToUpper(sym)] = true
 	}
+	fromSeed = len(set)
 	if path := store.FindUniverseCSV(); path != "" {
 		if syms, err := store.LoadUniverseCSV(path); err == nil {
 			for _, sym := range syms {
 				set[strings.ToUpper(sym)] = true
 			}
+			fromCSV = len(syms)
 		}
 	}
 	if s.publisher != nil {
@@ -109,12 +136,9 @@ func (s *Scheduler) refreshUniverse(ctx context.Context) {
 			for _, sym := range syms {
 				set[strings.ToUpper(sym)] = true
 			}
-		}
-		if shockers, err := s.publisher.GetActiveVolumeShockers(ctx); err == nil {
-			for sym := range shockers {
-				set[sym] = true
-				s.hotSet[sym] = true
-			}
+			fromFirestore = len(syms)
+		} else {
+			logx.Warn("Universe refresh: Firestore read failed: %v", err)
 		}
 	}
 	var book []string
@@ -123,44 +147,136 @@ func (s *Scheduler) refreshUniverse(ctx context.Context) {
 	}
 	sort.Strings(book)
 	s.fullBook = book
+	if len(book) != before {
+		logx.Info("Universe updated: %d symbols (was %d) [seed=%d csv=%d firestore=%d]",
+			len(book), before, fromSeed, fromCSV, fromFirestore)
+	} else {
+		logx.Verbosef("Universe unchanged: %d symbols [seed=%d csv=%d firestore=%d]",
+			len(book), fromSeed, fromCSV, fromFirestore)
+	}
 }
 
 func (s *Scheduler) tick(ctx context.Context) {
 	if s.shouldRunEOD() {
-		s.runEOD(ctx)
+		s.runEOD(ctx, s.eodSymbolList(ctx))
 	}
 	s.refreshHotSet(ctx)
+	hotCount := len(s.hotSet)
+	if hotCount == 0 {
+		logx.Verbosef("Hot tick: no symbols in hot set")
+		return
+	}
+	logx.Info("Hot ingest starting for %d symbols", hotCount)
+
+	var openRecs []firebase.OpenRecommendation
+	if s.publisher != nil {
+		var err error
+		openRecs, err = s.publisher.LoadOpenRecommendations(ctx)
+		if err != nil {
+			logx.Warn("Load open recommendations: %v", err)
+		}
+	}
+
+	ltpBySymbol := make(map[string]float64, hotCount)
+	ok, fail := 0, 0
 	for sym := range s.hotSet {
-		if err := s.ingestHot(ctx, sym); err != nil {
-			log.Printf("hot ingest %s: %v", sym, err)
+		ltp, err := s.ingestHot(ctx, sym)
+		if err != nil {
+			logx.Error("Hot ingest %s: %v", sym, err)
+			fail++
+		} else {
+			ok++
+			if ltp > 0 {
+				ltpBySymbol[sym] = ltp
+			}
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
+	if s.publisher != nil && len(ltpBySymbol) > 0 && len(openRecs) > 0 {
+		s.publisher.CheckOpenRecommendationsBatch(ctx, ltpBySymbol, openRecs)
+	}
+	logx.Info("Hot ingest done: %d ok, %d failed", ok, fail)
+	s.flushCatalog(ctx, false)
+}
+
+func (s *Scheduler) loadCatalogCache(ctx context.Context) {
+	if s.publisher == nil {
+		return
+	}
+	entries, err := s.publisher.LoadMarketCatalog(ctx)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		s.catalogCache[e.Symbol] = e
+	}
+	logx.Info("Loaded %d catalog entries from Firestore", len(entries))
+}
+
+func catalogFlushInterval() time.Duration {
+	iv := 5 * time.Minute
+	if v := os.Getenv("CATALOG_FLUSH_MINUTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			iv = time.Duration(n) * time.Minute
+		}
+	}
+	return iv
+}
+
+func (s *Scheduler) flushCatalog(ctx context.Context, force bool) {
+	if s.publisher == nil || len(s.catalogCache) == 0 {
+		return
+	}
+	if !force && time.Since(s.lastCatalogFlush) < catalogFlushInterval() {
+		logx.Verbosef("Skipping catalog flush (throttled, last %s ago)", time.Since(s.lastCatalogFlush).Round(time.Second))
+		return
+	}
+	entries := make([]firebase.CatalogEntry, 0, len(s.catalogCache))
+	for _, e := range s.catalogCache {
+		entries = append(entries, e)
+	}
+	if err := s.publisher.PublishMarketCatalog(ctx, entries); err != nil {
+		logx.Warn("catalog publish: %v", err)
+	} else {
+		s.lastCatalogFlush = time.Now()
+		logx.Verbosef("Published market catalog (%d symbols, 1 Firestore write)", len(entries))
+	}
+}
+
+func hotSymbolsMax() int {
+	max := 30
+	if v := os.Getenv("HOT_SYMBOLS_MAX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			max = n
+		}
+	}
+	return max
 }
 
 func (s *Scheduler) refreshHotSet(ctx context.Context) {
 	s.hotSet = make(map[string]bool)
-	if s.publisher == nil {
-		for _, sym := range s.fullBook {
-			if len(s.fullBook) <= 30 {
+	maxHot := hotSymbolsMax()
+
+	if s.publisher != nil {
+		if shockers, err := s.publisher.GetActiveVolumeShockers(ctx); err == nil {
+			for sym := range shockers {
 				s.hotSet[sym] = true
 			}
 		}
-		return
-	}
-	if shockers, err := s.publisher.GetActiveVolumeShockers(ctx); err == nil {
-		for sym := range shockers {
-			s.hotSet[sym] = true
-		}
-	}
-	if syms, err := s.publisher.GetUniverseSymbols(ctx); err == nil {
-		for _, sym := range syms {
-			s.hotSet[strings.ToUpper(sym)] = true
+		// Only user-uploaded universe symbols for hot quotes — not the full CSV seed book.
+		if syms, err := s.publisher.GetUniverseSymbols(ctx); err == nil {
+			for _, sym := range syms {
+				if len(s.hotSet) >= maxHot {
+					break
+				}
+				s.hotSet[strings.ToUpper(sym)] = true
+			}
 		}
 	}
 	for _, sym := range DefaultSymbols() {
 		s.hotSet[strings.ToUpper(sym)] = true
 	}
+	logx.Verbosef("Hot set refreshed: %d symbols (max %d)", len(s.hotSet), maxHot)
 }
 
 func (s *Scheduler) shouldRunEOD() bool {
@@ -177,16 +293,54 @@ func (s *Scheduler) shouldRunEOD() bool {
 	return minutes >= 16*60 // after 4pm IST
 }
 
-func (s *Scheduler) runEOD(ctx context.Context) {
+func (s *Scheduler) eodSymbolList(ctx context.Context) []string {
+	set := make(map[string]bool)
+	for sym := range s.hotSet {
+		sym = strings.ToUpper(sym)
+		if !market.IsIndexSymbol(sym) {
+			set[sym] = true
+		}
+	}
+	if s.publisher != nil {
+		if syms, err := s.publisher.GetUniverseSymbols(ctx); err == nil {
+			for _, sym := range syms {
+				sym = strings.ToUpper(sym)
+				if !market.IsIndexSymbol(sym) {
+					set[sym] = true
+				}
+			}
+		}
+	}
+	for _, sym := range DefaultSymbols() {
+		sym = strings.ToUpper(sym)
+		if !market.IsIndexSymbol(sym) {
+			set[sym] = true
+		}
+	}
+	out := make([]string, 0, len(set))
+	for sym := range set {
+		out = append(out, sym)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (s *Scheduler) runEOD(ctx context.Context, symbols []string) {
 	loc, _ := time.LoadLocation("Asia/Kolkata")
 	today := time.Now().In(loc).Format("2006-01-02")
-	log.Printf("EOD ingest for %d symbols", len(s.fullBook))
-	for i, sym := range s.fullBook {
+	logx.Info("EOD ingest starting for %d symbols (%s IST)", len(symbols), today)
+	ok, fail, skip := 0, 0, 0
+	for i, sym := range symbols {
 		if market.IsIndexSymbol(sym) {
+			skip++
 			continue
 		}
-		if err := s.ingestEOD(ctx, sym, false); err != nil {
-			log.Printf("eod %s: %v", sym, err)
+		logx.Verbosef("EOD [%d/%d] %s", i+1, len(symbols), sym)
+		if err := s.ingestEOD(ctx, sym, true); err != nil {
+			logx.Error("EOD %s: %v", sym, err)
+			fail++
+		} else {
+			ok++
 		}
 		if i%10 == 9 {
 			time.Sleep(2 * time.Second)
@@ -202,6 +356,8 @@ func (s *Scheduler) runEOD(ctx context.Context) {
 	}
 	s.lastEOD = today
 	_ = s.db.SetIngestState("last_eod", today)
+	logx.Info("EOD ingest complete: %d ok, %d failed, %d indices skipped", ok, fail, skip)
+	s.flushCatalog(ctx, true)
 }
 
 func (s *Scheduler) ingestEOD(ctx context.Context, symbol string, publishChart bool) error {
@@ -222,33 +378,35 @@ func (s *Scheduler) ingestEOD(ctx context.Context, symbol string, publishChart b
 		return err
 	}
 	fund, _ := s.provider.GetFundamentals(ctx, symbol)
-	return s.publishSymbol(ctx, symbol, quote, fund, candles, publishChart, false)
+	return s.publishSymbol(ctx, symbol, quote, fund, candles, publishChart)
 }
 
-func (s *Scheduler) ingestHot(ctx context.Context, symbol string) error {
+func (s *Scheduler) ingestHot(ctx context.Context, symbol string) (float64, error) {
 	if market.IsIndexSymbol(symbol) {
-		return nil
+		return 0, nil
 	}
+	logx.Verbosef("Hot %s: fetching quote", symbol)
 	quote, err := s.provider.GetQuote(ctx, symbol)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	candles, _ := s.db.GetCandles(symbol, "1d", 260)
 	if len(candles) < 20 {
+		logx.Verbosef("Hot %s: backfilling OHLC (%d candles in DB)", symbol, len(candles))
 		_ = s.fetchIncrementalOHLC(ctx, symbol)
 		candles, _ = s.db.GetCandles(symbol, "1d", 260)
 	}
 	fund, _ := s.provider.GetFundamentals(ctx, symbol)
 	if s.publisher != nil {
-		if err := s.publishSymbol(ctx, symbol, quote, fund, candles, false, true); err != nil {
-			log.Printf("publish hot %s: %v", symbol, err)
+		if err := s.publishSymbol(ctx, symbol, quote, fund, candles, false); err != nil {
+			return 0, err
 		}
-		s.publisher.CheckOpenRecommendations(ctx, symbol, quote.LTP)
+		logx.Verbosef("Hot %s: published to Firestore (ltp=%.2f)", symbol, quote.LTP)
 	}
 	if signals.IsMarketHoursIST() {
 		s.evaluateSignals(ctx, symbol, quote, candles, fund)
 	}
-	return nil
+	return quote.LTP, nil
 }
 
 func (s *Scheduler) fetchIncrementalOHLC(ctx context.Context, symbol string) error {
@@ -257,6 +415,7 @@ func (s *Scheduler) fetchIncrementalOHLC(ctx context.Context, symbol string) err
 	if !latest.IsZero() {
 		from = latest.AddDate(0, 0, -3)
 	}
+	logx.Verbosef("OHLC %s: fetching from %s to now (latest in DB: %s)", symbol, from.Format("2006-01-02"), latest.Format("2006-01-02"))
 	var candles []market.Candle
 	err := market.FetchWithBackoff(ctx, 3, func() error {
 		var e error
@@ -267,12 +426,14 @@ func (s *Scheduler) fetchIncrementalOHLC(ctx context.Context, symbol string) err
 		return err
 	}
 	if len(candles) == 0 {
+		logx.Verbosef("OHLC %s: no new candles returned", symbol)
 		return nil
 	}
+	logx.Verbosef("OHLC %s: upserting %d candles", symbol, len(candles))
 	return s.db.UpsertCandles(symbol, "1d", candles)
 }
 
-func (s *Scheduler) publishSymbol(ctx context.Context, symbol string, quote *market.Quote, fund *market.Fundamentals, candles []market.Candle, publishChart, hot bool) error {
+func (s *Scheduler) publishSymbol(ctx context.Context, symbol string, quote *market.Quote, fund *market.Fundamentals, candles []market.Candle, publishChart bool) error {
 	rsi, macd, macdSig, macdHist, sma20, sma50, sma200 := indicators.ComputeAll(candles)
 	supports, resistances := indicators.SupportResistance(candles)
 	w52h, w52l := store.Week52Range(candles)
@@ -326,7 +487,13 @@ func (s *Scheduler) publishSymbol(ctx context.Context, symbol string, quote *mar
 	if err := s.publisher.PublishSlimStock(ctx, payload); err != nil {
 		return err
 	}
-	if publishChart || hot {
+	sym := strings.ToUpper(symbol)
+	s.catalogCache[sym] = firebase.CatalogEntry{
+		Symbol: sym, Name: quote.Name, LTP: quote.LTP, ChangePct: quote.ChangePct,
+		MarketCap: fs.MarketCap, PE: fs.PE, Sector: sector,
+		LastUpdated: time.Now().Format(time.RFC3339), DataSource: s.provider.Name(),
+	}
+	if publishChart {
 		return s.publisher.PublishChartView(ctx, symbol, firebase.BuildChartPayload(candles))
 	}
 	return nil
@@ -363,13 +530,13 @@ func (s *Scheduler) evaluateSignals(ctx context.Context, symbol string, quote *m
 			}
 			fsID, err := s.publisher.PublishRecommendation(ctx, sug)
 			if err != nil {
-				log.Printf("publish recommendation: %v", err)
+				logx.Warn("publish recommendation: %v", err)
 				continue
 			}
 			_ = s.db.SaveSuggestion(sug.ID, sug.Symbol, sug.RuleID, sug.RuleName, sug.Side, sug.Entry, sug.SL, sug.Targets, sug.Confidence, signals.SnapshotJSON(sug.Snapshot))
 			_ = s.db.SetFirestoreID(sug.ID, fsID)
 		}
-		log.Printf("SIGNAL: %s", signals.FormatSuggestionLog(sug))
+		logx.Info("SIGNAL: %s", signals.FormatSuggestionLog(sug))
 	}
 }
 
@@ -437,22 +604,60 @@ func (s *Scheduler) computeVolumeShockers(ctx context.Context, tradeDate string)
 	if s.publisher != nil {
 		_ = s.publisher.PublishVolumeShockers(ctx, tradeDate, dayEntries, activeEntries)
 	}
-	log.Printf("Volume shockers: %d symbols for %s", len(dayEntries), tradeDate)
+	logx.Info("Volume shockers: %d symbols for %s", len(dayEntries), tradeDate)
 }
 
 func (s *Scheduler) RunHotIngestNow(ctx context.Context) int {
+	logx.Info("Manual hot ingest requested — refreshing universe and hot set")
 	s.refreshUniverse(ctx)
 	s.refreshHotSet(ctx)
+	logx.Info("Manual hot ingest: processing %d symbols", len(s.hotSet))
 	count := 0
+	var openRecs []firebase.OpenRecommendation
+	if s.publisher != nil {
+		openRecs, _ = s.publisher.LoadOpenRecommendations(ctx)
+	}
+	ltpBySymbol := make(map[string]float64)
 	for sym := range s.hotSet {
-		if err := s.ingestHot(ctx, sym); err != nil {
-			log.Printf("hot ingest %s: %v", sym, err)
+		ltp, err := s.ingestHot(ctx, sym)
+		if err != nil {
+			logx.Error("Manual hot ingest %s: %v", sym, err)
 		} else {
 			count++
+			if ltp > 0 {
+				ltpBySymbol[sym] = ltp
+			}
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
+	if s.publisher != nil && len(ltpBySymbol) > 0 && len(openRecs) > 0 {
+		s.publisher.CheckOpenRecommendationsBatch(ctx, ltpBySymbol, openRecs)
+	}
+	logx.Info("Manual hot ingest complete: %d/%d symbols", count, len(s.hotSet))
+	s.flushCatalog(ctx, true)
 	return count
+}
+
+// RunSymbolIngestNow fetches OHLC, fundamentals, indicators, and publishes stock + chart for one symbol.
+func (s *Scheduler) RunSymbolIngestNow(ctx context.Context, symbol string) error {
+	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	if symbol == "" {
+		return fmt.Errorf("symbol required")
+	}
+	logx.Info("Symbol ingest requested: %s", symbol)
+	for _, idx := range market.IndexSymbols {
+		if len(s.indexCandles[idx]) < 5 {
+			_ = s.fetchIncrementalOHLC(ctx, idx)
+			candles, _ := s.db.GetCandles(idx, "1d", 260)
+			s.indexCandles[idx] = candles
+		}
+	}
+	if err := s.ingestEOD(ctx, symbol, true); err != nil {
+		return err
+	}
+	s.flushCatalog(ctx, true)
+	logx.Info("Symbol ingest complete: %s", symbol)
+	return nil
 }
 
 func DefaultSymbols() []string {

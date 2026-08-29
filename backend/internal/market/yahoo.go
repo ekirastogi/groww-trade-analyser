@@ -16,6 +16,9 @@ func (p *YahooProvider) Name() string { return "yahoo" }
 
 func (p *YahooProvider) yahooSymbol(symbol string) string {
 	s := strings.ToUpper(strings.TrimSpace(symbol))
+	if strings.HasPrefix(s, "^") {
+		return s
+	}
 	if strings.Contains(s, ".") {
 		return s
 	}

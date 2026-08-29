@@ -90,12 +90,13 @@ export class DashboardComponent {
   readonly pnlClass = pnlClass;
   readonly groupTradesByStock = groupTradesByStock;
 
-  private readonly _syncPageHeader = effect(() => {
+  private readonly _syncPageHeader = effect((onCleanup) => {
     const report = this.state.report();
     if (report) {
       this.pageShell.setHeader('Dashboard', report.summary.period);
     }
-  });
+    onCleanup(() => this.pageShell.clearOverride());
+  }, { allowSignalWrites: true });
 
   activeTab = signal<TabId>('stocks');
   dragOver = signal(false);

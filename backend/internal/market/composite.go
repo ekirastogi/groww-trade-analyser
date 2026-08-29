@@ -3,6 +3,8 @@ package market
 import (
 	"context"
 	"time"
+
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/logx"
 )
 
 // CompositeProvider uses Stooq for OHLC and Yahoo for quotes/fundamentals.
@@ -29,7 +31,24 @@ func (p *CompositeProvider) GetQuote(ctx Context, symbol string) (*Quote, error)
 }
 
 func (p *CompositeProvider) GetOHLC(ctx Context, symbol, interval string, from, to time.Time) ([]Candle, error) {
-	return p.ohlc.GetOHLC(ctx, symbol, interval, from, to)
+	// Yahoo first — Stooq often returns bot-check HTML for automated requests.
+	candles, err := p.quotes.GetOHLC(ctx, symbol, interval, from, to)
+	if err == nil && len(candles) > 0 {
+		logx.Verbosef("OHLC %s: yahoo returned %d candles", symbol, len(candles))
+		return candles, nil
+	}
+	if err != nil {
+		logx.Verbosef("OHLC %s: yahoo failed: %v — trying stooq", symbol, err)
+	}
+	fallback, fbErr := p.ohlc.GetOHLC(ctx, symbol, interval, from, to)
+	if fbErr != nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fbErr
+	}
+	logx.Verbosef("OHLC %s: stooq returned %d candles", symbol, len(fallback))
+	return fallback, nil
 }
 
 func (p *CompositeProvider) GetFundamentals(ctx Context, symbol string) (*Fundamentals, error) {

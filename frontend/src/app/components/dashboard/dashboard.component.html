@@ -8,7 +8,7 @@
   <div class="card overflow-hidden p-8 text-center">
     <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
     <p class="mt-2 text-sm text-slate-500">Upload a broker P&amp;L export or load a saved client account below.</p>
-    <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload File</a>
+    <a routerLink="/settings" class="btn-primary mt-4 inline-block">Upload File</a>
   </div>
 
   @if (clients().length) {
@@ -35,7 +35,7 @@
           </button>
         }
         <label class="btn-secondary flex-1 cursor-pointer sm:flex-none">
-          <a routerLink="/upload">Upload</a>
+          <a routerLink="/settings">Upload</a>
         </label>
       </div>
     </div>

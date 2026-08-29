@@ -122,6 +122,30 @@ func (h *Handler) IngestHot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) IngestSymbol(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.scheduler == nil {
+		writeError(w, http.StatusServiceUnavailable, "ingestion scheduler not available")
+		return
+	}
+	symbol := strings.ToUpper(strings.TrimSpace(r.PathValue("symbol")))
+	if symbol == "" {
+		writeError(w, http.StatusBadRequest, "symbol required")
+		return
+	}
+	if err := h.scheduler.RunSymbolIngestNow(r.Context(), symbol); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok",
+		"symbol": symbol,
+	})
+}
+
 func parseTradeTypes(raw string) []models.TradeType {
 	if raw == "" || raw == "all" {
 		return nil

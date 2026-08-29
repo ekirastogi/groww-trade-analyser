@@ -1,0 +1,86 @@
+<div class="space-y-4">
+  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+  @for (stat of [
+    { label: 'With data', value: summary().total },
+    { label: 'Gainers', value: summary().gainers, cls: 'text-emerald-600' },
+    { label: 'Losers', value: summary().losers, cls: 'text-red-600' },
+    { label: 'Has mkt cap', value: summary().withCap }
+  ]; track stat.label) {
+    <div class="card p-4">
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ stat.label }}</div>
+      <div class="mt-1 text-xl font-bold" [class]="stat.cls ?? 'text-slate-900'">{{ stat.value }}</div>
+    </div>
+  }
+  </div>
+
+  <div class="card overflow-hidden">
+    <div class="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900">Market data catalog</h2>
+        <p class="text-xs text-slate-500">Catalog from <code class="rounded bg-slate-100 px-1">marketCatalog/summary</code> (1 Firestore doc)</p>
+      </div>
+      <input
+        type="search"
+        class="input-field w-full max-w-xs"
+        placeholder="Search symbol, name, sector…"
+        [ngModel]="search()"
+        (ngModelChange)="onSearch($event)"
+      />
+    </div>
+
+    @if (!stocks().length) {
+      <div class="px-4 py-12 text-center sm:px-5">
+        <p class="text-sm font-medium text-slate-700">No market data yet</p>
+        <p class="mt-2 text-sm text-slate-500">
+          Start the local worker and run <a routerLink="/settings" class="font-medium text-kairo-600 hover:underline">Settings → Backfill</a>
+          to hydrate stocks.
+        </p>
+      </div>
+    } @else if (!filtered().length) {
+      <div class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">No stocks match your search.</div>
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="stock-table w-full min-w-[720px]">
+          <thead>
+            <tr>
+              @for (col of columns; track col.key) {
+                <th [class]="col.align === 'right' ? 'text-right' : 'text-left'">
+                  <button
+                    type="button"
+                    class="sort-btn inline-flex items-center gap-1"
+                    [class.sort-btn-active]="tableSort.column() === col.key"
+                    (click)="tableSort.toggle(col.key, $event)"
+                  >
+                    {{ col.label }}
+                    @if (tableSort.column() === col.key) {
+                      <span>{{ tableSort.direction() === 'asc' ? '↑' : '↓' }}</span>
+                    }
+                  </button>
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (s of filtered(); track s.symbol) {
+              <tr class="cursor-pointer" [routerLink]="['/stock', s.symbol]">
+                <td class="font-semibold text-kairo-700">{{ s.symbol }}</td>
+                <td class="col-name max-w-[12rem] truncate text-slate-700">{{ s.name || s.symbol }}</td>
+                <td class="text-right font-medium tabular-nums">{{ fmt(s.ltp) }}</td>
+                <td class="text-right tabular-nums" [class]="pnlClass(s.changePct)">
+                  {{ s.changePct >= 0 ? '+' : '' }}{{ s.changePct.toFixed(2) }}%
+                </td>
+                <td class="text-right tabular-nums text-slate-600">{{ formatMarketCap(s.marketCap) }}</td>
+                <td class="text-right tabular-nums text-slate-600">{{ formatPe(s.pe) }}</td>
+                <td class="truncate text-slate-500">{{ s.sector || '—' }}</td>
+                <td class="whitespace-nowrap text-xs text-slate-400">{{ formatUpdated(s.lastUpdated) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="border-t border-slate-100 px-4 py-2 text-xs text-slate-400 sm:px-5">
+        Showing {{ filtered().length }} of {{ stocks().length }} stocks with market data
+      </div>
+    }
+  </div>
+</div>

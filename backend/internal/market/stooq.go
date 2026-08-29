@@ -1,6 +1,7 @@
 package market
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -81,7 +82,15 @@ func (p *StooqProvider) GetOHLC(ctx Context, symbol, interval string, from, to t
 		return nil, fmt.Errorf("stooq: http %d for %s", resp.StatusCode, symbol)
 	}
 
-	all, err := parseStooqCSV(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if !looksLikeStooqCSV(body) {
+		return nil, fmt.Errorf("stooq: non-csv response for %s (rate limit or bot check)", symbol)
+	}
+
+	all, err := parseStooqCSV(bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -99,8 +108,21 @@ func (p *StooqProvider) GetOHLC(ctx Context, symbol, interval string, from, to t
 	return out, nil
 }
 
+func looksLikeStooqCSV(body []byte) bool {
+	trim := strings.TrimSpace(string(body))
+	if trim == "" {
+		return false
+	}
+	if strings.HasPrefix(trim, "<") || strings.Contains(trim, "<!DOCTYPE") {
+		return false
+	}
+	return strings.HasPrefix(trim, "Date,")
+}
+
 func parseStooqCSV(r io.Reader) ([]Candle, error) {
 	reader := csv.NewReader(r)
+	reader.LazyQuotes = true
+	reader.FieldsPerRecord = -1
 	rows, err := reader.ReadAll()
 	if err != nil {
 		return nil, err

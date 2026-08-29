@@ -1,11 +1,13 @@
-import { Component, computed, inject, signal, effect } from '@angular/core';
+import { Component, computed, inject, signal, effect, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { switchMap, of } from 'rxjs';
+import { switchMap, of, Subscription } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { StockLevelsService } from '../../services/stock-levels.service';
+import { WorkerJobService } from '../../services/worker-job.service';
+import { AuthService } from '../../services/auth.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { TradingChartComponent } from '../trading-chart/trading-chart.component';
@@ -19,19 +21,28 @@ import { Trade } from '../../models/trade.models';
   imports: [CommonModule, FormsModule, RouterLink, TradingChartComponent],
   templateUrl: './stock-detail.component.html',
 })
-export class StockDetailComponent {
+export class StockDetailComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private stockSvc = inject(StockFirestoreService);
   private levelsSvc = inject(StockLevelsService);
+  private workerJobs = inject(WorkerJobService);
+  readonly auth = inject(AuthService);
   private location = inject(Location);
   private pageShell = inject(PageShellService);
   readonly reportState = inject(ReportStateService);
+
+  private workerSub?: Subscription;
 
   readonly tableSort = new TableSortState('sellDate', 'desc');
   newLevelPrice = '';
   newLevelLabel = '';
   newLevelType: 'support' | 'resistance' = 'support';
   levelError = signal<string | null>(null);
+
+  backfillBusy = signal(false);
+  backfillError = signal<string | null>(null);
+  backfillSuccess = signal<string | null>(null);
+  workerOnline = signal(false);
 
   readonly tradeColumns = [
     { key: 'buyDate', label: 'Buy', align: 'left' as const },
@@ -85,12 +96,13 @@ export class StockDetailComponent {
     return ((s.ltp - s.week52Low) / range) * 100;
   });
 
-  private readonly _syncPageHeader = effect(() => {
+  private readonly _syncPageHeader = effect((onCleanup) => {
     const sym = this.symbol();
     const s = this.stock();
     const subtitle = s ? `${s.name} · ${s.exchange}` : 'Market data and your trades';
     this.pageShell.setHeader(sym || 'Stock', subtitle);
-  });
+    onCleanup(() => this.pageShell.clearOverride());
+  }, { allowSignalWrites: true });
 
   myTrades = computed(() => {
     const sym = this.symbol();
@@ -121,6 +133,48 @@ export class StockDetailComponent {
 
   goBack(): void {
     this.location.back();
+  }
+
+  ngOnInit(): void {
+    this.workerSub = this.workerJobs.watchWorkerOnline().subscribe((online) => {
+      this.workerOnline.set(online);
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.workerSub?.unsubscribe();
+  }
+
+  async backfillStock(): Promise<void> {
+    const sym = this.symbol();
+    if (!sym || this.backfillBusy()) return;
+
+    this.backfillBusy.set(true);
+    this.backfillError.set(null);
+    this.backfillSuccess.set(null);
+
+    try {
+      await this.auth.whenReady();
+      if (!this.auth.hasAccess) {
+        throw new Error('Sign in to request a backfill');
+      }
+
+      const online = await this.workerJobs.getWorkerOnline();
+      if (!online) {
+        throw new Error('Worker is offline — start it locally (cd backend && go run .)');
+      }
+
+      const jobId = await this.workerJobs.requestSymbolIngest(sym);
+      const job = await this.workerJobs.waitForJob(jobId);
+      if (job.status === 'failed') {
+        throw new Error(job.error ?? 'Backfill failed');
+      }
+      this.backfillSuccess.set(`Backfill complete for ${sym}. Chart and quote will update from Firestore.`);
+    } catch (e) {
+      this.backfillError.set(e instanceof Error ? e.message : 'Backfill failed');
+    } finally {
+      this.backfillBusy.set(false);
+    }
   }
 
   rsi(s: { indicators?: { rsi?: number } }): number {

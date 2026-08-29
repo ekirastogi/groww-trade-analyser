@@ -6,8 +6,8 @@ import { WatchlistsComponent } from './components/watchlists/watchlists.componen
 import { StockDetailComponent } from './components/stock-detail/stock-detail.component';
 import { SignalsComponent } from './components/signals/signals.component';
 import { HeatmapComponent } from './components/heatmap/heatmap.component';
-import { UploadComponent } from './components/upload/upload.component';
 import { SettingsComponent } from './components/settings/settings.component';
+import { StocksComponent } from './components/stocks/stocks.component';
 import { LoginComponent } from './components/login/login.component';
 import { AdminLayoutComponent } from './layout/admin-layout.component';
 import { authGuard, loginGuard } from './guards/auth.guard';
@@ -31,8 +31,8 @@ export const routes: Routes = [
       },
       {
         path: 'upload',
-        component: UploadComponent,
-        data: { title: 'Upload P&L', subtitle: 'Import broker export to Firebase' },
+        redirectTo: 'settings',
+        pathMatch: 'full',
       },
       {
         path: 'analytics',
@@ -50,6 +50,11 @@ export const routes: Routes = [
         data: { title: 'Watchlists', subtitle: 'Profitable and loss-making stocks' },
       },
       {
+        path: 'stocks',
+        component: StocksComponent,
+        data: { title: 'Market data', subtitle: 'Stocks hydrated by the local worker' },
+      },
+      {
         path: 'stock/:symbol',
         component: StockDetailComponent,
         data: { title: 'Stock', subtitle: 'Market data and your trades' },
@@ -63,7 +68,7 @@ export const routes: Routes = [
       {
         path: 'settings',
         component: SettingsComponent,
-        data: { title: 'Settings', subtitle: 'Account and data management' },
+        data: { title: 'Settings', subtitle: 'Upload P&L, backfill, and data management' },
       },
     ],
   },

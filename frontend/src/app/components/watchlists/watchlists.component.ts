@@ -3,13 +3,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { switchMap, of } from 'rxjs';
 import { WatchlistService } from '../../services/watchlist.service';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { AuthService } from '../../services/auth.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { Watchlist } from '../../models/watchlist.models';
 import { StockSummary, TRADE_TYPE_LABELS } from '../../models/trade.models';
+import { StockSnapshot } from '../../models/market.models';
 import { formatCurrency, pnlClass } from '../../utils/format.utils';
 import {
   getPnlWatchlistTier,
@@ -72,15 +72,8 @@ export class WatchlistsComponent {
   readonly state = inject(ReportStateService);
 
   watchlists = toSignal(this.watchlistSvc.watchAll(), { initialValue: [] as Watchlist[] });
-  stocks = toSignal(
-    this.watchlistSvc.watchAll().pipe(
-      switchMap((watchlists) => {
-        const symbols = [...new Set(watchlists.flatMap((wl) => wl.stockSymbols))];
-        return symbols.length ? this.stockSvc.watchStocksBySymbols(symbols) : of([]);
-      })
-    ),
-    { initialValue: [] }
-  );
+  /** Single marketCatalog doc — avoids per-stock snapshot listeners. */
+  stocks = toSignal(this.stockSvc.watchMarketCatalog(), { initialValue: [] as StockSnapshot[] });
 
   readonly mainTabs: { id: WatchlistTab; label: string }[] = [
     { id: 'losing', label: 'Loss making' },

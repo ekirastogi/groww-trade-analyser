@@ -27,6 +27,14 @@
         <button
           type="button"
           class="tab-btn"
+          [class.tab-btn-active]="activeTab() === 'upload'"
+          (click)="setTab('upload')"
+        >
+          Upload P&amp;L
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
           [class.tab-btn-active]="activeTab() === 'backfill'"
           (click)="setTab('backfill')"
         >
@@ -43,7 +51,11 @@
       </div>
     </div>
 
-    @if (activeTab() === 'backfill') {
+    @if (activeTab() === 'upload') {
+      <div class="px-4 py-4 sm:px-5">
+        <app-upload />
+      </div>
+    } @else if (activeTab() === 'backfill') {
       <div class="space-y-4 px-4 py-4 sm:px-5">
         <div class="rounded-xl border border-kairo-200 bg-kairo-50 px-4 py-3 text-sm text-kairo-900">
           <p class="font-medium">Sync symbols for market data</p>
@@ -75,29 +87,21 @@
             (change)="triggerIngest.set($any($event.target).checked)"
           />
           <span class="text-sm text-slate-700">
-            Trigger hot ingest on local backend worker after sync (if running).
+            Request market data ingest from the local worker via Firebase after sync.
           </span>
         </label>
 
-        <div>
-          <label class="mb-2 block text-sm font-medium text-slate-700">Local backend URL</label>
-          <input
-            type="url"
-            class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-kairo-400 focus:outline-none focus:ring-2 focus:ring-kairo-200"
-            [value]="backendUrl()"
-            (change)="onBackendUrlChange($event)"
-            placeholder="http://localhost:8080"
-          />
-          <p class="mt-2 text-xs text-slate-500">
-            Worker status:
-            @if (workerOnline()) {
-              <span class="font-medium text-emerald-600">Online</span>
-            } @else {
-              <span class="font-medium text-amber-600">Offline</span>
-              — run <code class="rounded bg-slate-100 px-1">go run .</code> in <code class="rounded bg-slate-100 px-1">backend/</code>
-            }
-          </p>
-        </div>
+        <p class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Worker status (via Firestore):
+          @if (workerOnline()) {
+            <span class="font-medium text-emerald-600">Online</span>
+            — your local worker is connected and will process ingest jobs.
+          } @else {
+            <span class="font-medium text-amber-600">Offline</span>
+            — run <code class="rounded bg-white px-1">go run .</code> in <code class="rounded bg-white px-1">backend/</code> on your machine.
+            Universe sync still works; ingest runs when the worker starts.
+          }
+        </p>
 
         @if (backfillError()) {
           <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ backfillError() }}</div>
@@ -109,9 +113,6 @@
         <div class="flex flex-wrap gap-3 pt-1">
           <button type="button" class="btn-primary" [disabled]="!canRunBackfill()" (click)="runBackfill()">
             {{ backfillBusy() ? 'Backfilling…' : 'Backfill universe' }}
-          </button>
-          <button type="button" class="btn-secondary" [disabled]="backfillBusy()" (click)="refreshWorkerStatus()">
-            Check worker
           </button>
         </div>
       </div>
@@ -160,7 +161,7 @@
           <button type="button" class="btn-danger" [disabled]="!canConfirmReset()" (click)="confirmResetAllData()">
             {{ resetBusy() ? 'Resetting…' : 'Reset All Data' }}
           </button>
-          <a routerLink="/upload" class="btn-secondary">Upload P&amp;L</a>
+          <button type="button" class="btn-secondary" (click)="setTab('upload')">Upload P&amp;L</button>
         </div>
       </div>
     }

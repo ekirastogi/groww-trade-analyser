@@ -28,6 +28,7 @@ func startHTTPServer(addr string, h *handlers.Handler, health map[string]any) {
 	mux.HandleFunc("GET /api/v1/reports/{id}", h.Report)
 	mux.HandleFunc("GET /api/v1/reports/{id}/analyze", h.Analyze)
 	mux.HandleFunc("POST /api/v1/ingest/hot", h.IngestHot)
+	mux.HandleFunc("POST /api/v1/ingest/symbol/{symbol}", h.IngestSymbol)
 
 	server := &http.Server{
 		Addr:              addr,
