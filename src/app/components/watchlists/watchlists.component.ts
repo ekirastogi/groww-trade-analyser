@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -7,6 +7,8 @@ import { WatchlistService } from '../../services/watchlist.service';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { AuthService } from '../../services/auth.service';
 import { Watchlist } from '../../models/watchlist.models';
+
+type WatchlistTab = 'custom' | 'auto';
 
 @Component({
   selector: 'app-watchlists',
@@ -22,15 +24,36 @@ export class WatchlistsComponent {
   watchlists = toSignal(this.watchlistSvc.watchAll(), { initialValue: [] as Watchlist[] });
   stocks = toSignal(this.stockSvc.watchAllStocks(), { initialValue: [] });
 
+  activeTab = signal<WatchlistTab>('auto');
   newName = '';
   newSymbol = '';
-  selectedWatchlistId = signal<string | null>(null);
   error = signal<string | null>(null);
+
+  customWatchlists = computed(() =>
+    this.watchlists()
+      .filter((wl) => !this.watchlistSvc.isAutoWatchlist(wl))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  );
+
+  autoWatchlists = computed(() =>
+    this.watchlists()
+      .filter((wl) => this.watchlistSvc.isAutoWatchlist(wl))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  );
+
+  visibleWatchlists = computed(() =>
+    this.activeTab() === 'auto' ? this.autoWatchlists() : this.customWatchlists()
+  );
+
+  setTab(tab: WatchlistTab): void {
+    this.activeTab.set(tab);
+    this.error.set(null);
+  }
 
   async createWatchlist(): Promise<void> {
     if (!this.newName.trim()) return;
     try {
-      const lists = this.watchlists();
+      const lists = this.customWatchlists();
       await this.watchlistSvc.create({
         name: this.newName.trim(),
         type: 'manual',
@@ -39,6 +62,7 @@ export class WatchlistsComponent {
         stockSymbols: [],
       });
       this.newName = '';
+      this.activeTab.set('custom');
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to create watchlist');
     }

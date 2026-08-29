@@ -59,6 +59,13 @@ export class ClientAccountService {
     }
   }
 
+  clearSelectedClient(): void {
+    this.selectedClientCode.set(null);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(SELECTED_CLIENT_KEY);
+    }
+  }
+
   private loadSelected(): string | null {
     if (typeof localStorage === 'undefined') return null;
     return localStorage.getItem(SELECTED_CLIENT_KEY);

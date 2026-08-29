@@ -98,4 +98,19 @@ export class WatchlistService {
       })
     );
   }
+
+  async deleteAutoWatchlists(): Promise<void> {
+    const uid = this.auth.uid;
+    if (!uid) return;
+
+    await Promise.all(
+      PNL_WATCHLIST_TIERS.map((tier) =>
+        deleteDoc(doc(this.firestore, 'users', uid, 'watchlists', tier.id)).catch(() => undefined)
+      )
+    );
+  }
+
+  isAutoWatchlist(watchlist: Watchlist): boolean {
+    return watchlist.type === 'pnl_derived';
+  }
 }

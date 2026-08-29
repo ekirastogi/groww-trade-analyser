@@ -1,6 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import {
+  CollectionReference,
   Firestore,
+  collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -43,6 +46,14 @@ export interface UploadResult {
   affectedSymbols: string[];
 }
 
+export interface UploadOptions {
+  forceReingest?: boolean;
+}
+
+export interface ResetAllDataResult {
+  clientsRemoved: number;
+}
+
 const FIRESTORE_BATCH_LIMIT = 400;
 
 @Injectable({ providedIn: 'root' })
@@ -53,7 +64,7 @@ export class TradeLedgerService {
   private parser = inject(ParserService);
   private watchlists = inject(WatchlistService);
 
-  async uploadReport(file: File): Promise<UploadResult> {
+  async uploadReport(file: File, options: UploadOptions = {}): Promise<UploadResult> {
     await this.auth.whenReady();
     const uid = this.auth.uid;
     if (!uid) throw new Error('Sign in to push data to Firebase');
@@ -71,21 +82,27 @@ export class TradeLedgerService {
     const clientCode = report.summary.clientCode?.trim() || 'UNKNOWN';
     const clientName = report.summary.clientName?.trim() || clientCode;
 
+    if (options.forceReingest) {
+      await this.deleteClientData(clientCode);
+    }
+
     const uploadsCol = this.clientSvc.clientCol(clientCode, 'uploads');
-    const existingFile = await getDocs(
-      query(uploadsCol, where('contentHash', '==', contentHash), limit(1))
-    );
-    if (!existingFile.empty) {
-      await this.syncDerivedData(clientCode, clientName);
-      return {
-        uploadId: existingFile.docs[0].id,
-        clientCode,
-        clientName,
-        newTradesAdded: 0,
-        duplicatesSkipped: 0,
-        fileDuplicate: true,
-        affectedSymbols: [],
-      };
+    if (!options.forceReingest) {
+      const existingFile = await getDocs(
+        query(uploadsCol, where('contentHash', '==', contentHash), limit(1))
+      );
+      if (!existingFile.empty) {
+        await this.syncDerivedData(clientCode, clientName);
+        return {
+          uploadId: existingFile.docs[0].id,
+          clientCode,
+          clientName,
+          newTradesAdded: 0,
+          duplicatesSkipped: 0,
+          fileDuplicate: true,
+          affectedSymbols: [],
+        };
+      }
     }
 
     const uploadId = crypto.randomUUID();
@@ -162,6 +179,21 @@ export class TradeLedgerService {
       fileDuplicate: false,
       affectedSymbols: [...affectedSymbols],
     };
+  }
+
+  async resetAllData(): Promise<ResetAllDataResult> {
+    await this.auth.whenReady();
+    const uid = this.auth.uid;
+    if (!uid) throw new Error('Sign in to reset data');
+
+    const clients = await this.clientSvc.listClients();
+    for (const client of clients) {
+      await this.deleteClientData(client.clientCode);
+    }
+    await this.watchlists.deleteAutoWatchlists();
+    this.clientSvc.clearSelectedClient();
+
+    return { clientsRemoved: clients.length };
   }
 
   async getAllTrades(clientCode: string): Promise<StoredTrade[]> {
@@ -401,6 +433,24 @@ export class TradeLedgerService {
     };
 
     await setDoc(doc(this.clientSvc.clientCol(clientCode, 'stockProfiles'), symbol), profile);
+  }
+
+  private async deleteClientData(clientCode: string): Promise<void> {
+    await this.deleteCollection(this.clientSvc.clientCol(clientCode, 'trades'));
+    await this.deleteCollection(this.clientSvc.clientCol(clientCode, 'uploads'));
+    await this.deleteCollection(this.clientSvc.clientCol(clientCode, 'stockProfiles'));
+    await deleteDoc(doc(this.firestore, 'users', this.auth.uid!, 'clients', clientCode));
+  }
+
+  private async deleteCollection(colRef: CollectionReference): Promise<void> {
+    while (true) {
+      const snap = await getDocs(query(colRef, limit(FIRESTORE_BATCH_LIMIT)));
+      if (snap.empty) return;
+      const batch = writeBatch(this.firestore);
+      snap.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+      await batch.commit();
+      if (snap.size < FIRESTORE_BATCH_LIMIT) return;
+    }
   }
 
   private async ensureUserProfile(): Promise<void> {

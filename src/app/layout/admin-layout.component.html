@@ -4,7 +4,7 @@
   }
 
   <aside
-    class="fixed inset-y-0 left-0 z-50 flex w-[17rem] flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-300"
+    class="fixed inset-y-0 left-0 z-50 flex w-[17.5rem] flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-300"
     [class.-translate-x-full]="!sidebarOpen()"
     [class.translate-x-0]="sidebarOpen()"
   >
@@ -15,41 +15,40 @@
       </button>
     </div>
 
-    <nav class="flex-1 space-y-6 overflow-y-auto p-4">
-      <div>
-        <p class="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Core</p>
-        <div class="space-y-1">
-          <a routerLink="/" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: true }" class="nav-link">
-            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-            Recommendations
-          </a>
-          <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link">
-            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-            Trade Dashboard
-          </a>
-          <a routerLink="/upload" routerLinkActive="nav-link-active" class="nav-link">
-            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-            Upload File
-          </a>
+    <nav class="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      @for (section of navSections; track section.title) {
+        <div class="nav-section">
+          <p class="nav-section-title">{{ section.title }}</p>
+          <div class="space-y-0.5">
+            @for (item of section.items; track item.route) {
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="nav-link-active"
+                [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+                class="nav-link"
+                (click)="onNavigate()"
+              >
+                <svg class="h-[1.125rem] w-[1.125rem] shrink-0 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" [attr.d]="item.icon" />
+                </svg>
+                {{ item.label }}
+              </a>
+            }
+          </div>
         </div>
-      </div>
+      }
 
-      <div>
-        <p class="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Insights</p>
-        <div class="space-y-1">
-          <a routerLink="/analytics" routerLinkActive="nav-link-active" class="nav-link">
-            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-            Analytics
-          </a>
-          <a routerLink="/watchlists" routerLinkActive="nav-link-active" class="nav-link">
-            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5h14M5 12h14M5 19h14"/></svg>
-            Watchlists
-          </a>
-          <a routerLink="/heatmap" routerLinkActive="nav-link-active" class="nav-link">
-            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-            Heatmap
-          </a>
-        </div>
+      <div class="nav-section border-t border-sidebar-border/70 pt-4">
+        <p class="nav-section-title">Data</p>
+        <button type="button" class="nav-link-danger w-full" (click)="openResetModal()">
+          <svg class="h-[1.125rem] w-[1.125rem] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          Reset All Data
+        </button>
+        <p class="mt-2 px-3 text-[11px] leading-relaxed text-slate-500">
+          Clears all trades, uploads, and auto watchlists from Firebase. Custom watchlists are kept.
+        </p>
       </div>
     </nav>
 
@@ -69,7 +68,7 @@
     }
   </aside>
 
-  <div class="flex min-w-0 flex-1 flex-col transition-[margin] duration-300" [class.lg:ml-[17rem]]="sidebarOpen()">
+  <div class="flex min-w-0 flex-1 flex-col transition-[margin] duration-300" [class.lg:ml-[17.5rem]]="sidebarOpen()">
     <header class="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur-md sm:px-6">
       <button type="button" class="rounded-xl p-2 text-slate-600 transition hover:bg-slate-100" (click)="toggleSidebar()">
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -83,15 +82,65 @@
   </div>
 
   <nav class="fixed bottom-0 left-0 right-0 z-30 flex border-t border-slate-200 bg-white/95 backdrop-blur-md pb-safe lg:hidden">
-    <a routerLink="/" routerLinkActive="text-kairo-700" [routerLinkActiveOptions]="{ exact: true }" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Signals</a>
     <a routerLink="/dashboard" routerLinkActive="text-kairo-700" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Dashboard</a>
     <a routerLink="/upload" routerLinkActive="text-kairo-700" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Upload</a>
+    <a routerLink="/watchlists" routerLinkActive="text-kairo-700" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Lists</a>
+    <a routerLink="/" routerLinkActive="text-kairo-700" [routerLinkActiveOptions]="{ exact: true }" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Signals</a>
   </nav>
 </div>
 
-@if (state.loading()) {
+@if (resetModalOpen()) {
+  <div class="fixed inset-0 z-[110] flex items-end justify-center bg-slate-950/70 p-4 backdrop-blur-sm sm:items-center">
+    <div class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl" role="dialog" aria-labelledby="reset-title">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 id="reset-title" class="text-lg font-bold text-slate-900">Reset All Data</h2>
+        <p class="mt-1 text-sm text-slate-500">Remove all uploaded trade data from Firebase and optionally re-ingest from a file.</p>
+      </div>
+
+      <div class="space-y-4 px-5 py-4">
+        <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p class="font-medium">This will delete:</p>
+          <ul class="mt-2 list-disc space-y-1 pl-5 text-amber-800">
+            <li>All client accounts, trades, uploads, and stock profiles</li>
+            <li>Auto-generated PnL watchlists</li>
+          </ul>
+          <p class="mt-2 text-amber-800">Your custom watchlists and login are not affected.</p>
+        </div>
+
+        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+          <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-kairo-500" [checked]="resetConfirmChecked()" (change)="resetConfirmChecked.set($any($event.target).checked)" />
+          <span class="text-sm text-slate-700">I understand this permanently deletes my uploaded trade data from Firebase.</span>
+        </label>
+
+        <div>
+          <label class="mb-2 block text-sm font-medium text-slate-700">Re-ingest after reset (optional)</label>
+          <input type="file" accept=".xlsx,.xls,.csv" class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-kairo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-kairo-700" (change)="onReingestFileSelected($event)" />
+          @if (reingestFile(); as file) {
+            <p class="mt-2 text-xs text-slate-500">Selected: {{ file.name }}</p>
+          }
+        </div>
+
+        @if (resetError()) {
+          <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ resetError() }}</div>
+        }
+        @if (resetSuccess()) {
+          <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ resetSuccess() }}</div>
+        }
+      </div>
+
+      <div class="flex gap-3 border-t border-slate-100 px-5 py-4">
+        <button type="button" class="btn-secondary flex-1" [disabled]="resetBusy()" (click)="closeResetModal()">Cancel</button>
+        <button type="button" class="btn-danger flex-1" [disabled]="!canConfirmReset()" (click)="confirmResetAllData()">
+          {{ resetBusy() ? 'Resetting…' : 'Reset All Data' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (state.loading() || resetBusy()) {
   <div class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-sm">
     <div class="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-kairo-400"></div>
-    <span class="mt-4 text-sm font-medium text-white">Processing...</span>
+    <span class="mt-4 text-sm font-medium text-white">{{ resetBusy() ? 'Resetting data…' : 'Processing...' }}</span>
   </div>
 }

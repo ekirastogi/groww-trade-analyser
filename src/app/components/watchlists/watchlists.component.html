@@ -2,7 +2,7 @@
   <div class="page-header flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 class="page-title">Watchlists</h2>
-      <p class="page-subtitle">Symbols tracked by your local market engine</p>
+      <p class="page-subtitle">Auto lists from your P&L uploads, or create custom lists to track symbols.</p>
     </div>
     @if (!auth.user()) {
       <button type="button" class="btn-primary" (click)="auth.signInWithGoogle()">
@@ -16,27 +16,44 @@
   }
 
   <div class="flex flex-wrap gap-2">
-    <input [(ngModel)]="newName" placeholder="New watchlist name" class="input-field max-w-xs" />
-    <button type="button" class="btn-primary" (click)="createWatchlist()">Create</button>
+    <button type="button" class="chip" [class.chip-active]="activeTab() === 'auto'" [class.chip-inactive]="activeTab() !== 'auto'" (click)="setTab('auto')">
+      Auto
+    </button>
+    <button type="button" class="chip" [class.chip-active]="activeTab() === 'custom'" [class.chip-inactive]="activeTab() !== 'custom'" (click)="setTab('custom')">
+      Custom
+    </button>
   </div>
 
-  @for (wl of watchlists(); track wl.id) {
+  @if (activeTab() === 'auto') {
+    <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+      Auto watchlists are created when you upload a P&L file. Stocks are grouped by net P&L tiers (loss/profit up to ₹5K–₹2L).
+    </div>
+  } @else {
+    <div class="flex flex-wrap gap-2">
+      <input [(ngModel)]="newName" placeholder="New watchlist name" class="input-field max-w-xs" />
+      <button type="button" class="btn-primary" (click)="createWatchlist()">Create watchlist</button>
+    </div>
+  }
+
+  @for (wl of visibleWatchlists(); track wl.id) {
     <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="mb-3 flex items-center justify-between">
+      <div class="mb-3 flex items-center justify-between gap-3">
         <h3 class="font-semibold text-slate-900">
           <span class="mr-2 inline-block h-3 w-3 rounded-full" [style.background]="wl.color"></span>
           {{ wl.name }}
-          <span class="ml-2 text-xs font-normal text-slate-400">({{ wl.type }})</span>
+          <span class="ml-2 text-xs font-normal text-slate-400">({{ wl.stockSymbols.length }} stocks)</span>
         </h3>
-        @if (wl.type === 'manual') {
+        @if (activeTab() === 'custom') {
           <button type="button" class="text-xs text-red-500" (click)="deleteWatchlist(wl.id)">Delete</button>
         }
       </div>
 
-      <div class="mb-3 flex gap-2">
-        <input [(ngModel)]="newSymbol" placeholder="Add symbol e.g. RELIANCE" class="rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" />
-        <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" (click)="addSymbol(wl)">Add</button>
-      </div>
+      @if (activeTab() === 'custom') {
+        <div class="mb-3 flex gap-2">
+          <input [(ngModel)]="newSymbol" placeholder="Add symbol e.g. RELIANCE" class="rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" />
+          <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" (click)="addSymbol(wl)">Add</button>
+        </div>
+      }
 
       <div class="divide-y divide-slate-100">
         @for (sym of wl.stockSymbols; track sym) {
@@ -44,15 +61,29 @@
             <a [routerLink]="['/stock', sym]" class="font-medium text-kairo-600 hover:underline">{{ sym }}</a>
             <div class="flex items-center gap-3">
               <span class="text-slate-500">{{ stockPrice(sym) }}</span>
-              <button type="button" class="text-xs text-red-400" (click)="removeSymbol(wl, sym)">Remove</button>
+              @if (activeTab() === 'custom') {
+                <button type="button" class="text-xs text-red-400" (click)="removeSymbol(wl, sym)">Remove</button>
+              }
             </div>
           </div>
         } @empty {
-          <p class="py-4 text-center text-sm text-slate-400">No symbols yet</p>
+          <p class="py-4 text-center text-sm text-slate-400">
+            @if (activeTab() === 'auto') {
+              No stocks in this tier yet. Upload a P&L file from the sidebar.
+            } @else {
+              No symbols yet
+            }
+          </p>
         }
       </div>
     </div>
   } @empty {
-    <p class="text-center text-slate-500">No watchlists. Create one to start tracking stocks.</p>
+    <p class="text-center text-slate-500">
+      @if (activeTab() === 'auto') {
+        No auto watchlists yet. Upload a P&L file to generate them.
+      } @else {
+        No custom watchlists yet. Create one above.
+      }
+    </p>
   }
 </div>
