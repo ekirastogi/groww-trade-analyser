@@ -22,6 +22,8 @@ import {
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
+import { MarketCapFilterComponent } from '../shared/market-cap-filter/market-cap-filter.component';
+import { MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
 
 type WatchlistTab = 'profitable' | 'losing' | 'custom';
 
@@ -48,7 +50,7 @@ interface AutoTierTab {
 @Component({
   selector: 'app-watchlists',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent],
+  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent, MarketCapFilterComponent],
   templateUrl: './watchlists.component.html',
 })
 export class WatchlistsComponent {
@@ -71,6 +73,7 @@ export class WatchlistsComponent {
   selectedAutoTierId = signal<string | null>(null);
   selectedCustomWatchlistId = signal<string | null>(null);
   expandedStockKey = signal<string | null>(null);
+  selectedMarketCapTiers = signal<MarketCapTier[]>([]);
   newName = '';
   newSymbol = '';
   error = signal<string | null>(null);
@@ -102,7 +105,7 @@ export class WatchlistsComponent {
   );
 
   autoTierTabs = computed((): AutoTierTab[] => {
-    const summaries = this.state.analysis()?.stocks ?? [];
+    const summaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
     const mode = this.tierMode();
 
     return this.autoWatchlists().map((watchlist) => {
@@ -168,7 +171,7 @@ export class WatchlistsComponent {
 
   tierStocks = computed(() => {
     const watchlist = this.activeAutoWatchlist();
-    const stockSummaries = this.state.analysis()?.stocks ?? [];
+    const stockSummaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
     if (!watchlist) return [] as StockSummary[];
 
     const tier = getPnlWatchlistTier(watchlist.id);
@@ -227,6 +230,12 @@ export class WatchlistsComponent {
   setTierMode(mode: PnlTierMode): void {
     this.tierMode.set(mode);
     savePnlTierMode(mode);
+  }
+
+  setMarketCapTiers(tiers: MarketCapTier[]): void {
+    this.selectedMarketCapTiers.set(tiers);
+    this.selectedAutoTierId.set(null);
+    this.expandedStockKey.set(null);
   }
 
   selectAutoTier(id: string): void {
@@ -345,6 +354,19 @@ export class WatchlistsComponent {
         stock.symbol?.toUpperCase() === key ||
         normalizeSymbol(stock.stockName) === key ||
         stock.stockName.split(' ')[0].toUpperCase() === key
+    );
+  }
+
+  private marketCapForStock(stock: StockSummary): number | undefined {
+    const symbol = this.stockSymbol(stock).toUpperCase();
+    return this.stocks().find((s) => s.symbol === symbol)?.marketCap;
+  }
+
+  private filterByMarketCap(stocks: StockSummary[]): StockSummary[] {
+    const selected = this.selectedMarketCapTiers();
+    if (!selected.length) return stocks;
+    return stocks.filter((stock) =>
+      matchesMarketCapFilter(this.marketCapForStock(stock), selected)
     );
   }
 }

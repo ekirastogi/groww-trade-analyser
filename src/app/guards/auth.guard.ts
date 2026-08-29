@@ -6,12 +6,12 @@ export const authGuard: CanActivateFn = async () => {
   const authService = inject(AuthService);
   const router = inject(Router);
   await authService.whenReady();
-  return authService.currentUser ? true : router.createUrlTree(['/login']);
+  return authService.hasAccess ? true : router.createUrlTree(['/login']);
 };
 
 export const loginGuard: CanActivateFn = async () => {
   const authService = inject(AuthService);
   const router = inject(Router);
   await authService.whenReady();
-  return authService.currentUser ? router.createUrlTree(['/']) : true;
+  return authService.hasAccess ? router.createUrlTree(['/']) : true;
 };

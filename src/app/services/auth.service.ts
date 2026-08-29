@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { Auth, authState } from '@angular/fire/auth';
 import {
   GoogleAuthProvider,
@@ -9,6 +9,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { ACCESS_DENIED_MESSAGE, isAllowedGoogleUser } from '../constants/allowed-users';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -17,6 +18,7 @@ export class AuthService {
 
   readonly user = toSignal(authState(this.auth), { initialValue: null as User | null });
   readonly user$ = toObservable(this.user);
+  readonly sessionAllowed = computed(() => isAllowedGoogleUser(this.user()));
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -34,6 +36,7 @@ export class AuthService {
       this.error.set(e instanceof Error ? e.message : 'Sign in failed');
     }
     await this.auth.authStateReady();
+    await this.rejectIfNotAllowed();
   }
 
   async signInWithGoogle(): Promise<void> {
@@ -49,6 +52,7 @@ export class AuthService {
       }
 
       await signInWithPopup(this.auth, provider);
+      await this.rejectIfNotAllowed();
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Sign in failed');
     } finally {
@@ -61,15 +65,29 @@ export class AuthService {
   }
 
   get uid(): string | null {
-    return this.auth.currentUser?.uid ?? null;
+    return this.hasAccess ? (this.auth.currentUser?.uid ?? null) : null;
   }
 
   get currentUser(): User | null {
-    return this.auth.currentUser;
+    const user = this.auth.currentUser;
+    return isAllowedGoogleUser(user) ? user : null;
+  }
+
+  get hasAccess(): boolean {
+    return isAllowedGoogleUser(this.auth.currentUser);
   }
 
   async getIdToken(): Promise<string | null> {
+    if (!this.hasAccess) return null;
     return (await this.auth.currentUser?.getIdToken()) ?? null;
+  }
+
+  private async rejectIfNotAllowed(): Promise<void> {
+    const user = this.auth.currentUser;
+    if (!user) return;
+    if (isAllowedGoogleUser(user)) return;
+    await signOut(this.auth);
+    this.error.set(ACCESS_DENIED_MESSAGE);
   }
 
   private useRedirectSignIn(): boolean {

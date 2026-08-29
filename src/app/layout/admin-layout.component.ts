@@ -151,7 +151,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
       .pipe(filter((event) => event instanceof NavigationEnd))
       .subscribe(() => this.syncPageHeader());
 
-    if (this.auth.user()) {
+    if (this.auth.hasAccess) {
       this.notifications.requestPermission();
     }
     if (this.isMobile()) {
@@ -159,7 +159,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     }
 
     await this.auth.whenReady();
-    if (this.auth.currentUser) {
+    if (this.auth.hasAccess) {
       await this.state.ensureLoadedFromFirebase();
     }
   }

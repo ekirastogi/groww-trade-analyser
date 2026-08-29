@@ -42,6 +42,14 @@
           <app-trade-type-filter [compact]="true" />
         </div>
         <div class="hidden h-5 w-px bg-slate-200 sm:block"></div>
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cap</span>
+          <app-market-cap-filter
+            [selected]="selectedMarketCapTiers()"
+            (selectedChange)="setMarketCapTiers($event)"
+          />
+        </div>
+        <div class="hidden h-5 w-px bg-slate-200 sm:block"></div>
         <div class="flex flex-wrap items-center gap-2">
           <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bands</span>
           <div class="segmented-control">

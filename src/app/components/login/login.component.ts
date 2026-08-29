@@ -20,7 +20,7 @@ export class LoginComponent implements OnInit {
 
   constructor() {
     effect(() => {
-      if (this.auth.user()) {
+      if (this.auth.sessionAllowed()) {
         void this.router.navigate(['/']);
       }
     });

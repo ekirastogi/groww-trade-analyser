@@ -1,22 +1,58 @@
-import { Component, computed, inject } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+  ElementRef,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { StockSummary } from '../../models/trade.models';
 import { formatCurrency } from '../../utils/format.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
+import { layoutTreemap, minRectDimension, rectToPercentStyle } from '../../utils/treemap.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
+
+const HEATMAP_HEIGHT_PX = 500;
+const PANE_HEADER_PX = 32;
+const GRID_GAP_PX = 4;
+const GRID_PADDING_PX = 16;
+const MIN_TILE_PX = 56;
 
 interface HeatmapTile {
   symbol: string;
   name: string;
   netPnL: number;
-  winRate: number;
-  weight: number;
   background: string;
   borderColor: string;
+  textColor: string;
+  style: Record<string, string>;
+}
+
+interface HeatmapOthers {
+  count: number;
+  netPnL: number;
+  symbols: string[];
+  background: string;
+  borderColor: string;
+  textColor: string;
+  style: Record<string, string>;
+}
+
+interface HeatmapColors {
+  background: string;
+  borderColor: string;
+  textColor: string;
+}
+
+interface HeatmapSection {
+  featured: HeatmapTile[];
+  others: HeatmapOthers | null;
+  total: number;
+  stockCount: number;
 }
 
 @Component({
@@ -26,50 +62,142 @@ interface HeatmapTile {
   templateUrl: './heatmap.component.html',
 })
 export class HeatmapComponent {
-  private stockSvc = inject(StockFirestoreService);
   readonly reportState = inject(ReportStateService);
-
-  private marketStocks = toSignal(this.stockSvc.watchAllStocks(), { initialValue: [] });
-
   readonly fmt = formatCurrency;
+  readonly heatmapHeight = HEATMAP_HEIGHT_PX;
 
-  private stockRows = computed((): StockSummary[] => {
-    return this.reportState.analysis()?.stocks ?? [];
-  });
+  private columnsEl = viewChild<ElementRef<HTMLElement>>('columnsEl');
+  private paneWidth = signal(0);
+  private paneHeight = signal(0);
 
-  profitableTiles = computed(() => this.buildTiles(this.stockRows().filter((s) => s.netPnL > 0), true));
-  losingTiles = computed(() => this.buildTiles(this.stockRows().filter((s) => s.netPnL < 0), false));
+  private stockRows = computed((): StockSummary[] => this.reportState.analysis()?.stocks ?? []);
 
-  profitableTotal = computed(() => this.profitableTiles().reduce((sum, t) => sum + t.netPnL, 0));
-  losingTotal = computed(() => this.losingTiles().reduce((sum, t) => sum + t.netPnL, 0));
+  profitableSection = computed(() =>
+    this.buildSection(this.stockRows().filter((s) => s.netPnL > 0), true)
+  );
 
-  hasMarketData = computed(() => this.marketStocks().length > 0);
+  losingSection = computed(() =>
+    this.buildSection(this.stockRows().filter((s) => s.netPnL < 0), false)
+  );
 
-  private buildTiles(stocks: StockSummary[], positive: boolean): HeatmapTile[] {
-    if (!stocks.length) return [];
+  constructor() {
+    effect((onCleanup) => {
+      const el = this.columnsEl()?.nativeElement;
+      if (!el || typeof ResizeObserver === 'undefined') return;
 
-    const magnitudes = stocks.map((s) => Math.abs(s.netPnL));
-    const max = Math.max(...magnitudes, 1);
+      const observer = new ResizeObserver(() => this.updatePaneSize(el));
+      observer.observe(el);
+      this.updatePaneSize(el);
+      onCleanup(() => observer.disconnect());
+    });
+  }
 
-    return stocks
-      .map((stock) => {
-        const symbol = stock.symbol || normalizeSymbol(stock.stockName);
-        const magnitude = Math.abs(stock.netPnL);
-        const intensity = 0.28 + (magnitude / max) * 0.62;
-        const weight = Math.max(1, Math.round((magnitude / max) * 8));
+  othersTooltip(symbols: string[]): string {
+    if (symbols.length <= 8) return symbols.join(', ');
+    return `${symbols.slice(0, 8).join(', ')} +${symbols.length - 8} more`;
+  }
 
-        return {
-          symbol,
-          name: stock.stockName,
-          netPnL: stock.netPnL,
-          winRate: stock.winRate ?? 0,
-          weight,
-          background: positive
-            ? `rgba(16, 185, 129, ${intensity})`
-            : `rgba(239, 68, 68, ${intensity})`,
-          borderColor: positive ? 'rgba(5, 150, 105, 0.35)' : 'rgba(220, 38, 38, 0.35)',
-        };
-      })
-      .sort((a, b) => b.netPnL - a.netPnL);
+  private updatePaneSize(el: HTMLElement): void {
+    const paneWidth = Math.max(0, el.clientWidth / 2 - 1);
+    const innerHeight = HEATMAP_HEIGHT_PX - PANE_HEADER_PX - GRID_PADDING_PX;
+    const innerWidth = Math.max(0, paneWidth - GRID_PADDING_PX);
+    this.paneWidth.set(innerWidth);
+    this.paneHeight.set(innerHeight);
+  }
+
+  private buildSection(stocks: StockSummary[], positive: boolean): HeatmapSection {
+    const sorted = [...stocks].sort((a, b) => (positive ? b.netPnL - a.netPnL : a.netPnL - b.netPnL));
+    const total = sorted.reduce((sum, s) => sum + s.netPnL, 0);
+    const width = this.paneWidth();
+    const height = this.paneHeight();
+
+    if (!sorted.length || width <= 0 || height <= 0) {
+      return { featured: [], others: null, total, stockCount: sorted.length };
+    }
+
+    const max = Math.max(...sorted.map((s) => Math.abs(s.netPnL)), 1);
+    const { featured, rest } = this.splitForReadableLayout(sorted, width, height);
+    const weights = featured.map((stock) => Math.abs(stock.netPnL));
+    if (rest.length) {
+      weights.push(rest.reduce((sum, stock) => sum + Math.abs(stock.netPnL), 0));
+    }
+
+    const rects = layoutTreemap(weights, width, height, GRID_GAP_PX);
+    const tiles = featured.map((stock, index) => {
+      const colors = this.colorsForRatio(Math.abs(stock.netPnL) / max, positive);
+      return {
+        symbol: stock.symbol || normalizeSymbol(stock.stockName),
+        name: stock.stockName,
+        netPnL: stock.netPnL,
+        ...colors,
+        style: rectToPercentStyle(rects[index], width, height),
+      };
+    });
+
+    let others: HeatmapOthers | null = null;
+    if (rest.length) {
+      const netPnL = rest.reduce((sum, s) => sum + s.netPnL, 0);
+      const colors = this.colorsForRatio(Math.abs(netPnL) / max, positive);
+      others = {
+        count: rest.length,
+        netPnL,
+        symbols: rest.map((s) => s.symbol || normalizeSymbol(s.stockName)),
+        ...colors,
+        style: rectToPercentStyle(rects[rects.length - 1], width, height),
+      };
+    }
+
+    return { featured: tiles, others, total, stockCount: sorted.length };
+  }
+
+  private splitForReadableLayout(
+    sorted: StockSummary[],
+    width: number,
+    height: number
+  ): { featured: StockSummary[]; rest: StockSummary[] } {
+    for (let count = sorted.length; count >= 1; count--) {
+      const needsOthers = count < sorted.length;
+      const featuredCount = needsOthers ? count - 1 : count;
+      const featured = sorted.slice(0, featuredCount);
+      const rest = needsOthers ? sorted.slice(featuredCount) : [];
+      const weights = featured.map((stock) => Math.abs(stock.netPnL));
+
+      if (rest.length) {
+        weights.push(rest.reduce((sum, stock) => sum + Math.abs(stock.netPnL), 0));
+      }
+
+      const rects = layoutTreemap(weights, width, height, GRID_GAP_PX);
+      const smallest = Math.min(...rects.map((rect) => minRectDimension(rect)));
+
+      if (smallest >= MIN_TILE_PX || count === 1) {
+        return { featured, rest };
+      }
+    }
+
+    return { featured: sorted.slice(0, 1), rest: sorted.slice(1) };
+  }
+
+  private colorsForRatio(ratio: number, positive: boolean): HeatmapColors {
+    const t = Math.pow(Math.min(1, Math.max(0, ratio)), 0.55);
+
+    if (positive) {
+      const saturation = Math.round(42 + t * 54);
+      const lightness = Math.round(92 - t * 50);
+      const borderLightness = Math.max(28, lightness - 10);
+      return {
+        background: `hsl(152, ${saturation}%, ${lightness}%)`,
+        borderColor: `hsl(152, ${saturation}%, ${borderLightness}%)`,
+        textColor: lightness <= 58 ? '#ffffff' : '#064e3b',
+      };
+    }
+
+    const saturation = Math.round(48 + t * 50);
+    const lightness = Math.round(92 - t * 50);
+    const borderLightness = Math.max(28, lightness - 10);
+    return {
+      background: `hsl(0, ${saturation}%, ${lightness}%)`,
+      borderColor: `hsl(0, ${saturation}%, ${borderLightness}%)`,
+      textColor: lightness <= 58 ? '#ffffff' : '#7f1d1d',
+    };
   }
 }

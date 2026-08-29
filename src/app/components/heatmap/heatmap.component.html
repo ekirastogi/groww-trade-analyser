@@ -1,4 +1,4 @@
-<div class="space-y-4">
+<div class="heatmap-page">
   @if (!reportState.hasReport()) {
     <div class="card overflow-hidden p-8 text-center">
       <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
@@ -6,71 +6,111 @@
       <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
     </div>
   } @else {
-    <app-trade-type-filter />
-
-    <div class="grid gap-4 sm:grid-cols-2">
-      <div class="card border-l-4 border-l-emerald-500 p-4">
-        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Profitable stocks</p>
-        <p class="mt-1 text-2xl font-bold text-emerald-600">{{ fmt(profitableTotal()) }}</p>
-        <p class="text-xs text-slate-400">{{ profitableTiles().length }} stocks</p>
+    <div class="heatmap-toolbar">
+      <div class="flex items-center gap-2">
+        <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
+        <app-trade-type-filter [compact]="true" />
       </div>
-      <div class="card border-l-4 border-l-red-500 p-4">
-        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Loss-making stocks</p>
-        <p class="mt-1 text-2xl font-bold text-red-600">{{ fmt(losingTotal()) }}</p>
-        <p class="text-xs text-slate-400">{{ losingTiles().length }} stocks</p>
+      <div class="heatmap-totals">
+        <div class="heatmap-total heatmap-total-profit">
+          <span class="heatmap-total-label">Profit</span>
+          <span class="heatmap-total-value">{{ fmt(profitableSection().total) }}</span>
+          <span class="heatmap-total-meta">{{ profitableSection().stockCount }} stocks</span>
+        </div>
+        <div class="heatmap-total heatmap-total-loss">
+          <span class="heatmap-total-label">Loss</span>
+          <span class="heatmap-total-value">{{ fmt(losingSection().total) }}</span>
+          <span class="heatmap-total-meta">{{ losingSection().stockCount }} stocks</span>
+        </div>
       </div>
     </div>
 
-    <section class="card overflow-hidden">
-      <div class="border-b border-slate-100 px-4 py-3">
-        <h3 class="text-sm font-semibold text-emerald-700">Profitable</h3>
-      </div>
-      @if (profitableTiles().length) {
-        <div class="heatmap-grid p-3">
-          @for (tile of profitableTiles(); track tile.symbol) {
-            <a
-              [routerLink]="['/stock', tile.symbol]"
-              class="heatmap-tile"
-              [style.background]="tile.background"
-              [style.border-color]="tile.borderColor"
-              [style.flex-grow]="tile.weight"
-              [title]="tile.name + ' · ' + fmt(tile.netPnL)"
-            >
-              <span class="heatmap-tile-symbol">{{ tile.symbol }}</span>
-              <span class="heatmap-tile-pnl">{{ fmt(tile.netPnL) }}</span>
-              <span class="heatmap-tile-meta">{{ tile.winRate | number:'1.0-0' }}% win</span>
-            </a>
+    <div class="heatmap-split card overflow-hidden">
+      <div #columnsEl class="heatmap-columns" [style.height.px]="heatmapHeight">
+        <section class="heatmap-pane">
+          <div class="heatmap-pane-header heatmap-pane-header-profit">
+            Profitable · {{ profitableSection().stockCount }} stocks
+            @if (profitableSection().others) {
+              <span class="text-slate-400">· {{ profitableSection().featured.length }} shown</span>
+            }
+          </div>
+          @if (profitableSection().stockCount) {
+            <div class="heatmap-treemap">
+              @for (tile of profitableSection().featured; track tile.symbol) {
+                <a
+                  [routerLink]="['/stock', tile.symbol]"
+                  class="heatmap-tile-compact"
+                  [ngStyle]="tile.style"
+                  [style.background]="tile.background"
+                  [style.border-color]="tile.borderColor"
+                  [style.color]="tile.textColor"
+                  [title]="tile.name + ' · ' + fmt(tile.netPnL)"
+                >
+                  <span class="heatmap-tile-symbol">{{ tile.symbol }}</span>
+                  <span class="heatmap-tile-pnl">{{ fmt(tile.netPnL) }}</span>
+                </a>
+              }
+              @if (profitableSection().others; as others) {
+                <div
+                  class="heatmap-tile-compact heatmap-tile-others"
+                  [ngStyle]="others.style"
+                  [style.background]="others.background"
+                  [style.border-color]="others.borderColor"
+                  [style.color]="others.textColor"
+                  [title]="othersTooltip(others.symbols) + ' · ' + fmt(others.netPnL)"
+                >
+                  <span class="heatmap-tile-symbol">+{{ others.count }} more</span>
+                  <span class="heatmap-tile-pnl">{{ fmt(others.netPnL) }}</span>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="heatmap-empty">No profitable stocks</p>
           }
-        </div>
-      } @else {
-        <p class="px-4 py-10 text-center text-sm text-slate-400">No profitable stocks for the selected trade types.</p>
-      }
-    </section>
+        </section>
 
-    <section class="card overflow-hidden">
-      <div class="border-b border-slate-100 px-4 py-3">
-        <h3 class="text-sm font-semibold text-red-700">Loss making</h3>
-      </div>
-      @if (losingTiles().length) {
-        <div class="heatmap-grid p-3">
-          @for (tile of losingTiles(); track tile.symbol) {
-            <a
-              [routerLink]="['/stock', tile.symbol]"
-              class="heatmap-tile"
-              [style.background]="tile.background"
-              [style.border-color]="tile.borderColor"
-              [style.flex-grow]="tile.weight"
-              [title]="tile.name + ' · ' + fmt(tile.netPnL)"
-            >
-              <span class="heatmap-tile-symbol">{{ tile.symbol }}</span>
-              <span class="heatmap-tile-pnl">{{ fmt(tile.netPnL) }}</span>
-              <span class="heatmap-tile-meta">{{ tile.winRate | number:'1.0-0' }}% win</span>
-            </a>
+        <section class="heatmap-pane">
+          <div class="heatmap-pane-header heatmap-pane-header-loss">
+            Loss making · {{ losingSection().stockCount }} stocks
+            @if (losingSection().others) {
+              <span class="text-slate-400">· {{ losingSection().featured.length }} shown</span>
+            }
+          </div>
+          @if (losingSection().stockCount) {
+            <div class="heatmap-treemap">
+              @for (tile of losingSection().featured; track tile.symbol) {
+                <a
+                  [routerLink]="['/stock', tile.symbol]"
+                  class="heatmap-tile-compact"
+                  [ngStyle]="tile.style"
+                  [style.background]="tile.background"
+                  [style.border-color]="tile.borderColor"
+                  [style.color]="tile.textColor"
+                  [title]="tile.name + ' · ' + fmt(tile.netPnL)"
+                >
+                  <span class="heatmap-tile-symbol">{{ tile.symbol }}</span>
+                  <span class="heatmap-tile-pnl">{{ fmt(tile.netPnL) }}</span>
+                </a>
+              }
+              @if (losingSection().others; as others) {
+                <div
+                  class="heatmap-tile-compact heatmap-tile-others"
+                  [ngStyle]="others.style"
+                  [style.background]="others.background"
+                  [style.border-color]="others.borderColor"
+                  [style.color]="others.textColor"
+                  [title]="othersTooltip(others.symbols) + ' · ' + fmt(others.netPnL)"
+                >
+                  <span class="heatmap-tile-symbol">+{{ others.count }} more</span>
+                  <span class="heatmap-tile-pnl">{{ fmt(others.netPnL) }}</span>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="heatmap-empty">No loss-making stocks</p>
           }
-        </div>
-      } @else {
-        <p class="px-4 py-10 text-center text-sm text-slate-400">No loss-making stocks for the selected trade types.</p>
-      }
-    </section>
+        </section>
+      </div>
+    </div>
   }
 </div>

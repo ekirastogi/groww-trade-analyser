@@ -1,36 +1,42 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAuth() {
-      return request.auth != null;
+    // Keep emails in sync with frontend/src/app/constants/allowed-users.ts
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['ekirastogi@gmail.com'];
     }
 
-    match /users/{uid}/{document=**} {
-      allow read, write: if isAuth() && request.auth.uid == uid;
+    match /users/{uid} {
+      allow read, write: if isOwner() && request.auth.uid == uid;
+
+      match /{document=**} {
+        allow read, write: if isOwner() && request.auth.uid == uid;
+      }
     }
 
-    // Market snapshots + chart data — written by local backend service account, read by UI
+    // Market snapshots — written by local backend service account, read by owner only
     match /stocks/{symbol} {
-      allow read: if isAuth();
+      allow read: if isOwner();
       allow write: if false;
     }
 
     match /watchlists/{id} {
-      allow read, write: if isAuth();
+      allow read, write: if isOwner();
     }
 
     match /recommendations/{id} {
-      allow read: if isAuth();
-      // UI can approve/reject; backend service account writes initial + execution updates
+      allow read: if isOwner();
       allow create: if false;
-      allow update: if isAuth()
+      allow update: if isOwner()
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['approvalStatus', 'status', 'approvedAt', 'approvedBy', 'rejectedAt', 'rejectedBy']);
       allow delete: if false;
     }
 
     match /tradeOutcomes/{id} {
-      allow read: if isAuth();
+      allow read: if isOwner();
       allow write: if false;
     }
   }
