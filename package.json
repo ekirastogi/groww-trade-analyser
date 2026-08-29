@@ -10,7 +10,10 @@
     "prebuild:firebase": "node scripts/ensure-firebase-config.js",
     "build:firebase": "ng build --configuration production",
     "predeploy": "node scripts/ensure-firebase-config.js",
-    "deploy": "ng build --configuration production && firebase deploy --only hosting",
+    "deploy": "npm run build:firebase && firebase deploy --only hosting,functions",
+    "deploy:hosting": "ng build --configuration production && firebase deploy --only hosting",
+    "deploy:all": "ng build --configuration production && firebase deploy --only hosting,functions",
+    "secrets:setup": "node scripts/setup-firebase-secrets.js",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },

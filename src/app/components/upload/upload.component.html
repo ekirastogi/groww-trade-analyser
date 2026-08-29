@@ -1,7 +1,7 @@
 <div class="mx-auto max-w-2xl space-y-6">
-  <div>
-    <h2 class="text-xl font-bold text-slate-900">Upload P&amp;L Report</h2>
-    <p class="text-sm text-slate-500">Upload your Groww export. Optionally sync incremental trades to Firebase per client account.</p>
+  <div class="page-header">
+    <h2 class="page-title">Upload P&amp;L Report</h2>
+    <p class="page-subtitle">Import your broker export. Optionally sync incremental trades to the cloud per client account.</p>
   </div>
 
   @if (state.error()) {
@@ -15,7 +15,7 @@
   }
 
   <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
-    <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-500" [checked]="pushToFirebase()" (change)="pushToFirebase.set($any($event.target).checked)" />
+    <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-kairo-500" [checked]="pushToFirebase()" (change)="pushToFirebase.set($any($event.target).checked)" />
     <div>
       <div class="text-sm font-medium text-slate-900">Push to Firebase after upload</div>
       <div class="text-xs text-slate-500">Incremental merge per client ID — duplicate trades and identical files are skipped automatically.</div>
@@ -24,8 +24,8 @@
 
   <div
     class="card overflow-hidden"
-    [class.border-brand-500]="dragOver()"
-    [class.bg-brand-50]="dragOver()"
+    [class.border-kairo-500]="dragOver()"
+    [class.bg-kairo-50]="dragOver()"
     [class.border-2]="dragOver()"
     [class.border-dashed]="dragOver()"
     (drop)="onDrop($event)"
@@ -33,10 +33,10 @@
     (dragleave)="onDragLeave()"
   >
     <div class="flex flex-col items-center px-4 py-12 text-center">
-      <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+      <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-kairo-50 text-kairo-600">
         <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
       </div>
-      <h3 class="text-lg font-bold text-slate-900">Drop Groww .xlsx or .csv</h3>
+      <h3 class="text-lg font-bold text-slate-900">Drop your .xlsx or .csv export</h3>
       <label class="btn-primary mt-6 cursor-pointer">
         Choose File
         <input type="file" accept=".xlsx,.xls,.csv" (change)="onFileSelected($event)" class="hidden" />

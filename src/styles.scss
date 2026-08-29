@@ -2,33 +2,57 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
 
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900 antialiased font-sans;
   }
+
+  h1, h2, h3 {
+    @apply font-display tracking-tight;
+  }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50;
+    @apply inline-flex items-center justify-center rounded-xl bg-kairo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-kairo-600/20 transition hover:bg-kairo-700 focus:outline-none focus:ring-2 focus:ring-kairo-500 focus:ring-offset-2 disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2;
+    @apply inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-card transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900;
+    @apply inline-flex items-center justify-center rounded-xl px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900;
   }
 
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-card;
+  }
+
+  .page-header {
+    @apply mb-6;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-slate-900 sm:text-3xl;
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-sm text-slate-500;
+  }
+
+  .nav-link {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white;
+  }
+
+  .nav-link-active {
+    @apply border-l-2 border-kairo-400 bg-kairo-500/10 text-white;
   }
 
   .input-field {
-    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-kairo-500 focus:outline-none focus:ring-2 focus:ring-kairo-500/20;
   }
 
   .chip {
@@ -36,19 +60,19 @@
   }
 
   .chip-active {
-    @apply border-brand-500 bg-brand-500 text-white;
+    @apply border-kairo-500 bg-kairo-600 text-white;
   }
 
   .chip-inactive {
-    @apply border-slate-200 bg-white text-slate-600 hover:border-brand-500 hover:text-brand-600;
+    @apply border-slate-200 bg-white text-slate-600 hover:border-kairo-500 hover:text-kairo-700;
   }
 
   .sort-btn {
-    @apply inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-slate-500 transition hover:text-brand-600;
+    @apply inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-slate-500 transition hover:text-kairo-600;
   }
 
   .sort-btn-active {
-    @apply text-brand-600;
+    @apply text-kairo-600;
   }
 
   .tab-btn {
@@ -56,7 +80,7 @@
   }
 
   .tab-btn-active {
-    @apply border-brand-500 text-brand-600;
+    @apply border-kairo-500 text-kairo-700;
   }
 
   .data-table {

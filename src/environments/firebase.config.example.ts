@@ -1,9 +1,6 @@
 /**
- * Copy this file to `firebase.config.ts` and fill in your Firebase web app values.
- * `firebase.config.ts` is gitignored and must never be committed.
- *
- * Get values from: Firebase Console → Project settings → Your apps → SDK setup
- * Or run: firebase apps:sdkconfig WEB <app-id> --project <project-id>
+ * Template for local development only.
+ * Production uses Google Secret Manager via /api/firebase-config Cloud Function.
  */
 export const firebaseConfig = {
   apiKey: 'YOUR_API_KEY',

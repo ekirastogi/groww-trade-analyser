@@ -1,11 +1,11 @@
 <div class="space-y-6">
-  <div class="flex flex-wrap items-center justify-between gap-3">
+  <div class="page-header flex flex-wrap items-center justify-between gap-3">
     <div>
-      <h2 class="text-xl font-bold text-slate-900">Watchlists</h2>
-      <p class="text-sm text-slate-500">Manage symbols tracked by your local backend worker</p>
+      <h2 class="page-title">Watchlists</h2>
+      <p class="page-subtitle">Symbols tracked by your local market engine</p>
     </div>
     @if (!auth.user()) {
-      <button type="button" class="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white" (click)="auth.signInWithGoogle()">
+      <button type="button" class="btn-primary" (click)="auth.signInWithGoogle()">
         Sign in with Google
       </button>
     }
@@ -16,8 +16,8 @@
   }
 
   <div class="flex flex-wrap gap-2">
-    <input [(ngModel)]="newName" placeholder="New watchlist name" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-    <button type="button" class="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white" (click)="createWatchlist()">Create</button>
+    <input [(ngModel)]="newName" placeholder="New watchlist name" class="input-field max-w-xs" />
+    <button type="button" class="btn-primary" (click)="createWatchlist()">Create</button>
   </div>
 
   @for (wl of watchlists(); track wl.id) {
@@ -41,7 +41,7 @@
       <div class="divide-y divide-slate-100">
         @for (sym of wl.stockSymbols; track sym) {
           <div class="flex items-center justify-between py-2 text-sm">
-            <a [routerLink]="['/stock', sym]" class="font-medium text-brand-600 hover:underline">{{ sym }}</a>
+            <a [routerLink]="['/stock', sym]" class="font-medium text-kairo-600 hover:underline">{{ sym }}</a>
             <div class="flex items-center gap-3">
               <span class="text-slate-500">{{ stockPrice(sym) }}</span>
               <button type="button" class="text-xs text-red-400" (click)="removeSymbol(wl, sym)">Remove</button>

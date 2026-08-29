@@ -1,0 +1,10 @@
+{
+  "/api/firebase-config": {
+    "target": "https://us-central1-growtrader-628a0.cloudfunctions.net",
+    "secure": true,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/api/firebase-config": "/getFirebaseConfig"
+    }
+  }
+}

@@ -43,5 +43,6 @@ Thumbs.db
 
 # Firebase secrets (never commit)
 src/environments/firebase.config.ts
+.firebase-web-config.secret.json
 .env
 .env.local

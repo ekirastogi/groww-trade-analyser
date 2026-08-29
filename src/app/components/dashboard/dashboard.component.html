@@ -7,7 +7,7 @@
 @if (!state.hasReport()) {
   <div class="card overflow-hidden p-8 text-center">
     <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
-    <p class="mt-2 text-sm text-slate-500">Upload a Groww P&amp;L file or load a Firebase client account below.</p>
+    <p class="mt-2 text-sm text-slate-500">Upload a broker P&amp;L export or load a saved client account below.</p>
     <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload File</a>
   </div>
 
@@ -46,7 +46,7 @@
 
     <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-4">
       @for (stat of topStats(); track stat.label) {
-        <div class="card border-l-4 border-l-brand-500 p-4">
+        <div class="card border-l-4 border-l-kairo-500 p-4">
           <div class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ stat.label }}</div>
           <div class="mt-1 truncate text-sm font-semibold sm:text-base" [class]="stat.cls">{{ stat.value }}</div>
           @if (stat.sub) {
@@ -163,7 +163,7 @@
                 @for (row of sortedPeriodData(); track row.period; let i = $index) {
                   <tr
                     class="cursor-pointer transition"
-                    [class.bg-brand-50]="isPeriodExpanded(row.period)"
+                    [class.bg-kairo-50]="isPeriodExpanded(row.period)"
                     (click)="togglePeriodExpand(row.period)"
                   >
                     <td class="text-center text-slate-400">{{ i + 1 }}</td>
@@ -189,7 +189,7 @@
                   @if (isPeriodExpanded(row.period)) {
                     <tr>
                       <td [attr.colspan]="visiblePeriodColumnList().length + 2" class="!border-t-0 bg-slate-50 p-0">
-                        <div class="border-t-2 border-brand-500 px-3 py-3 sm:px-4">
+                        <div class="border-t-2 border-kairo-500 px-3 py-3 sm:px-4">
                           <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                             {{ groupTradesByStock(row.trades).length }} stocks · {{ row.tradeCount }} trades
                           </div>
@@ -282,8 +282,8 @@
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition"
-                [class.bg-brand-50]="stockScenarioPanelOpen()"
-                [class.text-brand-700]="stockScenarioPanelOpen()"
+                [class.bg-kairo-50]="stockScenarioPanelOpen()"
+                [class.text-kairo-700]="stockScenarioPanelOpen()"
                 [class.text-slate-600]="!stockScenarioPanelOpen()"
                 [class.hover:bg-slate-100]="!stockScenarioPanelOpen()"
                 (click)="toggleStockScenarioPanel()"
@@ -291,7 +291,7 @@
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
                 Scenario builder
                 @if (hasActiveStockScenario()) {
-                  <span class="rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] font-bold text-white">ON</span>
+                  <span class="rounded-full bg-kairo-500 px-1.5 py-0.5 text-[10px] font-bold text-white">ON</span>
                 }
                 <svg class="h-3.5 w-3.5 transition" [class.rotate-180]="stockScenarioPanelOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
               </button>
@@ -469,7 +469,7 @@
                 @for (stock of sortedStockData(); track stock.isin; let i = $index) {
                   <tr
                     class="cursor-pointer transition"
-                    [class.bg-brand-50]="isPerStockExpanded(stock)"
+                    [class.bg-kairo-50]="isPerStockExpanded(stock)"
                     (click)="togglePerStockExpand(stock)"
                   >
                     <td class="text-center text-slate-400">{{ i + 1 }}</td>
@@ -498,7 +498,7 @@
                   @if (isPerStockExpanded(stock)) {
                     <tr>
                       <td [attr.colspan]="visibleStockColumnList().length + 2" class="!border-t-0 bg-slate-50 p-0">
-                        <div class="border-t-2 border-brand-500 px-3 py-3 sm:px-4">
+                        <div class="border-t-2 border-kairo-500 px-3 py-3 sm:px-4">
                           <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                             {{ tradesForStock(stock).length }} trades
                           </div>

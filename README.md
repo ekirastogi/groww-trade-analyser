@@ -1,27 +1,40 @@
-# Frontend
+# Kairo
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 17.3.5.
+**Trade at the right moment** — a personal trading workstation for signals, portfolio analytics, and market intelligence.
 
-## Development server
+## Stack
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+- **Frontend**: Angular 17, Tailwind CSS, Firebase (Auth, Firestore, Hosting)
+- **Local engine**: Go worker with SQLite (market data, indicators, signals) — publishes to Firestore
 
-## Code scaffolding
+The UI talks only to Firebase. The local backend runs on your machine and syncs recommendations and market snapshots to the cloud.
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+## Development
 
-## Build
+```bash
+npm install
+npm start
+```
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+Open [http://localhost:4200](http://localhost:4200).
 
-## Running unit tests
+## Production build & deploy
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+```bash
+npm run secrets:setup   # one-time: upload Firebase web config to Secret Manager
+npm run deploy          # build + deploy hosting & functions
+```
 
-## Running end-to-end tests
+Hosted at [growtrader-628a0.web.app](https://growtrader-628a0.web.app).
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+## Project structure
 
-## Further help
+| Path | Purpose |
+|------|---------|
+| `src/app/components/` | Pages: signals, dashboard, upload, analytics, watchlists |
+| `src/app/services/` | Firestore, auth, trade ledger, recommendations |
+| `functions/` | Cloud Function serving Firebase config from Secret Manager |
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+## Broker uploads
+
+P&amp;L files from supported brokers (e.g. Groww exports) can be uploaded and optionally synced to Firestore with incremental deduplication per client account.

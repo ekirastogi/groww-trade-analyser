@@ -36,7 +36,7 @@
         { label: 'Win Rate', value: (data.summary.winRate | number:'1.1-1') + '%', cls: 'text-slate-900' },
         { label: 'Trades', value: (data.summary.tradeCount | number), cls: 'text-slate-900' }
       ]; track stat.label) {
-        <div class="card border-l-4 border-l-brand-500 p-4">
+        <div class="card border-l-4 border-l-kairo-500 p-4">
           <div class="text-xs font-medium text-slate-500">{{ stat.label }}</div>
           <div class="mt-1 text-base font-bold sm:text-lg" [class]="stat.cls">{{ stat.value }}</div>
         </div>

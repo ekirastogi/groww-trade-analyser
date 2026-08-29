@@ -1,7 +1,7 @@
 <div class="space-y-6">
-  <div>
-    <h2 class="text-xl font-bold text-slate-900">Profit / Loss Heatmap</h2>
-    <p class="text-sm text-slate-500">Watchlist stocks · market performance + your P&L from uploaded reports</p>
+  <div class="page-header">
+    <h2 class="page-title">Market Heatmap</h2>
+    <p class="page-subtitle">Watchlist performance, indicators, and your P&amp;L at a glance</p>
   </div>
 
   <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -22,7 +22,7 @@
           <tr class="border-t border-slate-100">
             <td class="px-4 py-2 text-slate-400">{{ i + 1 }}</td>
             <td class="px-4 py-2">
-              <a [routerLink]="['/stock', row.symbol]" class="font-medium text-brand-600 hover:underline">{{ row.symbol }}</a>
+              <a [routerLink]="['/stock', row.symbol]" class="font-medium text-kairo-600 hover:underline">{{ row.symbol }}</a>
               <div class="text-xs text-slate-400">{{ row.name }}</div>
             </td>
             <td class="px-4 py-2 text-right font-mono" [style.color]="cellColor(row.dayChangePct)">{{ row.dayChangePct.toFixed(2) }}%</td>
