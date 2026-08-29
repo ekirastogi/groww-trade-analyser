@@ -134,13 +134,19 @@ export class ReportStateService {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   }
 
-  private applyReport(report: Report): void {
+  private   applyReport(report: Report): void {
     this.report.set(report);
     this.startDate.set(report.dateRange.min);
     this.endDate.set(report.dateRange.max);
     this.selectedTradeTypes.set(defaultTradeTypesForReport(report));
     this.chartPeriod.set('daily');
     this.topStocksCount.set(10);
+  }
+
+  applyFirebaseReport(report: Report): void {
+    this.activeHistoryId.set(null);
+    this.applyReport(report);
+    this.error.set(null);
   }
 
   applyFilters(

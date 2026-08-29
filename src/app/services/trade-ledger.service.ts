@@ -12,10 +12,10 @@ import {
   writeBatch,
 } from '@angular/fire/firestore';
 import {
-  ChargeItem,
   Report,
-  StoredTrade,
   StockProfile,
+  StockSummary,
+  StoredTrade,
   Trade,
   TradeType,
   UploadRecord,
@@ -23,6 +23,7 @@ import {
 import { AuthService } from './auth.service';
 import { ClientAccountService } from './client-account.service';
 import { ParserService } from './parser.service';
+import { WatchlistService } from './watchlist.service';
 import {
   buildTradeTypeStats,
   computeChargeRatio,
@@ -42,12 +43,15 @@ export interface UploadResult {
   affectedSymbols: string[];
 }
 
+const FIRESTORE_BATCH_LIMIT = 400;
+
 @Injectable({ providedIn: 'root' })
 export class TradeLedgerService {
   private firestore = inject(Firestore);
   private auth = inject(AuthService);
   private clientSvc = inject(ClientAccountService);
   private parser = inject(ParserService);
+  private watchlists = inject(WatchlistService);
 
   async uploadReport(file: File): Promise<UploadResult> {
     const uid = this.auth.uid;
@@ -57,6 +61,10 @@ export class TradeLedgerService {
     const contentHash = await computeFileContentHash(buffer);
     const report = await this.parser.parseFile(file);
 
+    if (!report.trades.length) {
+      throw new Error('No trades found in this file. Check that it is a Groww P&L export.');
+    }
+
     const clientCode = report.summary.clientCode?.trim() || 'UNKNOWN';
     const clientName = report.summary.clientName?.trim() || clientCode;
 
@@ -65,6 +73,7 @@ export class TradeLedgerService {
       query(uploadsCol, where('contentHash', '==', contentHash), limit(1))
     );
     if (!existingFile.empty) {
+      await this.syncDerivedData(clientCode, clientName);
       return {
         uploadId: existingFile.docs[0].id,
         clientCode,
@@ -83,9 +92,9 @@ export class TradeLedgerService {
     let newTradesAdded = 0;
     let duplicatesSkipped = 0;
     const affectedSymbols = new Set<string>();
-    const batch = writeBatch(this.firestore);
-    const now = Date.now();
     const tradesCol = this.clientSvc.clientCol(clientCode, 'trades');
+    const now = Date.now();
+    const pendingWrites: Array<{ ref: ReturnType<typeof doc>; data: StoredTrade }> = [];
 
     for (const trade of report.trades) {
       const dedupeKey = await computeTradeDedupeKey(trade, clientCode);
@@ -99,21 +108,25 @@ export class TradeLedgerService {
         continue;
       }
 
-      const stored: StoredTrade = {
-        ...trade,
-        dedupeKey,
-        uploadId,
-        clientCode,
-        clientName,
-        symbol,
-        allocatedCharges: enriched.allocatedCharges,
-        netPnL: enriched.netPnL,
-        createdAt: now,
-      };
-      batch.set(tradeRef, stored);
+      pendingWrites.push({
+        ref: tradeRef,
+        data: {
+          ...trade,
+          dedupeKey,
+          uploadId,
+          clientCode,
+          clientName,
+          symbol,
+          allocatedCharges: enriched.allocatedCharges,
+          netPnL: enriched.netPnL,
+          createdAt: now,
+        },
+      });
       newTradesAdded++;
       affectedSymbols.add(symbol);
     }
+
+    await this.commitInChunks(pendingWrites);
 
     const uploadRecord: Omit<UploadRecord, 'id'> = {
       fileName: file.name,
@@ -133,14 +146,9 @@ export class TradeLedgerService {
       duplicatesSkipped,
       status: 'completed',
     };
-    batch.set(doc(uploadsCol, uploadId), uploadRecord);
-    await batch.commit();
+    await setDoc(doc(uploadsCol, uploadId), uploadRecord);
 
-    await this.clientSvc.registerClient(clientCode, clientName, report.trades.length);
-
-    for (const symbol of affectedSymbols) {
-      await this.recomputeStockProfile(clientCode, clientName, symbol);
-    }
+    await this.syncDerivedData(clientCode, clientName, [...affectedSymbols]);
 
     return {
       uploadId,
@@ -174,31 +182,65 @@ export class TradeLedgerService {
       query(this.clientSvc.clientCol(clientCode, 'uploads'), orderBy('uploadedAt', 'desc'), limit(1))
     );
     const lastUpload = uploadsSnap.docs[0]?.data() as UploadRecord | undefined;
+    const stockProfiles = await this.getStockProfiles(clientCode);
+    const stockSummary = stockProfiles.map((profile) => this.profileToStockSummary(profile));
 
-    const plainTrades: Trade[] = trades.map(({ stockName, isin, quantity, buyDate, buyPrice, buyValue, sellDate, sellPrice, sellValue, realisedPnL, remark, tradeType, holdingDays }) => ({
-      stockName, isin, quantity, buyDate, buyPrice, buyValue, sellDate, sellPrice, sellValue, realisedPnL, remark, tradeType, holdingDays,
-    }));
+    const plainTrades: Trade[] = trades.map(
+      ({
+        stockName,
+        isin,
+        quantity,
+        buyDate,
+        buyPrice,
+        buyValue,
+        sellDate,
+        sellPrice,
+        sellValue,
+        realisedPnL,
+        remark,
+        tradeType,
+        holdingDays,
+      }) => ({
+        stockName,
+        isin,
+        quantity,
+        buyDate,
+        buyPrice,
+        buyValue,
+        sellDate,
+        sellPrice,
+        sellValue,
+        realisedPnL,
+        remark,
+        tradeType,
+        holdingDays,
+      })
+    );
 
     const typeSet = new Set<TradeType>(['all']);
     plainTrades.forEach((t) => typeSet.add(t.tradeType));
     const dates = plainTrades.map((t) => t.sellDate).sort();
+    const allocatedCharges = trades.reduce((sum, trade) => sum + trade.allocatedCharges, 0);
+    const realisedPnL = plainTrades.reduce((sum, trade) => sum + trade.realisedPnL, 0);
 
     return {
       summary: {
         clientName,
         clientCode,
         period: lastUpload?.periodLabel ?? 'All trades',
-        realisedPnL: plainTrades.reduce((s, t) => s + t.realisedPnL, 0),
+        realisedPnL,
         unrealisedPnL: lastUpload?.reportUnrealisedPnL ?? 0,
       },
       charges: {
         items: lastUpload?.charges ?? [],
-        total: lastUpload?.chargesTotal ?? 0,
+        total: lastUpload?.chargesTotal ?? allocatedCharges,
       },
       trades: plainTrades,
-      stockSummary: [],
+      stockSummary,
       dateRange: { min: dates[0] ?? '', max: dates[dates.length - 1] ?? '' },
-      tradeTypes: ['all', 'intraday', 'delivery', 'same_day', 'mtf', 'fno'].filter((t) => typeSet.has(t as TradeType)) as TradeType[],
+      tradeTypes: ['all', 'intraday', 'delivery', 'same_day', 'mtf', 'fno'].filter((t) =>
+        typeSet.has(t as TradeType)
+      ) as TradeType[],
     };
   }
 
@@ -209,19 +251,81 @@ export class TradeLedgerService {
     return snap.docs.map((d) => d.data() as StockProfile);
   }
 
-  private async recomputeStockProfile(clientCode: string, clientName: string, symbol: string): Promise<void> {
+  private async syncDerivedData(
+    clientCode: string,
+    clientName: string,
+    affectedSymbols?: string[]
+  ): Promise<void> {
+    const trades = await this.getAllTrades(clientCode);
+    await this.clientSvc.registerClient(clientCode, clientName, trades.length);
+
+    const symbols =
+      affectedSymbols?.length ?
+        affectedSymbols
+      : [...new Set(trades.map((trade) => trade.symbol))];
+
+    for (const symbol of symbols) {
+      await this.recomputeStockProfile(clientCode, clientName, symbol);
+    }
+
+    const profiles = await this.getStockProfiles(clientCode);
+    await this.watchlists.syncPnlTierWatchlists(profiles);
+  }
+
+  private profileToStockSummary(profile: StockProfile): StockSummary {
+    return {
+      stockName: profile.stockName,
+      isin: profile.isin,
+      quantity: profile.tradeCount,
+      avgBuyPrice: profile.tradeCount ? profile.totalBuyValue / profile.tradeCount : 0,
+      buyValue: profile.totalBuyValue,
+      avgSellPrice: profile.tradeCount ? profile.totalSellValue / profile.tradeCount : 0,
+      sellValue: profile.totalSellValue,
+      realisedPnL: profile.realisedPnL,
+      realisedPnLPct: profile.netPnLPct,
+      tradeCount: profile.tradeCount,
+      allocatedCharges: profile.allocatedCharges,
+      netPnL: profile.netPnL,
+    };
+  }
+
+  private async commitInChunks(
+    writes: Array<{ ref: ReturnType<typeof doc>; data: StoredTrade }>
+  ): Promise<void> {
+    for (let i = 0; i < writes.length; i += FIRESTORE_BATCH_LIMIT) {
+      const batch = writeBatch(this.firestore);
+      const chunk = writes.slice(i, i + FIRESTORE_BATCH_LIMIT);
+      chunk.forEach(({ ref, data }) => batch.set(ref, data));
+      await batch.commit();
+    }
+  }
+
+  private async recomputeStockProfile(
+    clientCode: string,
+    clientName: string,
+    symbol: string
+  ): Promise<void> {
     const snap = await getDocs(
       query(this.clientSvc.clientCol(clientCode, 'trades'), where('symbol', '==', symbol))
     );
     const trades = snap.docs.map((d) => d.data() as StoredTrade);
     if (!trades.length) return;
 
-    let winningTrades = 0, losingTrades = 0, breakEvenTrades = 0;
-    let totalBuyValue = 0, totalSellValue = 0, grossProfit = 0, grossLoss = 0;
-    let realisedPnL = 0, allocatedCharges = 0, netPnL = 0, holdingDaysSum = 0;
+    let winningTrades = 0,
+      losingTrades = 0,
+      breakEvenTrades = 0;
+    let totalBuyValue = 0,
+      totalSellValue = 0,
+      grossProfit = 0,
+      grossLoss = 0;
+    let realisedPnL = 0,
+      allocatedCharges = 0,
+      netPnL = 0,
+      holdingDaysSum = 0;
     const uploadIds = new Set<string>();
     const byType = new Map<TradeType, StoredTrade[]>();
-    let first = trades[0].sellDate, last = trades[0].sellDate;
+    let first = trades[0].sellDate,
+      last = trades[0].sellDate;
 
     for (const t of trades) {
       totalBuyValue += t.buyValue;
@@ -231,9 +335,13 @@ export class TradeLedgerService {
       netPnL += t.netPnL;
       holdingDaysSum += t.holdingDays;
       uploadIds.add(t.uploadId);
-      if (t.realisedPnL > 0) { winningTrades++; grossProfit += t.realisedPnL; }
-      else if (t.realisedPnL < 0) { losingTrades++; grossLoss += t.realisedPnL; }
-      else breakEvenTrades++;
+      if (t.realisedPnL > 0) {
+        winningTrades++;
+        grossProfit += t.realisedPnL;
+      } else if (t.realisedPnL < 0) {
+        losingTrades++;
+        grossLoss += t.realisedPnL;
+      } else breakEvenTrades++;
       if (t.sellDate < first) first = t.sellDate;
       if (t.sellDate > last) last = t.sellDate;
       const list = byType.get(t.tradeType) ?? [];
