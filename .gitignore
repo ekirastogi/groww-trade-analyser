@@ -40,3 +40,8 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# Firebase secrets (never commit)
+src/environments/firebase.config.ts
+.env
+.env.local

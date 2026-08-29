@@ -3,9 +3,13 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
+    "prestart": "node scripts/ensure-firebase-config.js",
     "start": "ng serve",
+    "prebuild": "node scripts/ensure-firebase-config.js",
     "build": "ng build",
+    "prebuild:firebase": "node scripts/ensure-firebase-config.js",
     "build:firebase": "ng build --configuration production",
+    "predeploy": "node scripts/ensure-firebase-config.js",
     "deploy": "ng build --configuration production && firebase deploy --only hosting",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"

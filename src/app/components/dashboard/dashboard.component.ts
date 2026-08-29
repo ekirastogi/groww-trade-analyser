@@ -2,7 +2,10 @@ import { Component, signal, computed, inject, HostListener } from '@angular/core
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ReportStateService } from '../../services/report-state.service';
+import { ClientAccountService } from '../../services/client-account.service';
+import { TradeLedgerService } from '../../services/trade-ledger.service';
 import {
   PeriodBucket,
   StockSummary,
@@ -77,6 +80,9 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 })
 export class DashboardComponent {
   readonly state = inject(ReportStateService);
+  private clientSvc = inject(ClientAccountService);
+  private ledger = inject(TradeLedgerService);
+  readonly clients = toSignal(this.clientSvc.watchClients(), { initialValue: [] });
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
   readonly formatCurrency = formatCurrency;
   readonly formatPct = formatPct;
@@ -315,6 +321,26 @@ export class DashboardComponent {
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (input.files?.length) this.state.loadFile(input.files[0]);
+  }
+
+  async loadClient(clientCode: string): Promise<void> {
+    this.state.loading.set(true);
+    this.state.error.set(null);
+    try {
+      this.clientSvc.selectClient(clientCode);
+      const report = await this.ledger.buildReportFromClient(clientCode);
+      if (!report) {
+        this.state.error.set('No trades found for this account');
+        return;
+      }
+      this.state.report.set(report);
+      this.state.startDate.set(report.dateRange.min);
+      this.state.endDate.set(report.dateRange.max);
+    } catch (e) {
+      this.state.error.set(e instanceof Error ? e.message : 'Failed to load client data');
+    } finally {
+      this.state.loading.set(false);
+    }
   }
 
   onDrop(event: DragEvent): void {

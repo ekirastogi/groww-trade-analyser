@@ -129,6 +129,8 @@ export interface AnalysisOptions {
 export interface StoredTrade extends Trade {
   dedupeKey: string;
   uploadId: string;
+  clientCode: string;
+  clientName: string;
   symbol: string;
   allocatedCharges: number;
   netPnL: number;
@@ -154,6 +156,8 @@ export interface StockProfile {
   symbol: string;
   stockName: string;
   isin: string;
+  clientCode: string;
+  clientName: string;
   tradeCount: number;
   winningTrades: number;
   losingTrades: number;
@@ -179,11 +183,11 @@ export interface UploadRecord {
   fileName: string;
   contentHash: string;
   uploadedAt: number;
+  clientCode: string;
+  clientName: string;
   periodLabel: string;
   periodStart: string;
   periodEnd: string;
-  clientName: string;
-  clientCode: string;
   reportRealisedPnL: number;
   reportUnrealisedPnL: number;
   chargesTotal: number;

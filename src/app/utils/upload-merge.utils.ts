@@ -17,8 +17,9 @@ export async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
-export async function computeTradeDedupeKey(trade: Trade): Promise<string> {
+export async function computeTradeDedupeKey(trade: Trade, clientCode: string): Promise<string> {
   const raw = [
+    clientCode,
     trade.isin,
     trade.buyDate,
     trade.sellDate,
