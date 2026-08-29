@@ -1,4 +1,4 @@
-<div class="space-y-6">
+<div class="space-y-6 pb-28 lg:pb-6">
   <div class="page-header flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 class="page-title">Watchlists</h2>
@@ -25,65 +25,203 @@
   </div>
 
   @if (activeTab() === 'auto') {
-    <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-      Auto watchlists are created when you upload a P&L file. Stocks are grouped by net P&L tiers (loss/profit up to ₹5K–₹2L).
-    </div>
+    @if (!state.hasReport()) {
+      <div class="card overflow-hidden p-8 text-center">
+        <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
+        <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to generate auto watchlists and tier summaries.</p>
+        <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
+      </div>
+    } @else if (!autoWatchlists().length) {
+      <p class="text-center text-slate-500">No auto watchlists yet. Upload a P&amp;L file to generate them.</p>
+    } @else {
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <div>
+          <p class="text-sm font-medium text-slate-900">Tier grouping</p>
+          <p class="text-xs text-slate-500">
+            @if (tierMode() === 'cumulative') {
+              Cumulative: each tier includes all stocks up to that P&amp;L level.
+            } @else {
+              Exclusive bands: stocks appear in only one tier (e.g. ₹5K–₹10K).
+            }
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="chip"
+            [class.chip-active]="tierMode() === 'cumulative'"
+            [class.chip-inactive]="tierMode() !== 'cumulative'"
+            (click)="setTierMode('cumulative')"
+          >
+            Cumulative
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.chip-active]="tierMode() === 'band'"
+            [class.chip-inactive]="tierMode() !== 'band'"
+            (click)="setTierMode('band')"
+          >
+            Exclusive band
+          </button>
+        </div>
+      </div>
+
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto border-b border-slate-200 bg-slate-50/80">
+          <div class="flex min-w-max gap-1 p-2">
+            @for (tab of autoTierTabs(); track tab.watchlist.id) {
+              <button
+                type="button"
+                class="whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition sm:text-sm"
+                [ngClass]="
+                  activeAutoWatchlist()?.id === tab.watchlist.id
+                    ? 'bg-white text-kairo-700 shadow-sm'
+                    : 'text-slate-600 hover:bg-white/70'
+                "
+                (click)="selectAutoTier(tab.watchlist.id)"
+              >
+                <span class="mr-1.5 inline-block h-2 w-2 rounded-full" [style.background]="tab.watchlist.color"></span>
+                {{ tierTabLabel(tab) }}
+              </button>
+            }
+          </div>
+        </div>
+
+        @if (activeAutoWatchlist(); as wl) {
+          <div class="border-b border-slate-100 px-4 py-3">
+            <h3 class="font-semibold text-slate-900">{{ activeAutoTierMeta()?.label ?? wl.name }}</h3>
+            <p class="text-xs text-slate-500">
+              @if (tierMode() === 'band') {
+                Exclusive P&amp;L band — stocks are not repeated across tiers.
+              } @else {
+                Cumulative tier — includes all stocks from lower bands up to this level.
+              }
+            </p>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="stock-table min-w-[720px]">
+              <thead>
+                <tr>
+                  <th class="text-left">Stock</th>
+                  <th class="text-right">Trades</th>
+                  <th class="text-right">Buy Value</th>
+                  <th class="text-right">P&amp;L</th>
+                  <th class="text-right">Charges</th>
+                  <th class="text-right">Net P&amp;L</th>
+                  <th class="text-right">Win Rate</th>
+                  <th class="text-right">LTP</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (stock of tierStocks(); track stock.isin || stock.stockName) {
+                  <tr>
+                    <td class="col-name">
+                      <a [routerLink]="['/stock', stockSymbol(stock)]" class="font-medium text-kairo-600 hover:underline">
+                        {{ stock.stockName }}
+                      </a>
+                      <div class="text-xs text-slate-400">{{ stockSymbol(stock) }}</div>
+                    </td>
+                    <td class="text-right tabular-nums">{{ stock.tradeCount }}</td>
+                    <td class="text-right tabular-nums">{{ formatCurrency(stock.buyValue) }}</td>
+                    <td class="text-right tabular-nums" [class]="pnlClass(stock.realisedPnL)">{{ formatCurrency(stock.realisedPnL) }}</td>
+                    <td class="text-right tabular-nums text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</td>
+                    <td class="text-right tabular-nums font-semibold" [class]="pnlClass(stock.netPnL)">{{ formatCurrency(stock.netPnL) }}</td>
+                    <td class="text-right tabular-nums">{{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }}</td>
+                    <td class="text-right text-slate-500">{{ stockPrice(stockSymbol(stock)) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="8" class="py-10 text-center text-sm text-slate-400">
+                      No stocks in this tier yet.
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+
+      @if (tierSummary(); as summary) {
+        <div class="fixed bottom-16 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur-md lg:bottom-0 lg:left-72">
+          <div class="mx-auto max-w-6xl">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Tier summary</p>
+              <p class="truncate text-xs text-slate-400">{{ activeAutoTierMeta()?.label ?? activeAutoWatchlist()?.name }}</p>
+            </div>
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              @for (stat of tierSummaryStats(); track stat.label) {
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-slate-500">{{ stat.label }}</div>
+                  <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="stat.cls">{{ stat.value }}</div>
+                  @if (stat.sub) {
+                    <div class="text-[10px] text-slate-400">{{ stat.sub }}</div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    }
   } @else {
     <div class="flex flex-wrap gap-2">
       <input [(ngModel)]="newName" placeholder="New watchlist name" class="input-field max-w-xs" />
       <button type="button" class="btn-primary" (click)="createWatchlist()">Create watchlist</button>
     </div>
-  }
 
-  @for (wl of visibleWatchlists(); track wl.id) {
-    <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="mb-3 flex items-center justify-between gap-3">
-        <h3 class="font-semibold text-slate-900">
-          <span class="mr-2 inline-block h-3 w-3 rounded-full" [style.background]="wl.color"></span>
-          {{ wl.name }}
-          <span class="ml-2 text-xs font-normal text-slate-400">({{ wl.stockSymbols.length }} stocks)</span>
-        </h3>
-        @if (activeTab() === 'custom') {
-          <button type="button" class="text-xs text-red-500" (click)="deleteWatchlist(wl.id)">Delete</button>
-        }
-      </div>
-
-      @if (activeTab() === 'custom') {
-        <div class="mb-3 flex gap-2">
-          <input [(ngModel)]="newSymbol" placeholder="Add symbol e.g. RELIANCE" class="rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" />
-          <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" (click)="addSymbol(wl)">Add</button>
+    @if (!customWatchlists().length) {
+      <p class="text-center text-slate-500">No custom watchlists yet. Create one above.</p>
+    } @else {
+      @if (customWatchlists().length > 1) {
+        <div class="flex flex-wrap gap-2">
+          @for (wl of customWatchlists(); track wl.id) {
+            <button
+              type="button"
+              class="chip"
+              [class.chip-active]="activeCustomWatchlist()?.id === wl.id"
+              [class.chip-inactive]="activeCustomWatchlist()?.id !== wl.id"
+              (click)="selectCustomWatchlist(wl.id)"
+            >
+              {{ wl.name }} ({{ wl.stockSymbols.length }})
+            </button>
+          }
         </div>
       }
 
-      <div class="divide-y divide-slate-100">
-        @for (sym of wl.stockSymbols; track sym) {
-          <div class="flex items-center justify-between py-2 text-sm">
-            <a [routerLink]="['/stock', sym]" class="font-medium text-kairo-600 hover:underline">{{ sym }}</a>
-            <div class="flex items-center gap-3">
-              <span class="text-slate-500">{{ stockPrice(sym) }}</span>
-              @if (activeTab() === 'custom') {
-                <button type="button" class="text-xs text-red-400" (click)="removeSymbol(wl, sym)">Remove</button>
-              }
-            </div>
+      @if (activeCustomWatchlist(); as wl) {
+        <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <h3 class="font-semibold text-slate-900">
+              <span class="mr-2 inline-block h-3 w-3 rounded-full" [style.background]="wl.color"></span>
+              {{ wl.name }}
+              <span class="ml-2 text-xs font-normal text-slate-400">({{ wl.stockSymbols.length }} stocks)</span>
+            </h3>
+            <button type="button" class="text-xs text-red-500" (click)="deleteWatchlist(wl.id)">Delete</button>
           </div>
-        } @empty {
-          <p class="py-4 text-center text-sm text-slate-400">
-            @if (activeTab() === 'auto') {
-              No stocks in this tier yet. Upload a P&L file from the sidebar.
-            } @else {
-              No symbols yet
+
+          <div class="mb-3 flex gap-2">
+            <input [(ngModel)]="newSymbol" placeholder="Add symbol e.g. RELIANCE" class="rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" />
+            <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" (click)="addSymbol(wl)">Add</button>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            @for (sym of wl.stockSymbols; track sym) {
+              <div class="flex items-center justify-between py-2 text-sm">
+                <a [routerLink]="['/stock', sym]" class="font-medium text-kairo-600 hover:underline">{{ sym }}</a>
+                <div class="flex items-center gap-3">
+                  <span class="text-slate-500">{{ stockPrice(sym) }}</span>
+                  <button type="button" class="text-xs text-red-400" (click)="removeSymbol(wl, sym)">Remove</button>
+                </div>
+              </div>
+            } @empty {
+              <p class="py-4 text-center text-sm text-slate-400">No symbols yet</p>
             }
-          </p>
-        }
-      </div>
-    </div>
-  } @empty {
-    <p class="text-center text-slate-500">
-      @if (activeTab() === 'auto') {
-        No auto watchlists yet. Upload a P&L file to generate them.
-      } @else {
-        No custom watchlists yet. Create one above.
+          </div>
+        </div>
       }
-    </p>
+    }
   }
 </div>

@@ -1,4 +1,6 @@
-import { StockProfile } from '../models/trade.models';
+import { StockProfile, StockSummary } from '../models/trade.models';
+
+export type PnlTierMode = 'cumulative' | 'band';
 
 export interface PnlWatchlistTier {
   id: string;
@@ -6,7 +8,7 @@ export interface PnlWatchlistTier {
   color: string;
   sortOrder: number;
   side: 'loss' | 'profit';
-  /** Inclusive bound for matching stock net PnL */
+  /** Inclusive upper bound for matching stock net PnL */
   threshold: number;
 }
 
@@ -23,15 +25,83 @@ export const PNL_WATCHLIST_TIERS: PnlWatchlistTier[] = [
   { id: 'profit-upto-200k', name: 'Profit up to ₹200K', color: '#15803d', sortOrder: 14, side: 'profit', threshold: 200_000 },
 ];
 
-export function symbolsForPnlTier(profiles: StockProfile[], tier: PnlWatchlistTier): string[] {
+const TIER_MODE_STORAGE_KEY = 'kairo-pnl-tier-mode';
+
+export function loadPnlTierMode(): PnlTierMode {
+  if (typeof localStorage === 'undefined') return 'cumulative';
+  return localStorage.getItem(TIER_MODE_STORAGE_KEY) === 'band' ? 'band' : 'cumulative';
+}
+
+export function savePnlTierMode(mode: PnlTierMode): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(TIER_MODE_STORAGE_KEY, mode);
+}
+
+export function getPnlWatchlistTier(id: string): PnlWatchlistTier | undefined {
+  return PNL_WATCHLIST_TIERS.find((tier) => tier.id === id);
+}
+
+export function previousTierThreshold(tier: PnlWatchlistTier): number {
+  const sameSide = PNL_WATCHLIST_TIERS.filter((item) => item.side === tier.side).sort(
+    (a, b) => a.threshold - b.threshold
+  );
+  const index = sameSide.findIndex((item) => item.id === tier.id);
+  return index > 0 ? sameSide[index - 1].threshold : 0;
+}
+
+export function formatTierAmount(amount: number): string {
+  if (amount >= 100_000) return `₹${amount / 100_000}L`;
+  if (amount >= 1_000) return `₹${amount / 1_000}K`;
+  return `₹${amount}`;
+}
+
+export function tierDisplayName(tier: PnlWatchlistTier, mode: PnlTierMode): string {
+  if (mode === 'cumulative') return tier.name;
+
+  const floor = previousTierThreshold(tier);
+  const ceiling = formatTierAmount(tier.threshold);
+  if (tier.side === 'loss') {
+    return floor === 0 ? `Loss up to ${ceiling}` : `Loss ${formatTierAmount(floor)}–${ceiling}`;
+  }
+  return floor === 0 ? `Profit up to ${ceiling}` : `Profit ${formatTierAmount(floor)}–${ceiling}`;
+}
+
+export function netPnLMatchesPnlTier(
+  netPnL: number,
+  tier: PnlWatchlistTier,
+  mode: PnlTierMode = 'cumulative'
+): boolean {
+  if (tier.side === 'loss') {
+    if (netPnL >= 0) return false;
+    const magnitude = Math.abs(netPnL);
+    if (mode === 'cumulative') return magnitude <= tier.threshold;
+    const floor = previousTierThreshold(tier);
+    return magnitude > floor && magnitude <= tier.threshold;
+  }
+
+  if (netPnL <= 0) return false;
+  if (mode === 'cumulative') return netPnL <= tier.threshold;
+  const floor = previousTierThreshold(tier);
+  return netPnL > floor && netPnL <= tier.threshold;
+}
+
+export function symbolsForPnlTier(
+  profiles: StockProfile[],
+  tier: PnlWatchlistTier,
+  mode: PnlTierMode = 'cumulative'
+): string[] {
   return profiles
-    .filter((profile) => {
-      const pnl = profile.netPnL;
-      if (tier.side === 'loss') {
-        return pnl < 0 && Math.abs(pnl) <= tier.threshold;
-      }
-      return pnl > 0 && pnl <= tier.threshold;
-    })
+    .filter((profile) => netPnLMatchesPnlTier(profile.netPnL, tier, mode))
     .map((profile) => profile.symbol)
     .sort();
+}
+
+export function stockSummariesForPnlTier(
+  summaries: StockSummary[],
+  tier: PnlWatchlistTier,
+  mode: PnlTierMode = 'cumulative'
+): StockSummary[] {
+  return summaries
+    .filter((summary) => netPnLMatchesPnlTier(summary.netPnL, tier, mode))
+    .sort((a, b) => b.netPnL - a.netPnL);
 }
