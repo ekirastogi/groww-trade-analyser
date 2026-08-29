@@ -1,0 +1,85 @@
+<div class="mx-auto max-w-2xl space-y-4">
+  <section class="card overflow-hidden">
+    <div class="border-b border-slate-100 px-4 py-3 sm:px-5">
+      <h2 class="text-sm font-semibold text-slate-900">Account</h2>
+      <p class="text-xs text-slate-500">Signed-in user for Firebase sync</p>
+    </div>
+    <div class="px-4 py-4 sm:px-5">
+      @if (auth.user(); as user) {
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-kairo-100 text-sm font-bold text-kairo-700">
+            {{ (user.email?.charAt(0) ?? 'U').toUpperCase() }}
+          </div>
+          <div class="min-w-0">
+            <p class="truncate font-medium text-slate-900">{{ user.displayName || 'Trader' }}</p>
+            <p class="truncate text-sm text-slate-500">{{ user.email }}</p>
+          </div>
+        </div>
+      } @else {
+        <p class="text-sm text-slate-500">Not signed in.</p>
+      }
+    </div>
+  </section>
+
+  <section class="card overflow-hidden border-red-200/80">
+    <div class="border-b border-red-100 bg-red-50/50 px-4 py-3 sm:px-5">
+      <h2 class="text-sm font-semibold text-red-800">Data</h2>
+      <p class="text-xs text-red-600/80">Permanently remove uploaded trade data from Firebase</p>
+    </div>
+
+    <div class="space-y-4 px-4 py-4 sm:px-5">
+      <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p class="font-medium">Reset all data will delete:</p>
+        <ul class="mt-2 list-disc space-y-1 pl-5 text-amber-800">
+          <li>All client accounts, trades, uploads, and stock profiles</li>
+          <li>Auto-generated P&amp;L watchlists</li>
+        </ul>
+        <p class="mt-2 text-amber-800">Custom watchlists and your login are kept.</p>
+      </div>
+
+      <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+        <input
+          type="checkbox"
+          class="mt-0.5 h-4 w-4 rounded border-slate-300 text-kairo-500"
+          [checked]="resetConfirmChecked()"
+          (change)="resetConfirmChecked.set($any($event.target).checked)"
+        />
+        <span class="text-sm text-slate-700">I understand this permanently deletes my uploaded trade data from Firebase.</span>
+      </label>
+
+      <div>
+        <label class="mb-2 block text-sm font-medium text-slate-700">Re-ingest after reset (optional)</label>
+        <input
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-kairo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-kairo-700"
+          (change)="onReingestFileSelected($event)"
+        />
+        @if (reingestFile(); as file) {
+          <p class="mt-2 text-xs text-slate-500">Selected: {{ file.name }}</p>
+        }
+      </div>
+
+      @if (resetError()) {
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ resetError() }}</div>
+      }
+      @if (resetSuccess()) {
+        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ resetSuccess() }}</div>
+      }
+
+      <div class="flex flex-wrap gap-3 pt-1">
+        <button type="button" class="btn-danger" [disabled]="!canConfirmReset()" (click)="confirmResetAllData()">
+          {{ resetBusy() ? 'Resetting…' : 'Reset All Data' }}
+        </button>
+        <a routerLink="/upload" class="btn-secondary">Upload P&amp;L</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+@if (resetBusy()) {
+  <div class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+    <div class="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-kairo-400"></div>
+    <span class="mt-4 text-sm font-medium text-white">Resetting data…</span>
+  </div>
+}

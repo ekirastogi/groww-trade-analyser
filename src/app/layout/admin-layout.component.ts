@@ -1,4 +1,4 @@
-import { Component, inject, signal, HostListener, OnInit, computed, OnDestroy } from '@angular/core';
+import { Component, inject, signal, HostListener, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
@@ -6,7 +6,6 @@ import { ReportStateService } from '../services/report-state.service';
 import { PageShellService } from '../services/page-shell.service';
 import { AuthService } from '../services/auth.service';
 import { NotificationService } from '../services/notification.service';
-import { TradeLedgerService } from '../services/trade-ledger.service';
 import { BrandLogoComponent } from '../components/shared/brand-logo/brand-logo.component';
 import { BRAND } from '../constants/brand';
 
@@ -41,19 +40,12 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   readonly auth = inject(AuthService);
   readonly brand = BRAND;
   private notifications = inject(NotificationService);
-  private ledger = inject(TradeLedgerService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private navSub?: Subscription;
 
   sidebarOpen = signal(true);
   isMobile = signal(typeof window !== 'undefined' && window.innerWidth < 1024);
-  resetModalOpen = signal(false);
-  resetConfirmChecked = signal(false);
-  resetBusy = signal(false);
-  resetError = signal<string | null>(null);
-  resetSuccess = signal<string | null>(null);
-  reingestFile = signal<File | null>(null);
 
   readonly navSections: NavSection[] = [
     {
@@ -107,6 +99,16 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
         },
       ],
     },
+    {
+      title: 'Settings',
+      items: [
+        {
+          label: 'Settings',
+          route: '/settings',
+          icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+        },
+      ],
+    },
   ];
 
   readonly mobileNavItems: MobileNavItem[] = [
@@ -136,9 +138,12 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
       route: '/heatmap',
       icon: 'M4 6h16M4 10h16M4 14h16M4 18h16',
     },
+    {
+      label: 'Settings',
+      route: '/settings',
+      icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+    },
   ];
-
-  canConfirmReset = computed(() => this.resetConfirmChecked() && !this.resetBusy());
 
   async ngOnInit(): Promise<void> {
     this.syncPageHeader();
@@ -193,61 +198,6 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   onNavigate(): void {
     if (this.isMobile()) {
       this.closeSidebar();
-    }
-  }
-
-  openResetModal(): void {
-    this.resetModalOpen.set(true);
-    this.resetConfirmChecked.set(false);
-    this.resetError.set(null);
-    this.resetSuccess.set(null);
-    this.reingestFile.set(null);
-    if (this.isMobile()) {
-      this.closeSidebar();
-    }
-  }
-
-  closeResetModal(): void {
-    if (this.resetBusy()) return;
-    this.resetModalOpen.set(false);
-  }
-
-  onReingestFileSelected(event: Event): void {
-    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
-    this.reingestFile.set(file);
-  }
-
-  async confirmResetAllData(): Promise<void> {
-    if (!this.canConfirmReset()) return;
-
-    this.resetBusy.set(true);
-    this.resetError.set(null);
-
-    try {
-      const result = await this.ledger.resetAllData();
-      this.state.clear();
-
-      const file = this.reingestFile();
-      if (file) {
-        const upload = await this.ledger.uploadReport(file, { forceReingest: true });
-        this.state.applyUploadResult(upload);
-        this.resetSuccess.set(
-          `Reset complete. Re-ingested ${upload.newTradesAdded} trades for ${upload.clientName}.`
-        );
-        await this.router.navigate(['/dashboard']);
-      } else {
-        this.resetSuccess.set(
-          result.clientsRemoved
-            ? `Removed ${result.clientsRemoved} client account(s) from Firebase. Upload a P&L file to start fresh.`
-            : 'All trade data cleared. Upload a P&L file to start fresh.'
-        );
-      }
-
-      setTimeout(() => this.resetModalOpen.set(false), 1200);
-    } catch (e) {
-      this.resetError.set(e instanceof Error ? e.message : 'Reset failed');
-    } finally {
-      this.resetBusy.set(false);
     }
   }
 

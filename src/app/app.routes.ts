@@ -7,6 +7,7 @@ import { StockDetailComponent } from './components/stock-detail/stock-detail.com
 import { SignalsComponent } from './components/signals/signals.component';
 import { HeatmapComponent } from './components/heatmap/heatmap.component';
 import { UploadComponent } from './components/upload/upload.component';
+import { SettingsComponent } from './components/settings/settings.component';
 import { LoginComponent } from './components/login/login.component';
 import { AdminLayoutComponent } from './layout/admin-layout.component';
 import { authGuard, loginGuard } from './guards/auth.guard';
@@ -58,6 +59,11 @@ export const routes: Routes = [
         path: 'heatmap',
         component: HeatmapComponent,
         data: { title: 'P&L Heatmap', subtitle: 'Profitable vs loss-making stocks' },
+      },
+      {
+        path: 'settings',
+        component: SettingsComponent,
+        data: { title: 'Settings', subtitle: 'Account and data management' },
       },
     ],
   },
