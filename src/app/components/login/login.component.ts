@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, effect, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
@@ -18,11 +18,16 @@ export class LoginComponent implements OnInit {
   readonly year = new Date().getFullYear();
   checkingSession = true;
 
+  constructor() {
+    effect(() => {
+      if (this.auth.user()) {
+        void this.router.navigate(['/']);
+      }
+    });
+  }
+
   async ngOnInit(): Promise<void> {
     await this.auth.whenReady();
     this.checkingSession = false;
-    if (this.auth.currentUser) {
-      await this.router.navigate(['/']);
-    }
   }
 }

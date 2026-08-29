@@ -3,9 +3,7 @@ import { Auth, authState } from '@angular/fire/auth';
 import {
   GoogleAuthProvider,
   User,
-  browserLocalPersistence,
   getRedirectResult,
-  setPersistence,
   signInWithPopup,
   signInWithRedirect,
   signOut,
@@ -30,7 +28,6 @@ export class AuthService {
   }
 
   private async initialize(): Promise<void> {
-    await setPersistence(this.auth, browserLocalPersistence);
     try {
       await getRedirectResult(this.auth);
     } catch (e) {

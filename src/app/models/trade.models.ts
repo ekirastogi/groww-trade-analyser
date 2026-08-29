@@ -36,6 +36,8 @@ export interface Trade {
   remark: string;
   tradeType: TradeType;
   holdingDays: number;
+  allocatedCharges?: number;
+  netPnL?: number;
 }
 
 export interface ChargeItem {
@@ -51,6 +53,7 @@ export interface ChargesSummary {
 export interface StockSummary {
   stockName: string;
   isin: string;
+  symbol?: string;
   quantity: number;
   avgBuyPrice: number;
   buyValue: number;
@@ -61,6 +64,7 @@ export interface StockSummary {
   tradeCount: number;
   allocatedCharges: number;
   netPnL: number;
+  winRate?: number;
 }
 
 export interface PeriodBucket {

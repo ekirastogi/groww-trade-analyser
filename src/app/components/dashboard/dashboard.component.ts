@@ -5,7 +5,6 @@ import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReportStateService } from '../../services/report-state.service';
 import { ClientAccountService } from '../../services/client-account.service';
-import { TradeLedgerService } from '../../services/trade-ledger.service';
 import {
   PeriodBucket,
   StockSummary,
@@ -81,7 +80,6 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 export class DashboardComponent {
   readonly state = inject(ReportStateService);
   private clientSvc = inject(ClientAccountService);
-  private ledger = inject(TradeLedgerService);
   readonly clients = toSignal(this.clientSvc.watchClients(), { initialValue: [] });
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
   readonly formatCurrency = formatCurrency;
@@ -324,23 +322,7 @@ export class DashboardComponent {
   }
 
   async loadClient(clientCode: string): Promise<void> {
-    this.state.loading.set(true);
-    this.state.error.set(null);
-    try {
-      this.clientSvc.selectClient(clientCode);
-      const report = await this.ledger.buildReportFromClient(clientCode);
-      if (!report) {
-        this.state.error.set('No trades found for this account');
-        return;
-      }
-      this.state.report.set(report);
-      this.state.startDate.set(report.dateRange.min);
-      this.state.endDate.set(report.dateRange.max);
-    } catch (e) {
-      this.state.error.set(e instanceof Error ? e.message : 'Failed to load client data');
-    } finally {
-      this.state.loading.set(false);
-    }
+    await this.state.loadFromClient(clientCode);
   }
 
   onDrop(event: DragEvent): void {
@@ -430,11 +412,11 @@ export class DashboardComponent {
   }
 
   tradeAllocatedCharge(trade: Trade): number {
-    return trade.sellValue * this.chargeRatio();
+    return trade.allocatedCharges ?? trade.sellValue * this.chargeRatio();
   }
 
   tradeNetPnL(trade: Trade): number {
-    return trade.realisedPnL - this.tradeAllocatedCharge(trade);
+    return trade.netPnL ?? trade.realisedPnL - this.tradeAllocatedCharge(trade);
   }
 
   tradeRealisedPnLPct(trade: Trade): number {

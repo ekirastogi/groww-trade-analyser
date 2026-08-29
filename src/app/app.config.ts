@@ -1,11 +1,19 @@
-import { ApplicationConfig } from '@angular/core';
+import { APP_INITIALIZER, ApplicationConfig } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { FirebaseOptions, initializeApp, provideFirebaseApp } from '@angular/fire/app';
-import { getAuth, provideAuth } from '@angular/fire/auth';
+import { provideAuth } from '@angular/fire/auth';
 import { getFirestore, provideFirestore } from '@angular/fire/firestore';
+import { getApp } from 'firebase/app';
+import {
+  browserPopupRedirectResolver,
+  getAuth,
+  indexedDBLocalPersistence,
+  initializeAuth,
+} from 'firebase/auth';
 
 import { routes } from './app.routes';
+import { AuthService } from './services/auth.service';
 
 export function buildAppConfig(firebase: FirebaseOptions): ApplicationConfig {
   return {
@@ -13,8 +21,24 @@ export function buildAppConfig(firebase: FirebaseOptions): ApplicationConfig {
       provideRouter(routes),
       provideAnimations(),
       provideFirebaseApp(() => initializeApp(firebase)),
-      provideAuth(() => getAuth()),
+      provideAuth(() => {
+        const app = getApp();
+        try {
+          return initializeAuth(app, {
+            persistence: indexedDBLocalPersistence,
+            popupRedirectResolver: browserPopupRedirectResolver,
+          });
+        } catch {
+          return getAuth(app);
+        }
+      }),
       provideFirestore(() => getFirestore()),
+      {
+        provide: APP_INITIALIZER,
+        useFactory: (authService: AuthService) => () => authService.whenReady(),
+        deps: [AuthService],
+        multi: true,
+      },
     ],
   };
 }

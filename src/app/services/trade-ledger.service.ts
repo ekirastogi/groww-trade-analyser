@@ -54,8 +54,11 @@ export class TradeLedgerService {
   private watchlists = inject(WatchlistService);
 
   async uploadReport(file: File): Promise<UploadResult> {
+    await this.auth.whenReady();
     const uid = this.auth.uid;
     if (!uid) throw new Error('Sign in to push data to Firebase');
+
+    await this.ensureUserProfile();
 
     const buffer = await file.arrayBuffer();
     const contentHash = await computeFileContentHash(buffer);
@@ -200,6 +203,8 @@ export class TradeLedgerService {
         remark,
         tradeType,
         holdingDays,
+        allocatedCharges,
+        netPnL,
       }) => ({
         stockName,
         isin,
@@ -214,6 +219,8 @@ export class TradeLedgerService {
         remark,
         tradeType,
         holdingDays,
+        allocatedCharges,
+        netPnL,
       })
     );
 
@@ -257,7 +264,17 @@ export class TradeLedgerService {
     affectedSymbols?: string[]
   ): Promise<void> {
     const trades = await this.getAllTrades(clientCode);
-    await this.clientSvc.registerClient(clientCode, clientName, trades.length);
+    const uploadsSnap = await getDocs(
+      query(this.clientSvc.clientCol(clientCode, 'uploads'), orderBy('uploadedAt', 'desc'), limit(1))
+    );
+    const lastUpload = uploadsSnap.docs[0]?.data() as UploadRecord | undefined;
+
+    await this.clientSvc.registerClient(clientCode, clientName, trades.length, {
+      totalRealisedPnL: trades.reduce((sum, trade) => sum + trade.realisedPnL, 0),
+      totalNetPnL: trades.reduce((sum, trade) => sum + trade.netPnL, 0),
+      totalCharges: trades.reduce((sum, trade) => sum + trade.allocatedCharges, 0),
+      periodLabel: lastUpload?.periodLabel,
+    });
 
     const symbols =
       affectedSymbols?.length ?
@@ -276,6 +293,7 @@ export class TradeLedgerService {
     return {
       stockName: profile.stockName,
       isin: profile.isin,
+      symbol: profile.symbol,
       quantity: profile.tradeCount,
       avgBuyPrice: profile.tradeCount ? profile.totalBuyValue / profile.tradeCount : 0,
       buyValue: profile.totalBuyValue,
@@ -286,6 +304,7 @@ export class TradeLedgerService {
       tradeCount: profile.tradeCount,
       allocatedCharges: profile.allocatedCharges,
       netPnL: profile.netPnL,
+      winRate: profile.winRate,
     };
   }
 
@@ -382,5 +401,20 @@ export class TradeLedgerService {
     };
 
     await setDoc(doc(this.clientSvc.clientCol(clientCode, 'stockProfiles'), symbol), profile);
+  }
+
+  private async ensureUserProfile(): Promise<void> {
+    const uid = this.auth.uid;
+    const user = this.auth.currentUser;
+    if (!uid || !user) return;
+    await setDoc(
+      doc(this.firestore, 'users', uid),
+      {
+        email: user.email ?? '',
+        displayName: user.displayName ?? '',
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
   }
 }

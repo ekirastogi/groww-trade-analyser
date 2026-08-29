@@ -22,12 +22,17 @@ export class AdminLayoutComponent implements OnInit {
   sidebarOpen = signal(true);
   isMobile = signal(typeof window !== 'undefined' && window.innerWidth < 1024);
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     if (this.auth.user()) {
       this.notifications.requestPermission();
     }
     if (this.isMobile()) {
       this.sidebarOpen.set(false);
+    }
+
+    await this.auth.whenReady();
+    if (this.auth.currentUser) {
+      await this.state.ensureLoadedFromFirebase();
     }
   }
 

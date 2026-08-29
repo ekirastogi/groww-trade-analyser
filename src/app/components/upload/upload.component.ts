@@ -20,6 +20,7 @@ export class UploadComponent {
 
   pushToFirebase = signal(true);
   dragOver = signal(false);
+  uploading = signal(false);
   pushResult = signal<string | null>(null);
   pushError = signal<string | null>(null);
 
@@ -47,22 +48,42 @@ export class UploadComponent {
   private async handleFile(file: File): Promise<void> {
     this.pushResult.set(null);
     this.pushError.set(null);
-    await this.state.loadFile(file);
-
-    if (!this.pushToFirebase()) return;
+    this.uploading.set(true);
 
     try {
-      const result = await this.ledger.uploadReport(file);
-      if (result.fileDuplicate) {
-        this.pushResult.set(`File already uploaded for account ${result.clientCode}. No changes made.`);
-      } else {
-        this.pushResult.set(
-          `Pushed to Firebase for ${result.clientName} (${result.clientCode}): ` +
-          `${result.newTradesAdded} new trades, ${result.duplicatesSkipped} duplicates skipped.`
-        );
+      await this.auth.whenReady();
+
+      if (this.pushToFirebase()) {
+        if (!this.auth.currentUser) {
+          this.pushError.set('Sign in to store uploads in Firebase and load dashboards from the cloud.');
+          return;
+        }
+
+        const result = await this.ledger.uploadReport(file);
+        await this.state.loadFromClient(result.clientCode);
+
+        if (result.fileDuplicate) {
+          this.pushResult.set(
+            `File already in Firebase for ${result.clientName} (${result.clientCode}). Dashboard refreshed from cloud.`
+          );
+        } else {
+          this.pushResult.set(
+            `Saved to Firebase for ${result.clientName} (${result.clientCode}): ` +
+              `${result.newTradesAdded} new trades, ${result.duplicatesSkipped} duplicates skipped.`
+          );
+        }
+
+        await this.router.navigate(['/dashboard']);
+        return;
       }
+
+      await this.state.loadFile(file);
     } catch (e) {
-      this.pushError.set(e instanceof Error ? e.message : 'Firebase upload failed');
+      const message = e instanceof Error ? e.message : 'Upload failed';
+      this.pushError.set(message);
+      this.state.error.set(message);
+    } finally {
+      this.uploading.set(false);
     }
   }
 

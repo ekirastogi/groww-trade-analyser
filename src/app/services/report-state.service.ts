@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, inject, signal, computed } from '@angular/core';
 import {
   AnalysisOptions,
   AnalysisResult,
@@ -9,6 +9,9 @@ import {
 } from '../models/trade.models';
 import { AnalysisService } from './analysis.service';
 import { ParserService } from './parser.service';
+import { TradeLedgerService } from './trade-ledger.service';
+import { ClientAccountService } from './client-account.service';
+import { AuthService } from './auth.service';
 
 const MAX_REPORT_HISTORY = 5;
 const HISTORY_STORAGE_KEY = 'groww-pl-report-history';
@@ -20,9 +23,17 @@ function defaultTradeTypesForReport(report: Report): TradeType[] {
 
 @Injectable({ providedIn: 'root' })
 export class ReportStateService {
+  private parser = inject(ParserService);
+  private analysisService = inject(AnalysisService);
+  private ledger = inject(TradeLedgerService);
+  private clientSvc = inject(ClientAccountService);
+  private auth = inject(AuthService);
+
   report = signal<Report | null>(null);
   reportHistory = signal<ReportHistoryEntry[]>(this.loadHistoryFromStorage());
   activeHistoryId = signal<string | null>(null);
+  activeClientCode = signal<string | null>(null);
+  dataSource = signal<'local' | 'firebase'>('local');
   loading = signal(false);
   error = signal<string | null>(null);
 
@@ -44,24 +55,66 @@ export class ReportStateService {
     return this.analysisService.analyze(report, this.analysisOptions());
   });
 
-  /** Period buckets for charts based on chartPeriod filter */
   chartPeriodData = computed<PeriodBucket[]>(() => {
     const analysis = this.analysis();
     if (!analysis) return [];
     switch (this.chartPeriod()) {
-      case 'weekly': return analysis.weekly;
-      case 'monthly': return analysis.monthly;
-      default: return analysis.daily;
+      case 'weekly':
+        return analysis.weekly;
+      case 'monthly':
+        return analysis.monthly;
+      default:
+        return analysis.daily;
     }
   });
 
   hasReport = computed(() => !!this.report());
   hasHistory = computed(() => this.reportHistory().length > 0);
+  isFirebaseBacked = computed(() => this.dataSource() === 'firebase');
 
-  constructor(
-    private parser: ParserService,
-    private analysisService: AnalysisService
-  ) {}
+  async loadFromClient(clientCode: string): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      await this.auth.whenReady();
+      const report = await this.ledger.buildReportFromClient(clientCode);
+      if (!report) {
+        throw new Error('No trades found in Firebase for this account. Upload a P&L file first.');
+      }
+      this.clientSvc.selectClient(clientCode);
+      this.activeClientCode.set(clientCode);
+      this.dataSource.set('firebase');
+      this.applyFirebaseReport(report);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to load from Firebase';
+      this.error.set(message);
+      throw e;
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async ensureLoadedFromFirebase(): Promise<void> {
+    if (this.report() && this.dataSource() === 'firebase') return;
+
+    await this.auth.whenReady();
+    if (!this.auth.currentUser) return;
+
+    const selected = this.clientSvc.selectedClientCode();
+    if (selected) {
+      try {
+        await this.loadFromClient(selected);
+        return;
+      } catch {
+        // try latest client below
+      }
+    }
+
+    const clients = await this.clientSvc.listClients();
+    if (clients.length) {
+      await this.loadFromClient(clients[0].clientCode);
+    }
+  }
 
   async loadFile(file: File): Promise<void> {
     this.loading.set(true);
@@ -69,6 +122,8 @@ export class ReportStateService {
     try {
       const report = await this.parser.parseFile(file);
       this.addToHistory(file.name, report);
+      this.dataSource.set('local');
+      this.activeClientCode.set(null);
       this.applyReport(report);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to parse file');
@@ -83,6 +138,8 @@ export class ReportStateService {
     const entry = this.reportHistory().find((item) => item.id === id);
     if (!entry) return;
     this.activeHistoryId.set(id);
+    this.dataSource.set('local');
+    this.activeClientCode.set(null);
     this.applyReport(entry.report);
     this.error.set(null);
   }
@@ -134,7 +191,7 @@ export class ReportStateService {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   }
 
-  private   applyReport(report: Report): void {
+  private applyReport(report: Report): void {
     this.report.set(report);
     this.startDate.set(report.dateRange.min);
     this.endDate.set(report.dateRange.max);
@@ -177,6 +234,8 @@ export class ReportStateService {
   clear(): void {
     this.report.set(null);
     this.activeHistoryId.set(null);
+    this.activeClientCode.set(null);
+    this.dataSource.set('local');
     this.error.set(null);
   }
 }

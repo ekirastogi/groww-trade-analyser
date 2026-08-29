@@ -4,6 +4,7 @@ import {
   collection,
   collectionData,
   doc,
+  getDocs,
   orderBy,
   query,
   setDoc,
@@ -16,9 +17,13 @@ export interface ClientAccount {
   clientName: string;
   tradeCount: number;
   lastUploadAt: number;
+  totalRealisedPnL?: number;
+  totalNetPnL?: number;
+  totalCharges?: number;
+  periodLabel?: string;
 }
 
-const SELECTED_CLIENT_KEY = 'groww-selected-client';
+const SELECTED_CLIENT_KEY = 'kairo-selected-client';
 
 @Injectable({ providedIn: 'root' })
 export class ClientAccountService {
@@ -39,6 +44,14 @@ export class ClientAccountService {
     );
   }
 
+  async listClients(): Promise<ClientAccount[]> {
+    const uid = this.auth.uid;
+    if (!uid) return [];
+    const ref = collection(this.firestore, 'users', uid, 'clients');
+    const snap = await getDocs(query(ref, orderBy('lastUploadAt', 'desc')));
+    return snap.docs.map((d) => d.data() as ClientAccount);
+  }
+
   selectClient(clientCode: string): void {
     this.selectedClientCode.set(clientCode);
     if (typeof localStorage !== 'undefined') {
@@ -51,13 +64,25 @@ export class ClientAccountService {
     return localStorage.getItem(SELECTED_CLIENT_KEY);
   }
 
-  async registerClient(clientCode: string, clientName: string, tradeCount: number): Promise<void> {
+  async registerClient(
+    clientCode: string,
+    clientName: string,
+    tradeCount: number,
+    summary?: Pick<ClientAccount, 'totalRealisedPnL' | 'totalNetPnL' | 'totalCharges' | 'periodLabel'>
+  ): Promise<void> {
     const uid = this.auth.uid;
     if (!uid) return;
     const now = Date.now();
     await setDoc(
       doc(this.firestore, 'users', uid, 'clients', clientCode),
-      { clientCode, clientName, tradeCount, lastUploadAt: now, updatedAt: now },
+      {
+        clientCode,
+        clientName,
+        tradeCount,
+        lastUploadAt: now,
+        updatedAt: now,
+        ...summary,
+      },
       { merge: true }
     );
     if (!this.selectedClientCode()) {

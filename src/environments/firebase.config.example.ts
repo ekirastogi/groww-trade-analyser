@@ -4,7 +4,8 @@
  */
 export const firebaseConfig = {
   apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT.firebaseapp.com',
+  // Use your Firebase Hosting domain (e.g. project.web.app), not .firebaseapp.com, for mobile redirect sign-in.
+  authDomain: 'YOUR_PROJECT.web.app',
   projectId: 'YOUR_PROJECT_ID',
   storageBucket: 'YOUR_PROJECT.appspot.com',
   messagingSenderId: 'YOUR_SENDER_ID',

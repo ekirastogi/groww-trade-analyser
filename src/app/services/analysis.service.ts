@@ -66,7 +66,7 @@ export class AnalysisService {
     }
 
     const tradeCount = trades.length;
-    const allocatedCharges = totalSellValue * chargeRatio;
+    const allocatedCharges = trades.reduce((sum, t) => sum + this.tradeCharge(t, chargeRatio), 0);
     return {
       tradeCount,
       totalBuyValue,
@@ -79,6 +79,14 @@ export class AnalysisService {
       netPnL: realisedPnL - allocatedCharges,
       chargeRatio,
     };
+  }
+
+  private tradeCharge(trade: Trade, chargeRatio: number): number {
+    return trade.allocatedCharges ?? trade.sellValue * chargeRatio;
+  }
+
+  private tradeNetPnL(trade: Trade, chargeRatio: number): number {
+    return trade.netPnL ?? trade.realisedPnL - this.tradeCharge(trade, chargeRatio);
   }
 
   private aggregateByPeriod(
@@ -114,13 +122,13 @@ export class AnalysisService {
       b.realisedPnL += t.realisedPnL;
       if (t.realisedPnL > 0) b.winningTrades++;
       else if (t.realisedPnL < 0) b.losingTrades++;
+      b.allocatedCharges += this.tradeCharge(t, chargeRatio);
       b.trades.push(t);
     }
 
     return [...buckets.values()]
       .map((b) => {
         b.winRate = b.tradeCount ? (b.winningTrades / b.tradeCount) * 100 : 0;
-        b.allocatedCharges = b.totalSellValue * chargeRatio;
         b.netPnL = b.realisedPnL - b.allocatedCharges;
         b.trades.sort((a, b2) => b2.realisedPnL - a.realisedPnL);
         if (period === 'weekly') {
@@ -209,6 +217,7 @@ export class AnalysisService {
       s.buyValue += t.buyValue;
       s.sellValue += t.sellValue;
       s.realisedPnL += t.realisedPnL;
+      s.allocatedCharges += this.tradeCharge(t, chargeRatio);
     }
 
     return [...map.values()]
@@ -218,7 +227,6 @@ export class AnalysisService {
           s.avgSellPrice = s.sellValue / s.quantity;
         }
         if (s.buyValue > 0) s.realisedPnLPct = s.realisedPnL / s.buyValue;
-        s.allocatedCharges = s.sellValue * chargeRatio;
         s.netPnL = s.realisedPnL - s.allocatedCharges;
         return s;
       })
