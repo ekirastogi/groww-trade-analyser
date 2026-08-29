@@ -105,16 +105,26 @@
       <app-brand-logo variant="dark" [compact]="true" [showTagline]="false" class="lg:hidden" />
     </header>
 
-    <main class="flex-1 px-3 py-4 sm:px-6 sm:py-6 pb-20 lg:pb-6">
+    <main class="flex-1 px-3 py-4 sm:px-6 sm:py-6 pb-24 lg:pb-6">
       <router-outlet />
     </main>
   </div>
 
-  <nav class="fixed bottom-0 left-0 right-0 z-30 flex border-t border-slate-200 bg-white/95 backdrop-blur-md pb-safe lg:hidden">
-    <a routerLink="/dashboard" routerLinkActive="text-kairo-700" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Dashboard</a>
-    <a routerLink="/upload" routerLinkActive="text-kairo-700" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Upload</a>
-    <a routerLink="/watchlists" routerLinkActive="text-kairo-700" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Lists</a>
-    <a routerLink="/" routerLinkActive="text-kairo-700" [routerLinkActiveOptions]="{ exact: true }" class="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-slate-500" (click)="onNavigate()">Signals</a>
+  <nav class="mobile-tab-bar">
+    @for (item of mobileNavItems; track item.route) {
+      <a
+        [routerLink]="item.route"
+        routerLinkActive="mobile-tab-item-active"
+        [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+        class="mobile-tab-item"
+        (click)="onNavigate()"
+      >
+        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" [attr.d]="item.icon" />
+        </svg>
+        <span>{{ item.label }}</span>
+      </a>
+    }
   </nav>
 </div>
 

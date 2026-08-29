@@ -21,8 +21,7 @@ import {
 } from '../../utils/pnl-watchlist.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 
-type WatchlistTab = 'custom' | 'auto';
-type AutoPnlSide = 'loss' | 'profit';
+type WatchlistTab = 'profitable' | 'losing' | 'custom';
 
 interface TierSummary {
   stockCount: number;
@@ -59,8 +58,13 @@ export class WatchlistsComponent {
   watchlists = toSignal(this.watchlistSvc.watchAll(), { initialValue: [] as Watchlist[] });
   stocks = toSignal(this.stockSvc.watchAllStocks(), { initialValue: [] });
 
-  activeTab = signal<WatchlistTab>('auto');
-  autoSide = signal<AutoPnlSide>('loss');
+  readonly mainTabs: { id: WatchlistTab; label: string }[] = [
+    { id: 'profitable', label: 'Profitable' },
+    { id: 'losing', label: 'Loss making' },
+    { id: 'custom', label: 'Custom' },
+  ];
+
+  activeTab = signal<WatchlistTab>('losing');
   tierMode = signal<PnlTierMode>(loadPnlTierMode());
   selectedAutoTierId = signal<string | null>(null);
   selectedCustomWatchlistId = signal<string | null>(null);
@@ -70,6 +74,8 @@ export class WatchlistsComponent {
 
   readonly formatCurrency = formatCurrency;
   readonly pnlClass = pnlClass;
+
+  isPnlTab = computed(() => this.activeTab() === 'profitable' || this.activeTab() === 'losing');
 
   customWatchlists = computed(() =>
     this.watchlists()
@@ -117,10 +123,12 @@ export class WatchlistsComponent {
   );
 
   visibleAutoTierTabs = computed(() =>
-    this.autoSide() === 'loss' ? this.lossTierTabs() : this.profitTierTabs()
+    this.activeTab() === 'profitable' ? this.profitTierTabs() : this.lossTierTabs()
   );
 
   activeAutoWatchlist = computed(() => {
+    if (!this.isPnlTab()) return null;
+
     const tabs = this.visibleAutoTierTabs();
     const selected = this.selectedAutoTierId();
     if (selected) {
@@ -215,17 +223,13 @@ export class WatchlistsComponent {
 
   setTab(tab: WatchlistTab): void {
     this.activeTab.set(tab);
+    this.selectedAutoTierId.set(null);
     this.error.set(null);
   }
 
   setTierMode(mode: PnlTierMode): void {
     this.tierMode.set(mode);
     savePnlTierMode(mode);
-  }
-
-  setAutoSide(side: AutoPnlSide): void {
-    this.autoSide.set(side);
-    this.selectedAutoTierId.set(null);
   }
 
   selectAutoTier(id: string): void {

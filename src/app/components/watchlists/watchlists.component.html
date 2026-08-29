@@ -1,8 +1,8 @@
-<div class="space-y-6 pb-28 lg:pb-6">
+<div class="space-y-6 pb-32 lg:pb-6">
   <div class="page-header flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 class="page-title">Watchlists</h2>
-      <p class="page-subtitle">Auto lists from your P&L uploads, or create custom lists to track symbols.</p>
+      <p class="page-subtitle">Profitable and loss-making stocks from your P&amp;L, or custom lists.</p>
     </div>
     @if (!auth.user()) {
       <button type="button" class="btn-primary" (click)="auth.signInWithGoogle()">
@@ -15,94 +15,70 @@
     <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>
   }
 
-  <div class="flex flex-wrap gap-2">
-    <button type="button" class="chip" [class.chip-active]="activeTab() === 'auto'" [class.chip-inactive]="activeTab() !== 'auto'" (click)="setTab('auto')">
-      Auto
-    </button>
-    <button type="button" class="chip" [class.chip-active]="activeTab() === 'custom'" [class.chip-inactive]="activeTab() !== 'custom'" (click)="setTab('custom')">
-      Custom
-    </button>
+  <div class="segmented-control" role="tablist" aria-label="Watchlist type">
+    @for (tab of mainTabs; track tab.id) {
+      <button
+        type="button"
+        role="tab"
+        class="segment-item"
+        [class.segment-item-active]="activeTab() === tab.id"
+        [attr.aria-selected]="activeTab() === tab.id"
+        (click)="setTab(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    }
   </div>
 
-  @if (activeTab() === 'auto') {
+  @if (isPnlTab()) {
     @if (!state.hasReport()) {
       <div class="card overflow-hidden p-8 text-center">
         <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
-        <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to generate auto watchlists and tier summaries.</p>
+        <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to generate watchlists and tier summaries.</p>
         <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
       </div>
     } @else if (!autoWatchlists().length) {
-      <p class="text-center text-slate-500">No auto watchlists yet. Upload a P&amp;L file to generate them.</p>
+      <p class="text-center text-slate-500">No watchlists yet. Upload a P&amp;L file to generate them.</p>
     } @else {
-      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-        <div>
-          <p class="text-sm font-medium text-slate-900">Tier grouping</p>
-          <p class="text-xs text-slate-500">
-            @if (tierMode() === 'cumulative') {
-              Cumulative: each tier includes all stocks up to that P&amp;L level.
-            } @else {
-              Exclusive bands: stocks appear in only one tier (e.g. ₹5K–₹10K).
-            }
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+        <p class="text-xs text-slate-500">
+          @if (tierMode() === 'cumulative') {
+            Cumulative tiers include all stocks up to each level.
+          } @else {
+            Exclusive bands — no stock repeats across tiers.
+          }
+        </p>
+        <div class="segmented-control w-full max-w-xs sm:w-auto">
           <button
             type="button"
-            class="chip"
-            [class.chip-active]="tierMode() === 'cumulative'"
-            [class.chip-inactive]="tierMode() !== 'cumulative'"
+            class="segment-item text-xs sm:text-sm"
+            [class.segment-item-active]="tierMode() === 'cumulative'"
             (click)="setTierMode('cumulative')"
           >
             Cumulative
           </button>
           <button
             type="button"
-            class="chip"
-            [class.chip-active]="tierMode() === 'band'"
-            [class.chip-inactive]="tierMode() !== 'band'"
+            class="segment-item text-xs sm:text-sm"
+            [class.segment-item-active]="tierMode() === 'band'"
             (click)="setTierMode('band')"
           >
-            Exclusive band
+            Bands
           </button>
         </div>
       </div>
 
       <div class="card overflow-hidden">
-        <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2">
-          <button
-            type="button"
-            class="chip"
-            [class.chip-active]="autoSide() === 'loss'"
-            [class.chip-inactive]="autoSide() !== 'loss'"
-            (click)="setAutoSide('loss')"
-          >
-            Loss
-          </button>
-          <button
-            type="button"
-            class="chip"
-            [class.chip-active]="autoSide() === 'profit'"
-            [class.chip-inactive]="autoSide() !== 'profit'"
-            (click)="setAutoSide('profit')"
-          >
-            Profit
-          </button>
-        </div>
-
-        <div class="overflow-x-auto border-b border-slate-200 bg-white">
-          <div class="flex min-w-max gap-1 p-2">
+        <div class="overflow-x-auto border-b border-slate-200 bg-slate-50/50 px-2 py-2">
+          <div class="tier-segmented-control">
             @for (tab of visibleAutoTierTabs(); track tab.watchlist.id) {
               <button
                 type="button"
-                class="whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition sm:text-sm"
-                [ngClass]="
-                  activeAutoWatchlist()?.id === tab.watchlist.id
-                    ? 'bg-white text-kairo-700 shadow-sm'
-                    : 'text-slate-600 hover:bg-white/70'
-                "
+                class="tier-segment-item"
+                [class.tier-segment-item-active]="activeAutoWatchlist()?.id === tab.watchlist.id"
                 (click)="selectAutoTier(tab.watchlist.id)"
               >
-                <span class="mr-1.5 inline-block h-2 w-2 rounded-full" [style.background]="tab.watchlist.color"></span>
+                <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.watchlist.color"></span>
                 {{ tierTabLabel(tab) }}
               </button>
             }
@@ -112,13 +88,6 @@
         @if (activeAutoWatchlist(); as wl) {
           <div class="border-b border-slate-100 px-4 py-3">
             <h3 class="font-semibold text-slate-900">{{ activeAutoTierMeta()?.fullLabel ?? wl.name }}</h3>
-            <p class="text-xs text-slate-500">
-              @if (tierMode() === 'band') {
-                Exclusive P&amp;L band — stocks are not repeated across tiers.
-              } @else {
-                Cumulative tier — includes all stocks from lower bands up to this level.
-              }
-            </p>
           </div>
 
           <div class="overflow-x-auto">
@@ -165,12 +134,12 @@
         }
       </div>
 
-      @if (tierSummary(); as summary) {
-        <div class="fixed bottom-16 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur-md lg:bottom-0 lg:left-72">
+      @if (tierSummary()) {
+        <div class="fixed bottom-[4.5rem] left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur-md lg:bottom-0 lg:left-72">
           <div class="mx-auto max-w-6xl">
             <div class="mb-2 flex items-center justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Tier summary</p>
-              <p class="truncate text-xs text-slate-400">{{ activeAutoTierMeta()?.fullLabel ?? activeAutoWatchlist()?.name }}</p>
+              <p class="truncate text-xs text-slate-400">{{ activeAutoTierMeta()?.fullLabel }}</p>
             </div>
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               @for (stat of tierSummaryStats(); track stat.label) {
@@ -197,18 +166,19 @@
       <p class="text-center text-slate-500">No custom watchlists yet. Create one above.</p>
     } @else {
       @if (customWatchlists().length > 1) {
-        <div class="flex flex-wrap gap-2">
-          @for (wl of customWatchlists(); track wl.id) {
-            <button
-              type="button"
-              class="chip"
-              [class.chip-active]="activeCustomWatchlist()?.id === wl.id"
-              [class.chip-inactive]="activeCustomWatchlist()?.id !== wl.id"
-              (click)="selectCustomWatchlist(wl.id)"
-            >
-              {{ wl.name }} ({{ wl.stockSymbols.length }})
-            </button>
-          }
+        <div class="overflow-x-auto">
+          <div class="tier-segmented-control inline-flex min-w-full">
+            @for (wl of customWatchlists(); track wl.id) {
+              <button
+                type="button"
+                class="tier-segment-item"
+                [class.tier-segment-item-active]="activeCustomWatchlist().id === wl.id"
+                (click)="selectCustomWatchlist(wl.id)"
+              >
+                {{ wl.name }} ({{ wl.stockSymbols.length }})
+              </button>
+            }
+          </div>
         </div>
       }
 
