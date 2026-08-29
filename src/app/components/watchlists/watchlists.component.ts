@@ -17,10 +17,12 @@ import {
   savePnlTierMode,
   stockSummariesForPnlTier,
   tierDisplayName,
+  tierShortLabel,
 } from '../../utils/pnl-watchlist.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 
 type WatchlistTab = 'custom' | 'auto';
+type AutoPnlSide = 'loss' | 'profit';
 
 interface TierSummary {
   stockCount: number;
@@ -37,7 +39,8 @@ interface TierSummary {
 
 interface AutoTierTab {
   watchlist: Watchlist;
-  label: string;
+  shortLabel: string;
+  fullLabel: string;
   count: number;
 }
 
@@ -57,6 +60,7 @@ export class WatchlistsComponent {
   stocks = toSignal(this.stockSvc.watchAllStocks(), { initialValue: [] });
 
   activeTab = signal<WatchlistTab>('auto');
+  autoSide = signal<AutoPnlSide>('loss');
   tierMode = signal<PnlTierMode>(loadPnlTierMode());
   selectedAutoTierId = signal<string | null>(null);
   selectedCustomWatchlistId = signal<string | null>(null);
@@ -88,7 +92,8 @@ export class WatchlistsComponent {
       if (!tier) {
         return {
           watchlist,
-          label: watchlist.name,
+          shortLabel: watchlist.name,
+          fullLabel: watchlist.name,
           count: watchlist.stockSymbols.length,
         };
       }
@@ -96,14 +101,27 @@ export class WatchlistsComponent {
       const stocks = stockSummariesForPnlTier(summaries, tier, mode);
       return {
         watchlist,
-        label: tierDisplayName(tier, mode),
+        shortLabel: tierShortLabel(tier, mode),
+        fullLabel: tierDisplayName(tier, mode),
         count: stocks.length,
       };
     });
   });
 
+  lossTierTabs = computed(() =>
+    this.autoTierTabs().filter((tab) => getPnlWatchlistTier(tab.watchlist.id)?.side === 'loss')
+  );
+
+  profitTierTabs = computed(() =>
+    this.autoTierTabs().filter((tab) => getPnlWatchlistTier(tab.watchlist.id)?.side === 'profit')
+  );
+
+  visibleAutoTierTabs = computed(() =>
+    this.autoSide() === 'loss' ? this.lossTierTabs() : this.profitTierTabs()
+  );
+
   activeAutoWatchlist = computed(() => {
-    const tabs = this.autoTierTabs();
+    const tabs = this.visibleAutoTierTabs();
     const selected = this.selectedAutoTierId();
     if (selected) {
       const match = tabs.find((tab) => tab.watchlist.id === selected);
@@ -205,6 +223,11 @@ export class WatchlistsComponent {
     savePnlTierMode(mode);
   }
 
+  setAutoSide(side: AutoPnlSide): void {
+    this.autoSide.set(side);
+    this.selectedAutoTierId.set(null);
+  }
+
   selectAutoTier(id: string): void {
     this.selectedAutoTierId.set(id);
   }
@@ -214,7 +237,7 @@ export class WatchlistsComponent {
   }
 
   tierTabLabel(tab: AutoTierTab): string {
-    return `${tab.label} (${tab.count})`;
+    return `${tab.shortLabel} (${tab.count})`;
   }
 
   async createWatchlist(): Promise<void> {

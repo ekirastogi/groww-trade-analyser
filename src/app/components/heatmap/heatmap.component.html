@@ -1,40 +1,58 @@
 <div class="space-y-6">
   <div class="page-header">
     <h2 class="page-title">Market Heatmap</h2>
-    <p class="page-subtitle">Watchlist performance, indicators, and your P&amp;L at a glance</p>
+    <p class="page-subtitle">Your traded stocks with P&amp;L, plus live indicators when market data is available.</p>
   </div>
 
-  <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-    <table class="w-full text-sm">
-      <thead class="bg-slate-50 text-left text-xs text-slate-500">
-        <tr>
-          <th class="px-4 py-2">#</th>
-          <th class="px-4 py-2">Symbol</th>
-          <th class="px-4 py-2 text-right">Day %</th>
-          <th class="px-4 py-2 text-right">RSI</th>
-          <th class="px-4 py-2 text-right">My Net P&L</th>
-          <th class="px-4 py-2 text-right">Win Rate</th>
-          <th class="px-4 py-2 text-right">Dist to S1</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (row of rows(); track row.symbol; let i = $index) {
-          <tr class="border-t border-slate-100">
-            <td class="px-4 py-2 text-slate-400">{{ i + 1 }}</td>
-            <td class="px-4 py-2">
-              <a [routerLink]="['/stock', row.symbol]" class="font-medium text-kairo-600 hover:underline">{{ row.symbol }}</a>
-              <div class="text-xs text-slate-400">{{ row.name }}</div>
-            </td>
-            <td class="px-4 py-2 text-right font-mono" [style.color]="cellColor(row.dayChangePct)">{{ row.dayChangePct.toFixed(2) }}%</td>
-            <td class="px-4 py-2 text-right font-mono" [class.text-red-600]="row.rsi > 70" [class.text-emerald-600]="row.rsi < 30">{{ row.rsi.toFixed(1) }}</td>
-            <td class="px-4 py-2 text-right font-mono" [style.color]="cellColor(row.netPnL)">{{ fmt(row.netPnL) }}</td>
-            <td class="px-4 py-2 text-right">{{ row.winRate.toFixed(0) }}%</td>
-            <td class="px-4 py-2 text-right">{{ row.nearestSupportDist.toFixed(1) }}%</td>
+  @if (!reportState.hasReport()) {
+    <div class="card overflow-hidden p-8 text-center">
+      <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
+      <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to populate the heatmap from your holdings.</p>
+      <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
+    </div>
+  } @else {
+    @if (!hasMarketData()) {
+      <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Live day %, RSI, and support levels need the market data service. Your P&amp;L and win rate still show from uploaded trades.
+      </div>
+    }
+
+    <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-left text-xs text-slate-500">
+          <tr>
+            <th class="px-4 py-2">#</th>
+            <th class="px-4 py-2">Symbol</th>
+            <th class="px-4 py-2 text-right">Day %</th>
+            <th class="px-4 py-2 text-right">RSI</th>
+            <th class="px-4 py-2 text-right">My Net P&L</th>
+            <th class="px-4 py-2 text-right">Win Rate</th>
+            <th class="px-4 py-2 text-right">Dist to S1</th>
           </tr>
-        } @empty {
-          <tr><td colspan="7" class="px-4 py-12 text-center text-slate-400">Add symbols to a watchlist and start the local backend</td></tr>
-        }
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.symbol; let i = $index) {
+            <tr class="border-t border-slate-100">
+              <td class="px-4 py-2 text-slate-400">{{ i + 1 }}</td>
+              <td class="px-4 py-2">
+                <a [routerLink]="['/stock', row.symbol]" class="font-medium text-kairo-600 hover:underline">{{ row.symbol }}</a>
+                <div class="text-xs text-slate-400">{{ row.name }}</div>
+              </td>
+              <td class="px-4 py-2 text-right font-mono" [style.color]="cellColor(row.dayChangePct)">{{ row.dayChangePct.toFixed(2) }}%</td>
+              <td class="px-4 py-2 text-right font-mono" [class.text-red-600]="row.rsi > 70" [class.text-emerald-600]="row.rsi < 30">{{ row.rsi.toFixed(1) }}</td>
+              <td class="px-4 py-2 text-right font-mono" [style.color]="cellColor(row.netPnL)">{{ fmt(row.netPnL) }}</td>
+              <td class="px-4 py-2 text-right">{{ row.winRate.toFixed(0) }}%</td>
+              <td class="px-4 py-2 text-right">{{ row.nearestSupportDist.toFixed(1) }}%</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="px-4 py-12 text-center text-slate-400">
+                No stocks found. Upload a P&amp;L file or add symbols to a watchlist.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
 </div>

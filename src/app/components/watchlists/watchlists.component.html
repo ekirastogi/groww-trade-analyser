@@ -68,9 +68,30 @@
       </div>
 
       <div class="card overflow-hidden">
-        <div class="overflow-x-auto border-b border-slate-200 bg-slate-50/80">
+        <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2">
+          <button
+            type="button"
+            class="chip"
+            [class.chip-active]="autoSide() === 'loss'"
+            [class.chip-inactive]="autoSide() !== 'loss'"
+            (click)="setAutoSide('loss')"
+          >
+            Loss
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.chip-active]="autoSide() === 'profit'"
+            [class.chip-inactive]="autoSide() !== 'profit'"
+            (click)="setAutoSide('profit')"
+          >
+            Profit
+          </button>
+        </div>
+
+        <div class="overflow-x-auto border-b border-slate-200 bg-white">
           <div class="flex min-w-max gap-1 p-2">
-            @for (tab of autoTierTabs(); track tab.watchlist.id) {
+            @for (tab of visibleAutoTierTabs(); track tab.watchlist.id) {
               <button
                 type="button"
                 class="whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition sm:text-sm"
@@ -90,7 +111,7 @@
 
         @if (activeAutoWatchlist(); as wl) {
           <div class="border-b border-slate-100 px-4 py-3">
-            <h3 class="font-semibold text-slate-900">{{ activeAutoTierMeta()?.label ?? wl.name }}</h3>
+            <h3 class="font-semibold text-slate-900">{{ activeAutoTierMeta()?.fullLabel ?? wl.name }}</h3>
             <p class="text-xs text-slate-500">
               @if (tierMode() === 'band') {
                 Exclusive P&amp;L band — stocks are not repeated across tiers.
@@ -149,7 +170,7 @@
           <div class="mx-auto max-w-6xl">
             <div class="mb-2 flex items-center justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Tier summary</p>
-              <p class="truncate text-xs text-slate-400">{{ activeAutoTierMeta()?.label ?? activeAutoWatchlist()?.name }}</p>
+              <p class="truncate text-xs text-slate-400">{{ activeAutoTierMeta()?.fullLabel ?? activeAutoWatchlist()?.name }}</p>
             </div>
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               @for (stat of tierSummaryStats(); track stat.label) {

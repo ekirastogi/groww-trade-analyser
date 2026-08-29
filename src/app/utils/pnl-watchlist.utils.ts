@@ -55,6 +55,25 @@ export function formatTierAmount(amount: number): string {
   return `₹${amount}`;
 }
 
+export function formatTierAmountShort(amount: number): string {
+  if (amount >= 100_000) return `${amount / 100_000}L`;
+  if (amount >= 1_000) return `${amount / 1_000}k`;
+  return String(amount);
+}
+
+export function tierShortLabel(tier: PnlWatchlistTier, mode: PnlTierMode): string {
+  const ceiling = formatTierAmountShort(tier.threshold);
+  const prefix = tier.side === 'loss' ? 'Loss' : 'Profit';
+
+  if (mode === 'band') {
+    const floor = previousTierThreshold(tier);
+    if (floor === 0) return `${prefix}${ceiling}`;
+    return `${prefix}${formatTierAmountShort(floor)}-${ceiling}`;
+  }
+
+  return `${prefix}${ceiling}`;
+}
+
 export function tierDisplayName(tier: PnlWatchlistTier, mode: PnlTierMode): string {
   if (mode === 'cumulative') return tier.name;
 
