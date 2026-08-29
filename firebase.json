@@ -4,24 +4,11 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": "dist/frontend/browser",
+    "public": "frontend/dist/frontend/browser",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "headers": [
-      {
-        "source": "**",
-        "headers": [
-          {
-            "key": "Cross-Origin-Opener-Policy",
-            "value": "same-origin-allow-popups"
-          }
-        ]
-      }
-    ],
+    "predeploy": ["npm --prefix frontend run build:firebase"],
     "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
+      { "source": "**", "destination": "/index.html" }
     ]
   }
 }

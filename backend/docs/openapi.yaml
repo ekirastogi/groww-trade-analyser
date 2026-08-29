@@ -24,6 +24,8 @@ tags:
     description: Process liveness and dependency status
   - name: Reports
     description: Groww P&L upload and analysis (in-memory)
+  - name: Ingest
+    description: Market data ingestion controls
 
 paths:
   /health:
@@ -145,6 +147,35 @@ paths:
                 $ref: "#/components/schemas/AnalysisResult"
         "404":
           description: Unknown id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/ingest/hot:
+    post:
+      tags: [Ingest]
+      summary: Trigger hot market-data ingest for universe symbols
+      description: |
+        Refreshes the symbol universe from Firestore and runs one hot ingest pass
+        for all active symbols. Use after backfilling the `universe` collection.
+      operationId: ingestHot
+      responses:
+        "200":
+          description: Hot ingest completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  symbolsIngested:
+                    type: integer
+                    example: 42
+        "503":
+          description: Ingestion scheduler not available
           content:
             application/json:
               schema:

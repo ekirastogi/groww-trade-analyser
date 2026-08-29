@@ -1,4 +1,7 @@
-<div class="flex min-h-screen min-h-dvh bg-slate-50">
+<div
+  class="flex min-h-screen min-h-dvh bg-slate-50"
+  [style.--sidebar-width]="!isMobile() && sidebarOpen() ? '18rem' : '0px'"
+>
   @if (isMobile() && sidebarOpen()) {
     <div class="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden" (click)="closeSidebar()"></div>
   }

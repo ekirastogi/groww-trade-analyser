@@ -57,6 +57,17 @@ export interface ResetAllDataResult {
   clientsRemoved: number;
 }
 
+export interface BackfillUniverseOptions {
+  rebuildProfiles?: boolean;
+}
+
+export interface BackfillUniverseResult {
+  clientsProcessed: number;
+  symbolsSynced: number;
+  symbols: string[];
+  profilesRebuilt: number;
+}
+
 const FIRESTORE_BATCH_LIMIT = 400;
 
 @Injectable({ providedIn: 'root' })
@@ -191,6 +202,48 @@ export class TradeLedgerService {
     };
   }
 
+  async backfillUniverse(options: BackfillUniverseOptions = {}): Promise<BackfillUniverseResult> {
+    await this.auth.whenReady();
+    if (!this.auth.uid) throw new Error('Sign in to backfill universe');
+
+    const clients = await this.clientSvc.listClients();
+    const symbolMap = new Map<string, { symbol: string; name?: string; isin?: string }>();
+    let profilesRebuilt = 0;
+
+    for (const client of clients) {
+      let profiles = await this.getStockProfiles(client.clientCode);
+      if (options.rebuildProfiles || !profiles.length) {
+        const trades = await this.getAllTrades(client.clientCode);
+        if (trades.length) {
+          profiles = this.buildStockProfilesFromTrades(
+            trades,
+            client.clientCode,
+            client.clientName
+          );
+          await this.writeStockProfiles(client.clientCode, profiles);
+          profilesRebuilt++;
+        }
+      }
+
+      for (const profile of profiles) {
+        symbolMap.set(profile.symbol, {
+          symbol: profile.symbol,
+          name: profile.stockName,
+          isin: profile.isin,
+        });
+      }
+    }
+
+    const symbolsSynced = await this.universe.syncSymbols([...symbolMap.values()], 'pnl_upload');
+
+    return {
+      clientsProcessed: clients.length,
+      symbolsSynced,
+      symbols: [...symbolMap.keys()].sort(),
+      profilesRebuilt,
+    };
+  }
+
   async resetAllData(): Promise<ResetAllDataResult> {
     await this.auth.whenReady();
     const uid = this.auth.uid;
@@ -228,6 +281,17 @@ export class TradeLedgerService {
     );
     const lastUpload = uploadsSnap.docs[0]?.data() as UploadRecord | undefined;
     const stockProfiles = await this.getStockProfiles(clientCode);
+
+    if (stockProfiles.length) {
+      await this.universe.syncSymbols(
+        stockProfiles.map((profile) => ({
+          symbol: profile.symbol,
+          name: profile.stockName,
+          isin: profile.isin,
+        })),
+        'pnl_upload'
+      );
+    }
 
     return this.buildReportFromStoredData(
       trades,

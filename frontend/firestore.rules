@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Keep emails in sync with frontend/src/app/constants/allowed-users.ts
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['ekirastogi@gmail.com'];
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner() && request.auth.uid == uid;
+
+      match /{document=**} {
+        allow read, write: if isOwner() && request.auth.uid == uid;
+      }
+    }
+
+    match /universe/{symbol} {
+      allow read: if isOwner();
+      allow create, update: if isOwner();
+      allow delete: if false;
+    }
+
+    match /volumeShockers/{id} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    match /stocks/{symbol} {
+      allow read: if isOwner();
+      allow write: if false;
+
+      match /views/{viewId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+    }
+
+    match /watchlists/{id} {
+      allow read, write: if isOwner();
+    }
+
+    match /recommendations/{id} {
+      allow read: if isOwner();
+      allow create: if false;
+      allow update: if isOwner()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['approvalStatus', 'status', 'approvedAt', 'approvedBy', 'rejectedAt', 'rejectedBy']);
+      allow delete: if false;
+    }
+
+    match /tradeOutcomes/{id} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+  }
+}

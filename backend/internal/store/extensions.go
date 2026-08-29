@@ -345,7 +345,6 @@ func sectorIndexFor(sector string) string {
 func FindMetaCSV() string {
 	candidates := []string{
 		"data/symbol_meta.csv",
-		"backend/data/symbol_meta.csv",
 		filepath.Join(filepath.Dir(DefaultDBPath()), "symbol_meta.csv"),
 	}
 	for _, p := range candidates {
@@ -381,7 +380,7 @@ func LoadUniverseCSV(path string) ([]string, error) {
 }
 
 func FindUniverseCSV() string {
-	for _, p := range []string{"data/universe.csv", "backend/data/universe.csv"} {
+	for _, p := range []string{"data/universe.csv"} {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}

@@ -99,7 +99,7 @@ func main() {
 		if interval == "" {
 			interval = "5m"
 		}
-		api := handlers.New(store.New())
+		api := handlers.NewWithScheduler(store.New(), scheduler)
 		go startHTTPServer(addr, api, map[string]any{
 			"status":           "ok",
 			"service":          "groww-trading-worker",

@@ -17,10 +17,6 @@ Stooq/Yahoo ──► SQLite (~/.groww-trader/market.db) ──► Firestore (sl
 | **Firestore** | Slim `stocks/{sym}`, chart at `stocks/{sym}/views/chart`, `recommendations`, `volumeShockers/active`, `universe` |
 | **Worker** | EOD full book (~200+ symbols), hot-set quotes during market hours, relative-strength INTRADAY/BTST signals |
 
-- **Raw candles** never go on the main `stocks/{symbol}` doc — chart data lives in `views/chart`.
-- **Volume shockers** — top N by volume vs 20d avg, held in hot set for 5 trading days.
-- **Signals** — scored vs Nifty/Midcap/Smallcap (by cap) + sector index + volume + MACD/RSI/S/R.
-
 ## Quick start
 
 ### 1. Firebase setup
@@ -28,7 +24,7 @@ Stooq/Yahoo ──► SQLite (~/.groww-trader/market.db) ──► Firestore (sl
 1. Create a project at https://console.firebase.google.com
 2. Enable **Authentication** (Google sign-in) and **Firestore**
 3. Create a **service account** key for the local worker
-4. Update `src/environments/environment.ts` with your Firebase web config
+4. Update `frontend/src/environments/environment.ts` with your Firebase web config
 5. Update `.firebaserc` with your project ID
 6. Deploy rules: `firebase deploy --only firestore:rules,firestore:indexes`
 
@@ -50,11 +46,18 @@ See [`backend/README.md`](backend/README.md) for ingest tiers, env vars, and HTT
 ### 3. Frontend
 
 ```bash
+cd frontend
 npm install --legacy-peer-deps
 npm start
 ```
 
 Open http://localhost:4200 — sign in with Google.
+
+### 4. Both together
+
+```bash
+./start.sh
+```
 
 ## UI pages
 
@@ -67,6 +70,18 @@ Open http://localhost:4200 — sign in with Google.
 | `/heatmap` | P&L treemap from uploaded report |
 | `/analytics` | P&L charts |
 
+## Project structure
+
+```
+groww/
+├── backend/           # Local worker (Go + SQLite + Firestore sync)
+├── frontend/          # Angular SPA (Firestore only)
+├── firestore.rules
+├── firestore.indexes.json
+├── firebase.json
+└── start.sh
+```
+
 ## Swapping market data provider
 
 Set `MARKET_DATA_PROVIDER=stooq+yahoo|yahoo|stooq|nse|groww` in backend `.env`. Groww live feed plugs in later via the same `market.Provider` interface.
@@ -74,13 +89,3 @@ Set `MARKET_DATA_PROVIDER=stooq+yahoo|yahoo|stooq|nse|groww` in backend `.env`. 
 ## Groww trading (future)
 
 Set `GROWW_API_TOKEN` and implement `GrowwProvider.PlaceOrder()`. Approved recommendations execute automatically (dry-run until wired).
-
-## Project structure
-
-```
-├── backend/           # Local worker (Go + SQLite + Firestore sync)
-├── src/               # Angular SPA (Firestore only)
-├── firestore.rules
-├── firestore.indexes.json
-└── package.json
-```

@@ -19,10 +19,7 @@ func startHTTPServer(addr string, h *handlers.Handler, health map[string]any) {
 	})
 	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
-		http.ServeFile(w, r, firstExistingFile(
-			"docs/openapi.yaml",
-			"backend/docs/openapi.yaml",
-		))
+		http.ServeFile(w, r, firstExistingFile("docs/openapi.yaml"))
 	})
 	mux.HandleFunc("GET /docs", serveSwaggerUI)
 	mux.HandleFunc("GET /docs/", serveSwaggerUI)
@@ -30,6 +27,7 @@ func startHTTPServer(addr string, h *handlers.Handler, health map[string]any) {
 	mux.HandleFunc("POST /api/v1/reports", h.Upload)
 	mux.HandleFunc("GET /api/v1/reports/{id}", h.Report)
 	mux.HandleFunc("GET /api/v1/reports/{id}/analyze", h.Analyze)
+	mux.HandleFunc("POST /api/v1/ingest/hot", h.IngestHot)
 
 	server := &http.Server{
 		Addr:              addr,
@@ -54,7 +52,7 @@ func firstExistingFile(paths ...string) string {
 }
 
 func serveSwaggerUI(w http.ResponseWriter, r *http.Request) {
-	path := firstExistingFile("docs/swagger-ui.html", "backend/docs/swagger-ui.html")
+	path := firstExistingFile("docs/swagger-ui.html")
 	if _, err := os.Stat(path); err != nil {
 		http.Error(w, "swagger UI not found; import docs/openapi.yaml into Swagger Editor", http.StatusNotFound)
 		return

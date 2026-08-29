@@ -440,6 +440,21 @@ func (s *Scheduler) computeVolumeShockers(ctx context.Context, tradeDate string)
 	log.Printf("Volume shockers: %d symbols for %s", len(dayEntries), tradeDate)
 }
 
+func (s *Scheduler) RunHotIngestNow(ctx context.Context) int {
+	s.refreshUniverse(ctx)
+	s.refreshHotSet(ctx)
+	count := 0
+	for sym := range s.hotSet {
+		if err := s.ingestHot(ctx, sym); err != nil {
+			log.Printf("hot ingest %s: %v", sym, err)
+		} else {
+			count++
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return count
+}
+
 func DefaultSymbols() []string {
 	raw := os.Getenv("WATCH_SYMBOLS")
 	if raw == "" {

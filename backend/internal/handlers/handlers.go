@@ -6,17 +6,23 @@ import (
 	"strings"
 
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/analysis"
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/ingestion"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/models"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/parser"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/store"
 )
 
 type Handler struct {
-	store *store.Store
+	store     *store.Store
+	scheduler *ingestion.Scheduler
 }
 
 func New(s *store.Store) *Handler {
 	return &Handler{store: s}
+}
+
+func NewWithScheduler(s *store.Store, scheduler *ingestion.Scheduler) *Handler {
+	return &Handler{store: s, scheduler: scheduler}
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +103,23 @@ func (h *Handler) Report(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) IngestHot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.scheduler == nil {
+		writeError(w, http.StatusServiceUnavailable, "ingestion scheduler not available")
+		return
+	}
+
+	count := h.scheduler.RunHotIngestNow(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":          "ok",
+		"symbolsIngested": count,
+	})
 }
 
 func parseTradeTypes(raw string) []models.TradeType {

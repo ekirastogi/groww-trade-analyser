@@ -230,15 +230,25 @@
   }
 
   .tier-summary-bar {
-    @apply fixed left-0 right-0 z-40 border-t border-slate-800/80 bg-slate-900/95 backdrop-blur-xl lg:bottom-0 lg:left-72;
-    bottom: var(--mobile-tab-height);
+    @apply fixed left-0 right-0 z-40 border-t border-slate-800/80 bg-slate-900/95 backdrop-blur-xl;
     min-height: var(--tier-summary-height);
     box-shadow: none;
+    bottom: var(--mobile-tab-height);
+
+    @screen lg {
+      bottom: 0;
+      left: var(--sidebar-width, 0px);
+      transition: left 300ms ease-in-out;
+    }
   }
 
   .tier-summary-compact {
-    @apply mx-auto flex max-w-6xl items-center gap-2 overflow-x-auto px-3 text-xs sm:gap-4 sm:px-4;
+    @apply flex items-center gap-2 overflow-x-auto px-3 text-xs sm:gap-4 sm:px-4;
     min-height: var(--tier-summary-height);
+
+    @screen lg {
+      @apply mx-0 max-w-none flex-nowrap justify-between gap-4 overflow-visible px-5;
+    }
   }
 
   .tier-summary-tier {
