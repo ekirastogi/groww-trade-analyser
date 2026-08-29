@@ -26,7 +26,7 @@ import { BRAND } from '../../../constants/brand';
           >{{ BRAND.name }}</div>
           @if (showTagline && !compact) {
             <div
-              class="truncate text-[11px] font-medium uppercase tracking-[0.14em]"
+              class="truncate text-[11px] font-medium uppercase tracking-wider"
               [class.text-slate-400]="variant === 'light'"
               [class.text-slate-500]="variant === 'dark'"
             >{{ BRAND.tagline }}</div>

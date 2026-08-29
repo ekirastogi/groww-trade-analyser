@@ -6,7 +6,8 @@
   <div class="relative z-10 hidden w-1/2 flex-col justify-between border-r border-white/10 p-12 text-white lg:flex">
     <app-brand-logo [showTagline]="true" />
     <div class="max-w-md">
-      <h1 class="text-4xl font-bold leading-tight text-white">{{ brand.tagline }}</h1>
+      <h1 class="text-4xl font-bold leading-tight text-white">{{ brand.name }}</h1>
+      <p class="mt-3 text-lg text-kairo-300">{{ brand.tagline }}</p>
       <p class="mt-4 text-base leading-relaxed text-slate-300">
         {{ brand.description }}
       </p>

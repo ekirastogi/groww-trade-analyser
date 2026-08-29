@@ -50,7 +50,9 @@ export class AdminLayoutComponent implements OnInit {
   }
 
   onNavigate(): void {
-    this.closeSidebar();
+    if (this.isMobile()) {
+      this.closeSidebar();
+    }
   }
 
   async logout(): Promise<void> {

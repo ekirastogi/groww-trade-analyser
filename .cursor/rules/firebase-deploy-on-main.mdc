@@ -1,0 +1,25 @@
+---
+description: Deploy Firebase Hosting when pushing to main
+alwaysApply: true
+---
+
+# Firebase deploy on main
+
+When changes are pushed to the `main` branch, Firebase Hosting must be deployed.
+
+## CI (automatic)
+
+GitHub Actions workflow `.github/workflows/deploy-firebase.yml` runs `npm run deploy` on every push to `main`.
+
+Required repo secret: `FIREBASE_TOKEN` (generate with `firebase login:ci`).
+
+## Manual deploy
+
+```bash
+cd frontend
+npm run deploy
+```
+
+## After frontend changes
+
+If you commit and push to `main`, confirm the GitHub Actions deploy workflow succeeds unless the user asked for a local-only change.
