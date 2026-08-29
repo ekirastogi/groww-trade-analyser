@@ -1,64 +1,81 @@
 <div class="space-y-6">
   <div class="page-header">
-    <h2 class="page-title">Market Heatmap</h2>
-    <p class="page-subtitle">Your traded stocks with P&amp;L, plus live indicators when market data is available.</p>
+    <h2 class="page-title">P&amp;L Heatmap</h2>
+    <p class="page-subtitle">Tile size reflects magnitude of net P&amp;L. Green = profitable, red = loss-making.</p>
   </div>
 
   @if (!reportState.hasReport()) {
     <div class="card overflow-hidden p-8 text-center">
       <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
-      <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to populate the heatmap from your holdings.</p>
+      <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to see your profitable and loss-making stocks as a heatmap.</p>
       <a routerLink="/upload" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
     </div>
   } @else {
-    @if (!hasMarketData()) {
-      <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        Live day %, RSI, and support levels need the market data service. Your P&amp;L and win rate still show from uploaded trades.
-      </div>
-    }
+    <app-trade-type-filter />
 
-    <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-      <table class="stock-table min-w-[640px]">
-        <thead>
-          <tr>
-            <th class="w-10 text-center">#</th>
-            @for (col of heatmapColumns; track col.key) {
-              <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
-                <button
-                  type="button"
-                  class="sort-btn"
-                  [class.sort-btn-active]="tableSort.isActive(col.key)"
-                  (click)="tableSort.toggle(col.key, $event)"
-                >
-                  {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
-                </button>
-              </th>
-            }
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of rows(); track row.symbol; let i = $index) {
-            <tr>
-              <td class="text-center text-slate-400">{{ i + 1 }}</td>
-              <td class="col-name">
-                <a [routerLink]="['/stock', row.symbol]" class="font-medium text-kairo-600 hover:underline">{{ row.symbol }}</a>
-                <div class="text-xs text-slate-400">{{ row.name }}</div>
-              </td>
-              <td class="text-right font-mono" [style.color]="cellColor(row.dayChangePct)">{{ row.dayChangePct.toFixed(2) }}%</td>
-              <td class="text-right font-mono" [class.text-red-600]="row.rsi > 70" [class.text-emerald-600]="row.rsi < 30">{{ row.rsi.toFixed(1) }}</td>
-              <td class="text-right font-mono" [style.color]="cellColor(row.netPnL)">{{ fmt(row.netPnL) }}</td>
-              <td class="text-right tabular-nums">{{ row.winRate.toFixed(0) }}%</td>
-              <td class="text-right tabular-nums">{{ row.nearestSupportDist.toFixed(1) }}%</td>
-            </tr>
-          } @empty {
-            <tr>
-              <td colspan="7" class="py-12 text-center text-slate-400">
-                No stocks found. Upload a P&amp;L file or add symbols to a watchlist.
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="card border-l-4 border-l-emerald-500 p-4">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Profitable stocks</p>
+        <p class="mt-1 text-2xl font-bold text-emerald-600">{{ fmt(profitableTotal()) }}</p>
+        <p class="text-xs text-slate-400">{{ profitableTiles().length }} stocks</p>
+      </div>
+      <div class="card border-l-4 border-l-red-500 p-4">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Loss-making stocks</p>
+        <p class="mt-1 text-2xl font-bold text-red-600">{{ fmt(losingTotal()) }}</p>
+        <p class="text-xs text-slate-400">{{ losingTiles().length }} stocks</p>
+      </div>
     </div>
+
+    <section class="card overflow-hidden">
+      <div class="border-b border-slate-100 px-4 py-3">
+        <h3 class="text-sm font-semibold text-emerald-700">Profitable</h3>
+      </div>
+      @if (profitableTiles().length) {
+        <div class="heatmap-grid p-3">
+          @for (tile of profitableTiles(); track tile.symbol) {
+            <a
+              [routerLink]="['/stock', tile.symbol]"
+              class="heatmap-tile"
+              [style.background]="tile.background"
+              [style.border-color]="tile.borderColor"
+              [style.flex-grow]="tile.weight"
+              [title]="tile.name + ' · ' + fmt(tile.netPnL)"
+            >
+              <span class="heatmap-tile-symbol">{{ tile.symbol }}</span>
+              <span class="heatmap-tile-pnl">{{ fmt(tile.netPnL) }}</span>
+              <span class="heatmap-tile-meta">{{ tile.winRate | number:'1.0-0' }}% win</span>
+            </a>
+          }
+        </div>
+      } @else {
+        <p class="px-4 py-10 text-center text-sm text-slate-400">No profitable stocks for the selected trade types.</p>
+      }
+    </section>
+
+    <section class="card overflow-hidden">
+      <div class="border-b border-slate-100 px-4 py-3">
+        <h3 class="text-sm font-semibold text-red-700">Loss making</h3>
+      </div>
+      @if (losingTiles().length) {
+        <div class="heatmap-grid p-3">
+          @for (tile of losingTiles(); track tile.symbol) {
+            <a
+              [routerLink]="['/stock', tile.symbol]"
+              class="heatmap-tile"
+              [style.background]="tile.background"
+              [style.border-color]="tile.borderColor"
+              [style.flex-grow]="tile.weight"
+              [title]="tile.name + ' · ' + fmt(tile.netPnL)"
+            >
+              <span class="heatmap-tile-symbol">{{ tile.symbol }}</span>
+              <span class="heatmap-tile-pnl">{{ fmt(tile.netPnL) }}</span>
+              <span class="heatmap-tile-meta">{{ tile.winRate | number:'1.0-0' }}% win</span>
+            </a>
+          }
+        </div>
+      } @else {
+        <p class="px-4 py-10 text-center text-sm text-slate-400">No loss-making stocks for the selected trade types.</p>
+      }
+    </section>
   }
 </div>

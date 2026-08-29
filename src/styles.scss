@@ -185,4 +185,68 @@
   .stock-table tfoot td {
     @apply border-t-2 border-slate-200 bg-slate-50 px-3 py-2.5;
   }
+
+  .tier-summary-bar {
+    @apply fixed bottom-[4.5rem] left-0 right-0 z-20 border-t border-slate-800/80 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 shadow-[0_-16px_48px_rgba(15,23,42,0.35)] backdrop-blur-xl lg:bottom-0 lg:left-72;
+  }
+
+  .tier-summary-inner {
+    @apply mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .tier-summary-hero {
+    @apply min-w-0 flex-1;
+  }
+
+  .tier-summary-badge {
+    @apply inline-flex rounded-full bg-kairo-500/20 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-kairo-300;
+  }
+
+  .tier-summary-winbar {
+    @apply mt-3 h-1 overflow-hidden rounded-full bg-slate-700;
+
+    &::after {
+      content: '';
+      @apply block h-full rounded-full bg-gradient-to-r from-kairo-400 to-emerald-400;
+      width: var(--win-pct, 0%);
+      max-width: 100%;
+      transition: width 0.3s ease;
+    }
+  }
+
+  .tier-summary-metrics {
+    @apply grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-700/80 bg-slate-700/80 sm:grid-cols-4;
+  }
+
+  .tier-summary-metric {
+    @apply bg-slate-900/90 px-4 py-3;
+  }
+
+  .tier-summary-metric-label {
+    @apply block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500;
+  }
+
+  .tier-summary-metric-value {
+    @apply mt-1 block text-sm font-bold sm:text-base;
+  }
+
+  .heatmap-grid {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .heatmap-tile {
+    @apply flex min-h-[5.5rem] min-w-[7.5rem] flex-1 basis-28 flex-col justify-between rounded-xl border px-3 py-2.5 text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md;
+  }
+
+  .heatmap-tile-symbol {
+    @apply truncate text-sm font-bold tracking-tight;
+  }
+
+  .heatmap-tile-pnl {
+    @apply text-base font-bold tabular-nums sm:text-lg;
+  }
+
+  .heatmap-tile-meta {
+    @apply text-[10px] font-medium text-white/80;
+  }
 }

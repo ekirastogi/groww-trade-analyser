@@ -3,131 +3,73 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
-import { WatchlistService } from '../../services/watchlist.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { StockSummary } from '../../models/trade.models';
-import { pnlColor } from '../../utils/chart-theme';
-import { formatCurrency, formatPct } from '../../utils/format.utils';
+import { formatCurrency } from '../../utils/format.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
-import { TableSortState } from '../../utils/table-sort.utils';
+import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 
-interface HeatmapRow {
+interface HeatmapTile {
   symbol: string;
   name: string;
-  dayChangePct: number;
-  rsi: number;
   netPnL: number;
   winRate: number;
-  nearestSupportDist: number;
+  weight: number;
+  background: string;
+  borderColor: string;
 }
 
 @Component({
   selector: 'app-heatmap',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, TradeTypeFilterComponent],
   templateUrl: './heatmap.component.html',
 })
 export class HeatmapComponent {
   private stockSvc = inject(StockFirestoreService);
-  private watchlistSvc = inject(WatchlistService);
   readonly reportState = inject(ReportStateService);
 
   private marketStocks = toSignal(this.stockSvc.watchAllStocks(), { initialValue: [] });
-  private watchlists = toSignal(this.watchlistSvc.watchAll(), { initialValue: [] });
 
-  readonly tableSort = new TableSortState('netPnL');
+  readonly fmt = formatCurrency;
 
-  readonly heatmapColumns = [
-    { key: 'symbol', label: 'Symbol', align: 'left' as const },
-    { key: 'dayChangePct', label: 'Day %', align: 'right' as const },
-    { key: 'rsi', label: 'RSI', align: 'right' as const },
-    { key: 'netPnL', label: 'My Net P&L', align: 'right' as const },
-    { key: 'winRate', label: 'Win Rate', align: 'right' as const },
-    { key: 'nearestSupportDist', label: 'Dist to S1', align: 'right' as const },
-  ];
+  private stockRows = computed((): StockSummary[] => {
+    return this.reportState.analysis()?.stocks ?? [];
+  });
 
-  rows = computed((): HeatmapRow[] => {
-    const marketMap = new Map(this.marketStocks().map((stock) => [stock.symbol.toUpperCase(), stock]));
-    const watchlists = this.watchlists();
-    const analysisStocks = this.reportState.analysis()?.stocks ?? [];
+  profitableTiles = computed(() => this.buildTiles(this.stockRows().filter((s) => s.netPnL > 0), true));
+  losingTiles = computed(() => this.buildTiles(this.stockRows().filter((s) => s.netPnL < 0), false));
 
-    const watchlistSymbols = new Set<string>();
-    watchlists.forEach((watchlist) =>
-      watchlist.stockSymbols.forEach((symbol) => watchlistSymbols.add(symbol.toUpperCase()))
-    );
+  profitableTotal = computed(() => this.profitableTiles().reduce((sum, t) => sum + t.netPnL, 0));
+  losingTotal = computed(() => this.losingTiles().reduce((sum, t) => sum + t.netPnL, 0));
 
-    let stocksToShow: StockSummary[] = analysisStocks;
-    if (watchlistSymbols.size > 0 && analysisStocks.length) {
-      stocksToShow = analysisStocks.filter((stock) => {
-        const symbol = this.stockSymbol(stock).toUpperCase();
-        return watchlistSymbols.has(symbol);
-      });
-    }
+  hasMarketData = computed(() => this.marketStocks().length > 0);
 
-    if (!stocksToShow.length && watchlistSymbols.size) {
-      stocksToShow = [...watchlistSymbols].map((symbol) => ({
-        stockName: symbol,
-        isin: symbol,
-        symbol,
-        quantity: 0,
-        avgBuyPrice: 0,
-        buyValue: 0,
-        avgSellPrice: 0,
-        sellValue: 0,
-        realisedPnL: 0,
-        realisedPnLPct: 0,
-        tradeCount: 0,
-        allocatedCharges: 0,
-        netPnL: 0,
-      }));
-    }
+  private buildTiles(stocks: StockSummary[], positive: boolean): HeatmapTile[] {
+    if (!stocks.length) return [];
 
-    return this.tableSort.sort(
-      stocksToShow.map((stock): HeatmapRow => {
-        const symbol = this.stockSymbol(stock);
-        const market = marketMap.get(symbol.toUpperCase());
-        const support = market?.supportLevels?.[0] ?? market?.ltp ?? 0;
-        const ltp = market?.ltp ?? 0;
-        const dist = ltp ? (Math.abs(ltp - support) / ltp) * 100 : 0;
+    const magnitudes = stocks.map((s) => Math.abs(s.netPnL));
+    const max = Math.max(...magnitudes, 1);
+
+    return stocks
+      .map((stock) => {
+        const symbol = stock.symbol || normalizeSymbol(stock.stockName);
+        const magnitude = Math.abs(stock.netPnL);
+        const intensity = 0.28 + (magnitude / max) * 0.62;
+        const weight = Math.max(1, Math.round((magnitude / max) * 8));
 
         return {
           symbol,
           name: stock.stockName,
-          dayChangePct: market?.changePct ?? 0,
-          rsi: market?.indicators?.rsi ?? 50,
           netPnL: stock.netPnL,
           winRate: stock.winRate ?? 0,
-          nearestSupportDist: dist,
+          weight,
+          background: positive
+            ? `rgba(16, 185, 129, ${intensity})`
+            : `rgba(239, 68, 68, ${intensity})`,
+          borderColor: positive ? 'rgba(5, 150, 105, 0.35)' : 'rgba(220, 38, 38, 0.35)',
         };
-      }),
-      (row, col) => {
-        switch (col) {
-          case 'symbol':
-            return row.symbol.toLowerCase();
-          case 'dayChangePct':
-            return row.dayChangePct;
-          case 'rsi':
-            return row.rsi;
-          case 'netPnL':
-            return row.netPnL;
-          case 'winRate':
-            return row.winRate;
-          case 'nearestSupportDist':
-            return row.nearestSupportDist;
-          default:
-            return 0;
-        }
-      }
-    );
-  });
-
-  hasMarketData = computed(() => this.marketStocks().length > 0);
-
-  fmt = formatCurrency;
-  fmtPct = formatPct;
-  cellColor = pnlColor;
-
-  private stockSymbol(stock: StockSummary): string {
-    return stock.symbol || normalizeSymbol(stock.stockName);
+      })
+      .sort((a, b) => b.netPnL - a.netPnL);
   }
 }

@@ -1,4 +1,4 @@
-<div class="space-y-6 pb-32 lg:pb-6">
+<div class="space-y-6 pb-36 lg:pb-28">
   <div class="page-header flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 class="page-title">Watchlists</h2>
@@ -40,14 +40,13 @@
     } @else if (!autoWatchlists().length) {
       <p class="text-center text-slate-500">No watchlists yet. Upload a P&amp;L file to generate them.</p>
     } @else {
-      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
-        <p class="text-xs text-slate-500">
-          @if (tierMode() === 'cumulative') {
-            Cumulative tiers include all stocks up to each level.
-          } @else {
-            Exclusive bands — no stock repeats across tiers.
-          }
-        </p>
+      <app-trade-type-filter />
+
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-slate-800">{{ tierModeLabel() }}</p>
+          <p class="text-xs text-slate-500">{{ tierModeDescription() }}</p>
+        </div>
         <div class="segmented-control w-full max-w-xs sm:w-auto">
           <button
             type="button"
@@ -63,7 +62,7 @@
             [class.segment-item-active]="tierMode() === 'band'"
             (click)="setTierMode('band')"
           >
-            Bands
+            Exclusive bands
           </button>
         </div>
       </div>
@@ -91,7 +90,7 @@
           </div>
 
           <div class="overflow-x-auto">
-            <table class="stock-table min-w-[720px]">
+            <table class="stock-table min-w-[520px]">
               <thead>
                 <tr>
                   <th class="w-10 text-center">#</th>
@@ -107,35 +106,87 @@
                       </button>
                     </th>
                   }
+                  <th class="w-8"></th>
                 </tr>
               </thead>
               <tbody>
                 @for (stock of tierStocks(); track stock.isin || stock.stockName; let i = $index) {
-                  <tr>
+                  <tr
+                    class="cursor-pointer transition"
+                    [ngClass]="{ 'bg-kairo-50': isStockExpanded(stock) }"
+                    (click)="toggleStockExpand(stock)"
+                  >
                     <td class="text-center tabular-nums text-slate-400">{{ i + 1 }}</td>
                     @for (col of tierStockColumns; track col.key) {
                       <td [class]="col.key === 'stockName' ? 'col-name' : tierStockCellClass(col.key, stock)">
                         @switch (col.key) {
                           @case ('stockName') {
-                            <a [routerLink]="['/stock', stockSymbol(stock)]" class="font-medium text-kairo-600 hover:underline">
-                              {{ stock.stockName }}
-                            </a>
+                            <span class="block truncate font-semibold text-slate-900" [title]="stock.stockName">{{ stock.stockName }}</span>
                             <div class="text-xs text-slate-400">{{ stockSymbol(stock) }}</div>
                           }
-                          @case ('tradeCount') { {{ stock.tradeCount }} }
-                          @case ('buyValue') { {{ formatCurrency(stock.buyValue) }} }
                           @case ('realisedPnL') { {{ formatCurrency(stock.realisedPnL) }} }
                           @case ('allocatedCharges') { {{ formatCurrency(stock.allocatedCharges) }} }
                           @case ('netPnL') { {{ formatCurrency(stock.netPnL) }} }
                           @case ('winRate') { {{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }} }
-                          @case ('ltp') { {{ stockPrice(stockSymbol(stock)) }} }
                         }
                       </td>
                     }
+                    <td class="text-slate-400">
+                      <svg class="h-4 w-4 transition" [class.rotate-180]="isStockExpanded(stock)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </td>
                   </tr>
+
+                  @if (isStockExpanded(stock)) {
+                    <tr>
+                      <td [attr.colspan]="tierStockColumns.length + 2" class="!border-t-0 bg-slate-50 p-0">
+                        <div class="border-t-2 border-kairo-500 px-4 py-4">
+                          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <a
+                              [routerLink]="['/stock', stockSymbol(stock)]"
+                              class="text-sm font-semibold text-kairo-600 hover:underline"
+                              (click)="$event.stopPropagation()"
+                            >
+                              View {{ stock.stockName }} details →
+                            </a>
+                            <span class="text-xs text-slate-400">{{ stock.isin || '—' }}</span>
+                          </div>
+                          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trades</div>
+                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.tradeCount }}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Quantity</div>
+                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.quantity | number }}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Buy value</div>
+                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ formatCurrency(stock.buyValue) }}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sell value</div>
+                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ formatCurrency(stock.sellValue) }}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L %</div>
+                              <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="pnlClass(stock.realisedPnL)">
+                                {{ stock.realisedPnLPct != null ? (stock.realisedPnLPct * 100 | number:'1.1-1') + '%' : '—' }}
+                              </div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">LTP</div>
+                              <div class="mt-0.5 text-sm font-bold text-slate-700">{{ stockPrice(stockSymbol(stock)) }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  }
                 } @empty {
                   <tr>
-                    <td colspan="9" class="py-10 text-center text-sm text-slate-400">
+                    <td [attr.colspan]="tierStockColumns.length + 2" class="py-10 text-center text-sm text-slate-400">
                       No stocks in this tier yet.
                     </td>
                   </tr>
@@ -146,21 +197,36 @@
         }
       </div>
 
-      @if (tierSummary()) {
-        <div class="fixed bottom-[4.5rem] left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur-md lg:bottom-0 lg:left-72">
-          <div class="mx-auto max-w-6xl">
-            <div class="mb-2 flex items-center justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Tier summary</p>
-              <p class="truncate text-xs text-slate-400">{{ activeAutoTierMeta()?.fullLabel }}</p>
+      @if (tierSummary(); as summary) {
+        <div class="tier-summary-bar">
+          <div class="tier-summary-inner">
+            <div class="tier-summary-hero">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="tier-summary-badge">{{ tierModeLabel() }}</span>
+                <span class="text-xs text-slate-400">{{ activeAutoTierMeta()?.fullLabel }}</span>
+              </div>
+              <div class="mt-1 flex flex-wrap items-end gap-3">
+                <div>
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Net P&amp;L</p>
+                  <p class="text-2xl font-bold tabular-nums sm:text-3xl" [class]="pnlClass(summary.netPnL)">
+                    {{ formatCurrency(summary.netPnL) }}
+                  </p>
+                </div>
+                <div class="mb-1 hidden h-8 w-px bg-slate-700/60 sm:block"></div>
+                <div class="mb-1">
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Win rate</p>
+                  <p class="text-lg font-bold tabular-nums text-white">{{ summary.winRate.toFixed(1) }}%</p>
+                  <p class="text-[10px] text-slate-400">{{ summary.winningTrades }}W · {{ summary.losingTrades }}L</p>
+                </div>
+              </div>
+              <div class="tier-summary-winbar" [style.--win-pct]="summary.winRate + '%'"></div>
             </div>
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+
+            <div class="tier-summary-metrics">
               @for (stat of tierSummaryStats(); track stat.label) {
-                <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-slate-500">{{ stat.label }}</div>
-                  <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="stat.cls">{{ stat.value }}</div>
-                  @if (stat.sub) {
-                    <div class="text-[10px] text-slate-400">{{ stat.sub }}</div>
-                  }
+                <div class="tier-summary-metric">
+                  <span class="tier-summary-metric-label">{{ stat.label }}</span>
+                  <span class="tier-summary-metric-value tabular-nums" [class]="stat.cls">{{ stat.value }}</span>
                 </div>
               }
             </div>

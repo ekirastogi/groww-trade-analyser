@@ -21,6 +21,7 @@ import {
 } from '../../utils/pnl-watchlist.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
+import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 
 type WatchlistTab = 'profitable' | 'losing' | 'custom';
 
@@ -47,7 +48,7 @@ interface AutoTierTab {
 @Component({
   selector: 'app-watchlists',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent],
   templateUrl: './watchlists.component.html',
 })
 export class WatchlistsComponent {
@@ -69,6 +70,7 @@ export class WatchlistsComponent {
   tierMode = signal<PnlTierMode>(loadPnlTierMode());
   selectedAutoTierId = signal<string | null>(null);
   selectedCustomWatchlistId = signal<string | null>(null);
+  expandedStockKey = signal<string | null>(null);
   newName = '';
   newSymbol = '';
   error = signal<string | null>(null);
@@ -79,13 +81,10 @@ export class WatchlistsComponent {
 
   readonly tierStockColumns = [
     { key: 'stockName', label: 'Stock', align: 'left' as const },
-    { key: 'tradeCount', label: 'Trades', align: 'right' as const },
-    { key: 'buyValue', label: 'Buy Value', align: 'right' as const },
     { key: 'realisedPnL', label: 'P&L', align: 'right' as const },
     { key: 'allocatedCharges', label: 'Charges', align: 'right' as const },
     { key: 'netPnL', label: 'Net P&L', align: 'right' as const },
     { key: 'winRate', label: 'Win Rate', align: 'right' as const },
-    { key: 'ltp', label: 'LTP', align: 'right' as const },
   ];
 
   isPnlTab = computed(() => this.activeTab() === 'profitable' || this.activeTab() === 'losing');
@@ -223,19 +222,18 @@ export class WatchlistsComponent {
     const summary = this.tierSummary();
     if (!summary) return [];
     return [
-      { label: 'Stocks', value: String(summary.stockCount), cls: 'text-slate-900' },
-      { label: 'Trades', value: String(summary.tradeCount), cls: 'text-slate-900' },
       { label: 'Realised P&L', value: formatCurrency(summary.realisedPnL), cls: pnlClass(summary.realisedPnL) },
-      { label: 'Charges', value: formatCurrency(summary.allocatedCharges), cls: 'text-red-600' },
-      { label: 'Net P&L', value: formatCurrency(summary.netPnL), cls: pnlClass(summary.netPnL) },
-      {
-        label: 'Win Rate',
-        value: `${summary.winRate.toFixed(1)}%`,
-        cls: 'text-slate-900',
-        sub: `${summary.winningTrades}W / ${summary.losingTrades}L`,
-      },
+      { label: 'Charges', value: formatCurrency(summary.allocatedCharges), cls: 'text-red-500' },
+      { label: 'Trades', value: String(summary.tradeCount), cls: 'text-white' },
+      { label: 'Stocks', value: String(summary.stockCount), cls: 'text-white' },
     ];
   });
+
+  tierModeDescription = computed(() =>
+    this.tierMode() === 'cumulative'
+      ? 'Each tier includes every stock up to that P&L level.'
+      : 'Each stock appears in exactly one band — no repeats across tiers.'
+  );
 
   setTab(tab: WatchlistTab): void {
     this.activeTab.set(tab);
@@ -250,6 +248,25 @@ export class WatchlistsComponent {
 
   selectAutoTier(id: string): void {
     this.selectedAutoTierId.set(id);
+    this.expandedStockKey.set(null);
+  }
+
+  stockRowKey(stock: StockSummary): string {
+    return stock.isin || stock.stockName;
+  }
+
+  isStockExpanded(stock: StockSummary): boolean {
+    return this.expandedStockKey() === this.stockRowKey(stock);
+  }
+
+  toggleStockExpand(stock: StockSummary, event?: Event): void {
+    event?.stopPropagation();
+    const key = this.stockRowKey(stock);
+    this.expandedStockKey.set(this.expandedStockKey() === key ? null : key);
+  }
+
+  tierModeLabel(): string {
+    return this.tierMode() === 'cumulative' ? 'Cumulative' : 'Exclusive bands';
   }
 
   selectCustomWatchlist(id: string): void {
@@ -325,10 +342,6 @@ export class WatchlistsComponent {
     switch (col) {
       case 'stockName':
         return stock.stockName.toLowerCase();
-      case 'tradeCount':
-        return stock.tradeCount;
-      case 'buyValue':
-        return stock.buyValue;
       case 'realisedPnL':
         return stock.realisedPnL;
       case 'allocatedCharges':
@@ -337,15 +350,9 @@ export class WatchlistsComponent {
         return stock.netPnL;
       case 'winRate':
         return stock.winRate ?? -1;
-      case 'ltp':
-        return this.stockLtp(this.stockSymbol(stock));
       default:
         return 0;
     }
-  }
-
-  private stockLtp(symbol: string): number {
-    return this.stocks().find((x) => x.symbol === symbol)?.ltp ?? -1;
   }
 
   stockSymbol(stock: StockSummary): string {
