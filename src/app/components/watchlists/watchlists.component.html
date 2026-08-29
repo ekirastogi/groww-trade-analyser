@@ -94,6 +94,7 @@
             <table class="stock-table min-w-[720px]">
               <thead>
                 <tr>
+                  <th class="w-10 text-center">#</th>
                   <th class="text-left">Stock</th>
                   <th class="text-right">Trades</th>
                   <th class="text-right">Buy Value</th>
@@ -105,8 +106,9 @@
                 </tr>
               </thead>
               <tbody>
-                @for (stock of tierStocks(); track stock.isin || stock.stockName) {
+                @for (stock of tierStocks(); track stock.isin || stock.stockName; let i = $index) {
                   <tr>
+                    <td class="text-center tabular-nums text-slate-400">{{ i + 1 }}</td>
                     <td class="col-name">
                       <a [routerLink]="['/stock', stockSymbol(stock)]" class="font-medium text-kairo-600 hover:underline">
                         {{ stock.stockName }}
@@ -123,7 +125,7 @@
                   </tr>
                 } @empty {
                   <tr>
-                    <td colspan="8" class="py-10 text-center text-sm text-slate-400">
+                    <td colspan="9" class="py-10 text-center text-sm text-slate-400">
                       No stocks in this tier yet.
                     </td>
                   </tr>
