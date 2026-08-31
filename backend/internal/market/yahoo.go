@@ -22,9 +22,10 @@ const (
 )
 
 var (
+	yahooSparkURL     = "https://query1.finance.yahoo.com/v7/finance/spark"
 	yahooQuoteURL     = "https://query1.finance.yahoo.com/v7/finance/quote"
 	yahooCrumbURL     = "https://query2.finance.yahoo.com/v1/test/getcrumb"
-	yahooBootstrapURL = "https://fc.yahoo.com"
+	yahooBootstrapURL = "https://finance.yahoo.com/"
 )
 
 // YahooProvider fetches delayed NSE/BSE quotes via Yahoo Finance (unofficial API).
@@ -104,10 +105,21 @@ func (p *YahooProvider) FetchRegistryQuotesBatch(ctx context.Context, entries []
 
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
+		out, err := p.fetchSparkQuotes(ctx, yahooSyms, backMap)
+		if err == nil && len(out) > 0 {
+			return out, nil
+		}
+		if err != nil {
+			lastErr = err
+		}
+
 		if err := p.ensureAuth(ctx); err != nil {
+			if lastErr != nil {
+				return nil, lastErr
+			}
 			return nil, err
 		}
-		out, err := p.fetchQuotes(ctx, yahooSyms, backMap)
+		out, err = p.fetchV7Quotes(ctx, yahooSyms, backMap)
 		if err == nil {
 			return out, nil
 		}
@@ -121,7 +133,89 @@ func (p *YahooProvider) FetchRegistryQuotesBatch(ctx context.Context, entries []
 	return nil, lastErr
 }
 
-func (p *YahooProvider) fetchQuotes(ctx context.Context, yahooSyms []string, backMap map[string]string) (map[string]*RegistryMarketSnapshot, error) {
+func (p *YahooProvider) fetchSparkQuotes(ctx context.Context, yahooSyms []string, backMap map[string]string) (map[string]*RegistryMarketSnapshot, error) {
+	q := url.Values{}
+	q.Set("symbols", strings.Join(yahooSyms, ","))
+	q.Set("range", "1d")
+	q.Set("interval", "1d")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, yahooSparkURL+"?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	p.setBrowserHeaders(req)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("yahoo spark HTTP %d: %s", resp.StatusCode, yahooBodyPreview(body))
+	}
+	if len(body) == 0 {
+		return nil, fmt.Errorf("yahoo spark empty response")
+	}
+
+	var payload struct {
+		Spark struct {
+			Result []struct {
+				Symbol   string `json:"symbol"`
+				Response []struct {
+					Meta map[string]any `json:"meta"`
+				} `json:"response"`
+			} `json:"result"`
+		} `json:"spark"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("yahoo spark decode: %w (%s)", err, yahooBodyPreview(body))
+	}
+
+	out := make(map[string]*RegistryMarketSnapshot, len(payload.Spark.Result))
+	for _, row := range payload.Spark.Result {
+		if len(row.Response) == 0 || row.Response[0].Meta == nil {
+			continue
+		}
+		meta := row.Response[0].Meta
+		ySym, _ := meta["symbol"].(string)
+		if ySym == "" {
+			ySym = row.Symbol
+		}
+		sym, exchange := FromYahooSymbol(ySym)
+		if mapped, ok := backMap[strings.ToUpper(ySym)]; ok {
+			sym = mapped
+		}
+		name, _ := meta["shortName"].(string)
+		if name == "" {
+			name, _ = meta["longName"].(string)
+		}
+		ltp := yahooFloat(meta["regularMarketPrice"])
+		if ltp == 0 {
+			ltp = yahooFloat(meta["regularMarketPreviousClose"])
+		}
+		if ltp <= 0 {
+			continue
+		}
+		out[sym] = &RegistryMarketSnapshot{
+			Symbol:    sym,
+			Name:      name,
+			LTP:       ltp,
+			MarketCap: yahooFloat(meta["marketCap"]),
+			PE:        yahooFloat(meta["trailingPE"]),
+			Exchange:  exchange,
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("yahoo spark: no quotes returned")
+	}
+	return out, nil
+}
+
+func (p *YahooProvider) fetchV7Quotes(ctx context.Context, yahooSyms []string, backMap map[string]string) (map[string]*RegistryMarketSnapshot, error) {
 	q := url.Values{}
 	q.Set("symbols", strings.Join(yahooSyms, ","))
 	q.Set("crumb", p.crumbValue())
@@ -137,9 +231,15 @@ func (p *YahooProvider) fetchQuotes(ctx context.Context, yahooSyms []string, bac
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("yahoo quote HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("yahoo quote HTTP %d: %s", resp.StatusCode, yahooBodyPreview(body))
+	}
+	if len(body) == 0 {
+		return nil, fmt.Errorf("yahoo quote empty response")
 	}
 
 	var payload struct {
@@ -148,7 +248,7 @@ func (p *YahooProvider) fetchQuotes(ctx context.Context, yahooSyms []string, bac
 		} `json:"quoteResponse"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("yahoo quote decode: %w", err)
+		return nil, fmt.Errorf("yahoo quote decode: %w (%s)", err, yahooBodyPreview(body))
 	}
 
 	out := make(map[string]*RegistryMarketSnapshot, len(payload.QuoteResponse.Result))
@@ -222,21 +322,24 @@ func (p *YahooProvider) bootstrapLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	p.setBrowserHeaders(req)
+	p.setCrumbHeaders(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 512))
+	if err != nil {
+		return err
+	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("yahoo crumb HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("yahoo crumb HTTP %d: %s", resp.StatusCode, yahooBodyPreview(body))
 	}
 
 	crumb := strings.TrimSpace(string(body))
-	if crumb == "" {
-		return fmt.Errorf("yahoo crumb empty")
+	if crumb == "" || strings.HasPrefix(crumb, "{") {
+		return fmt.Errorf("yahoo crumb invalid: %s", yahooBodyPreview(body))
 	}
 	p.crumb = crumb
 	p.crumbAt = time.Now()
@@ -244,30 +347,21 @@ func (p *YahooProvider) bootstrapLocked(ctx context.Context) error {
 }
 
 func (p *YahooProvider) bootstrapCookies(ctx context.Context) error {
-	endpoints := []string{yahooBootstrapURL, yahooFinanceReferer}
-	var lastErr error
-	for _, endpoint := range endpoints {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return err
-		}
-		p.setBrowserHeaders(req)
-		resp, err := p.client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-		if resp.StatusCode < 400 {
-			return nil
-		}
-		lastErr = fmt.Errorf("yahoo bootstrap HTTP %d from %s", resp.StatusCode, endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, yahooBootstrapURL, nil)
+	if err != nil {
+		return err
 	}
-	if lastErr != nil {
-		return lastErr
+	p.setBrowserHeaders(req)
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("yahoo bootstrap failed")
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("yahoo bootstrap HTTP %d from %s", resp.StatusCode, yahooBootstrapURL)
+	}
+	return nil
 }
 
 func (p *YahooProvider) loadCookiesFromEnv() error {
@@ -306,6 +400,21 @@ func (p *YahooProvider) setBrowserHeaders(req *http.Request) {
 	req.Header.Set("Accept", "application/json,text/plain,*/*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Referer", yahooFinanceReferer)
+}
+
+func (p *YahooProvider) setCrumbHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", yahooUserAgent())
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Referer", yahooFinanceReferer)
+}
+
+func yahooBodyPreview(body []byte) string {
+	s := strings.TrimSpace(string(body))
+	if len(s) > 180 {
+		return s[:180] + "..."
+	}
+	return s
 }
 
 func yahooAuthRetryable(err error) bool {
