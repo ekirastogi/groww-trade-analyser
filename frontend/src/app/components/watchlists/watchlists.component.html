@@ -141,7 +141,6 @@
                       @case ('realisedPnL') { {{ formatCurrency(stock.realisedPnL) }} }
                       @case ('allocatedCharges') { {{ formatCurrency(stock.allocatedCharges) }} }
                       @case ('netPnL') { {{ formatCurrency(stock.netPnL) }} }
-                      @case ('winRate') { {{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }} }
                     }
                   </td>
                 }
@@ -176,8 +175,8 @@
                           <div class="mt-0.5 text-sm font-bold tabular-nums text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</div>
                         </div>
                         <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Win rate</div>
-                          <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }}</div>
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Net P&amp;L</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="pnlClass(stock.netPnL)">{{ formatCurrency(stock.netPnL) }}</div>
                         </div>
                       </div>
                       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -235,16 +234,16 @@
             {{ activeViewLabel() }}
           </span>
           <span class="tier-summary-kpi">
-            <span class="tier-summary-kpi-label">Net</span>
-            <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.netPnL)">{{ formatCurrency(summary.netPnL) }}</span>
-          </span>
-          <span class="tier-summary-kpi hidden sm:inline-flex">
             <span class="tier-summary-kpi-label">P&amp;L</span>
             <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.realisedPnL)">{{ formatCurrency(summary.realisedPnL) }}</span>
           </span>
-          <span class="tier-summary-kpi hidden md:inline-flex">
+          <span class="tier-summary-kpi hidden sm:inline-flex">
             <span class="tier-summary-kpi-label">Charges</span>
             <span class="tier-summary-kpi-value tabular-nums text-red-400">{{ formatCurrency(summary.allocatedCharges) }}</span>
+          </span>
+          <span class="tier-summary-kpi">
+            <span class="tier-summary-kpi-label">Net</span>
+            <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.netPnL)">{{ formatCurrency(summary.netPnL) }}</span>
           </span>
           <span class="tier-summary-kpi hidden lg:inline-flex">
             <span class="tier-summary-kpi-label">Stocks</span>
@@ -253,11 +252,6 @@
           <span class="tier-summary-kpi hidden lg:inline-flex">
             <span class="tier-summary-kpi-label">Trades</span>
             <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.tradeCount }}</span>
-          </span>
-          <span class="tier-summary-kpi hidden sm:inline-flex">
-            <span class="tier-summary-kpi-label">Win</span>
-            <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.winRate.toFixed(1) }}%</span>
-            <span class="tier-summary-kpi-sub">{{ summary.winningTrades }}W/{{ summary.losingTrades }}L</span>
           </span>
         </div>
       </div>

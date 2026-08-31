@@ -89,6 +89,9 @@ export interface Report {
   stockSummary: StockSummary[];
   dateRange: DateRange;
   tradeTypes: TradeType[];
+  /** Authoritative trade count from DB (may exceed trades.length while trades load lazily). */
+  totalTradeCount?: number;
+  tradesLoaded?: boolean;
 }
 
 export interface ReportHistoryEntry {

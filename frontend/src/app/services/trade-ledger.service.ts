@@ -425,16 +425,75 @@ export class TradeLedgerService {
     return all;
   }
 
-  async buildReportFromClient(clientCode: string): Promise<Report | null> {
-    const trades = await this.getAllTrades(clientCode);
-    if (!trades.length) return null;
+  async countTrades(clientCode: string): Promise<number> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return 0;
+    const { count, error } = await this.supabase.client
+      .from('trades')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', uid)
+      .eq('client_code', clientCode);
+    if (error) throw error;
+    return count ?? 0;
+  }
 
+  async getTradesForSymbol(clientCode: string, symbol: string): Promise<StoredTrade[]> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+    const sym = normalizeSymbol(symbol);
+
+    const pageSize = 1000;
+    const all: StoredTrade[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.supabase.client
+        .from('trades')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('client_code', clientCode)
+        .eq('symbol', sym)
+        .order('sell_date', { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data?.length) break;
+      all.push(...data.map((row) => tradeFromRow(row)));
+      if (data.length < pageSize) break;
+    }
+    return all;
+  }
+
+  mergeTradesIntoReport(report: Report, trades: StoredTrade[]): Report {
+    const merged = this.buildReportFromStoredData(
+      trades,
+      report.summary.clientCode,
+      report.summary.clientName,
+      undefined,
+      undefined,
+      { totalTradeCount: trades.length, tradesLoaded: true }
+    );
+    return {
+      ...merged,
+      charges: report.charges,
+      summary: {
+        ...report.summary,
+        realisedPnL: merged.summary.realisedPnL,
+      },
+    };
+  }
+
+  async buildReportFromClient(
+    clientCode: string,
+    options: { loadTrades?: boolean } = {}
+  ): Promise<Report | null> {
     const uid = await this.auth.getDataUserId();
     if (!uid) return null;
 
     const clients = await this.clientSvc.listClients();
     const client = clients.find((c) => c.clientCode === clientCode);
     const clientName = client?.clientName ?? clientCode;
+    const stockProfiles = await this.getStockProfiles(clientCode);
+    const totalTradeCount = await this.countTrades(clientCode);
+
+    if (!stockProfiles.length && totalTradeCount === 0) return null;
 
     const { data: lastUploadRow } = await this.supabase.client
       .from('uploads')
@@ -445,7 +504,6 @@ export class TradeLedgerService {
       .limit(1)
       .maybeSingle();
     const lastUpload = lastUploadRow ? rowToCamel<UploadRecord>(lastUploadRow) : undefined;
-    const stockProfiles = await this.getStockProfiles(clientCode);
 
     if (stockProfiles.length) {
       await this.registry.syncSymbols(
@@ -458,13 +516,29 @@ export class TradeLedgerService {
       );
     }
 
-    return this.buildReportFromStoredData(
+    const loadTrades = options.loadTrades !== false;
+    const trades = loadTrades ? await this.getAllTrades(clientCode) : [];
+
+    const report = this.buildReportFromStoredData(
       trades,
       clientCode,
       clientName,
       lastUpload,
-      stockProfiles
+      stockProfiles,
+      {
+        totalTradeCount: totalTradeCount || client?.tradeCount || trades.length,
+        tradesLoaded: loadTrades && trades.length > 0,
+      }
     );
+
+    if (loadTrades && trades.length !== totalTradeCount && totalTradeCount > 0) {
+      console.warn(
+        `Trade count mismatch for ${clientCode}: fetched ${trades.length}, expected ${totalTradeCount}`
+      );
+      report.totalTradeCount = totalTradeCount;
+    }
+
+    return report;
   }
 
   async getStockProfiles(clientCode: string): Promise<StockProfile[]> {
@@ -539,7 +613,11 @@ export class TradeLedgerService {
       clientCode,
       clientName,
       uploadMeta,
-      profiles
+      profiles,
+      {
+        totalTradeCount: trades.length,
+        tradesLoaded: true,
+      }
     );
   }
 
@@ -548,9 +626,13 @@ export class TradeLedgerService {
     clientCode: string,
     clientName: string,
     uploadMeta: UploadRecord | Omit<UploadRecord, 'id'> | undefined,
-    stockProfiles: StockProfile[]
+    stockProfiles?: StockProfile[],
+    meta?: { totalTradeCount?: number; tradesLoaded?: boolean }
   ): Report {
-    const stockSummary = stockProfiles.map((profile) => this.profileToStockSummary(profile));
+    const profiles =
+      stockProfiles ??
+      (trades.length ? this.buildStockProfilesFromTrades(trades, clientCode, clientName) : []);
+    const stockSummary = profiles.map((profile) => this.profileToStockSummary(profile));
     const plainTrades: Trade[] = trades.map(
       ({
         stockName,
@@ -590,8 +672,15 @@ export class TradeLedgerService {
     const typeSet = new Set<TradeType>(['all']);
     plainTrades.forEach((t) => typeSet.add(t.tradeType));
     const dates = plainTrades.map((t) => t.sellDate).sort();
-    const allocatedCharges = trades.reduce((sum, trade) => sum + trade.allocatedCharges, 0);
-    const realisedPnL = plainTrades.reduce((sum, trade) => sum + trade.realisedPnL, 0);
+    const allocatedCharges =
+      trades.length > 0
+        ? trades.reduce((sum, trade) => sum + trade.allocatedCharges, 0)
+        : profiles.reduce((sum, profile) => sum + profile.allocatedCharges, 0);
+    const realisedPnL =
+      plainTrades.length > 0
+        ? plainTrades.reduce((sum, trade) => sum + trade.realisedPnL, 0)
+        : profiles.reduce((sum, profile) => sum + profile.realisedPnL, 0);
+    const totalTradeCount = meta?.totalTradeCount ?? plainTrades.length;
 
     return {
       summary: {
@@ -607,10 +696,15 @@ export class TradeLedgerService {
       },
       trades: plainTrades,
       stockSummary,
-      dateRange: { min: dates[0] ?? '', max: dates[dates.length - 1] ?? '' },
+      dateRange: {
+        min: dates[0] ?? '',
+        max: dates[dates.length - 1] ?? '',
+      },
       tradeTypes: ['all', 'intraday', 'delivery', 'same_day', 'mtf', 'fno'].filter((t) =>
         typeSet.has(t as TradeType)
       ) as TradeType[],
+      totalTradeCount,
+      tradesLoaded: meta?.tradesLoaded ?? plainTrades.length > 0,
     };
   }
 

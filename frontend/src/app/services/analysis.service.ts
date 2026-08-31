@@ -12,19 +12,31 @@ import {
 @Injectable({ providedIn: 'root' })
 export class AnalysisService {
   analyze(report: Report, opts: AnalysisOptions = {}): AnalysisResult {
-    const reportTotalSell = report.trades.reduce((s, t) => s + t.sellValue, 0);
+    const reportTotalSell =
+      report.trades.length > 0
+        ? report.trades.reduce((s, t) => s + t.sellValue, 0)
+        : report.stockSummary.reduce((s, stock) => s + stock.sellValue, 0);
     const chargeRatio = reportTotalSell > 0 && report.charges.total > 0
       ? report.charges.total / reportTotalSell
       : 0;
 
     const trades = this.filterTrades(report.trades, opts);
+    const stocks =
+      report.trades.length > 0
+        ? this.aggregateByStock(trades, chargeRatio)
+        : this.filterStockSummary(report.stockSummary, opts);
+
+    const summary =
+      report.trades.length > 0
+        ? this.buildSummary(trades, chargeRatio)
+        : this.buildSummaryFromStocks(stocks, chargeRatio);
 
     return {
-      summary: this.buildSummary(trades, chargeRatio),
-      daily: this.aggregateByPeriod(trades, chargeRatio, 'daily'),
-      weekly: this.aggregateByPeriod(trades, chargeRatio, 'weekly'),
-      monthly: this.aggregateByPeriod(trades, chargeRatio, 'monthly'),
-      stocks: this.aggregateByStock(trades, chargeRatio),
+      summary,
+      daily: report.trades.length > 0 ? this.aggregateByPeriod(trades, chargeRatio, 'daily') : [],
+      weekly: report.trades.length > 0 ? this.aggregateByPeriod(trades, chargeRatio, 'weekly') : [],
+      monthly: report.trades.length > 0 ? this.aggregateByPeriod(trades, chargeRatio, 'monthly') : [],
+      stocks,
       charges: report.charges,
       filteredTrades: trades,
       filters: {
@@ -48,6 +60,42 @@ export class AnalysisService {
   private buildTypeFilter(types?: TradeType[]): Set<TradeType> | null {
     if (!types?.length || types.includes('all')) return null;
     return new Set(types);
+  }
+
+  private buildSummaryFromStocks(stocks: StockSummary[], chargeRatio: number) {
+    let winningTrades = 0;
+    let losingTrades = 0;
+    let totalBuyValue = 0;
+    let totalSellValue = 0;
+    let realisedPnL = 0;
+    let tradeCount = 0;
+
+    for (const stock of stocks) {
+      totalBuyValue += stock.buyValue;
+      totalSellValue += stock.sellValue;
+      realisedPnL += stock.realisedPnL;
+      tradeCount += stock.tradeCount;
+      if (stock.realisedPnL > 0) winningTrades += stock.tradeCount;
+      else if (stock.realisedPnL < 0) losingTrades += stock.tradeCount;
+    }
+
+    const allocatedCharges = stocks.reduce((sum, stock) => sum + stock.allocatedCharges, 0);
+    return {
+      tradeCount,
+      totalBuyValue,
+      totalSellValue,
+      realisedPnL,
+      winningTrades,
+      losingTrades,
+      winRate: tradeCount ? (winningTrades / tradeCount) * 100 : 0,
+      allocatedCharges,
+      netPnL: realisedPnL - allocatedCharges,
+      chargeRatio,
+    };
+  }
+
+  private filterStockSummary(stocks: StockSummary[], _opts: AnalysisOptions): StockSummary[] {
+    return stocks;
   }
 
   private buildSummary(trades: Trade[], chargeRatio: number) {

@@ -173,9 +173,10 @@ export class DashboardComponent implements OnInit {
     const summary = this.analysis()?.summary;
     const stockDaySummary = this.stockDayWinRateSummary();
     if (!report) return [];
+    const tradeCount = report.totalTradeCount ?? report.trades.length ?? summary?.tradeCount ?? 0;
     return [
       { label: 'Client', value: report.summary.clientName, cls: 'text-slate-900' },
-      { label: 'Trades', value: String(report.trades.length), cls: 'text-slate-900' },
+      { label: 'Trades', value: String(tradeCount), cls: 'text-slate-900' },
       { label: 'Stocks', value: String(report.stockSummary.length), cls: 'text-slate-900' },
       {
         label: 'Win Rate',
@@ -294,15 +295,20 @@ export class DashboardComponent implements OnInit {
   });
 
   sortedStockData = computed(() => {
-    const stocks = filterStocksByRules(this.analysis()?.stocks ?? [], this.stockFilterRules());
-    return this.sortRows(stocks, (row, col) => {
+    const report = this.state.report();
+    const stocks =
+      report?.stockSummary?.length
+        ? report.stockSummary
+        : (this.analysis()?.stocks ?? []);
+    const filtered = filterStocksByRules(stocks, this.stockFilterRules());
+    return this.sortRows(filtered, (row, col) => {
       if (col === 'stockName') return row.stockName.toLowerCase();
       return row[col as keyof StockSummary] as number;
     });
   });
 
   stockScenarioStats = computed(() => {
-    const total = this.analysis()?.stocks.length ?? 0;
+    const total = this.state.report()?.stockSummary.length ?? this.analysis()?.stocks.length ?? 0;
     const shown = this.sortedStockData().length;
     return { total, shown };
   });

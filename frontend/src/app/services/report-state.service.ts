@@ -16,20 +16,20 @@ import { AuthService } from './auth.service';
 
 const MAX_REPORT_HISTORY = 5;
 const HISTORY_STORAGE_KEY = 'groww-pl-report-history';
-const FIREBASE_REPORT_CACHE_PREFIX = 'kairo-firebase-report';
+const FIREBASE_REPORT_CACHE_PREFIX = 'kairo-firebase-report-v2';
 
 interface CachedFirebaseReport {
   savedAt: number;
   report: Report;
 }
-const DEFAULT_TRADE_TYPES: TradeType[] = ['intraday'];
+const DEFAULT_TRADE_TYPES: TradeType[] = ['all'];
 
 function firebaseReportCacheKey(uid: string, clientCode: string): string {
   return `${FIREBASE_REPORT_CACHE_PREFIX}:${uid}:${clientCode}`;
 }
 
-function defaultTradeTypesForReport(report: Report): TradeType[] {
-  return report.tradeTypes.includes('intraday') ? DEFAULT_TRADE_TYPES : ['all'];
+function defaultTradeTypesForReport(_report: Report): TradeType[] {
+  return DEFAULT_TRADE_TYPES;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -47,6 +47,7 @@ export class ReportStateService {
   activeClientCode = signal<string | null>(null);
   dataSource = signal<'local' | 'firebase'>('local');
   loading = signal(false);
+  tradesLoading = signal(false);
   error = signal<string | null>(null);
 
   startDate = signal('');
@@ -95,9 +96,18 @@ export class ReportStateService {
     const clientCode = this.activeClientCode();
     if (!clientCode || this.dataSource() !== 'firebase') return;
     try {
-      const report = await this.ledger.buildReportFromClient(clientCode);
+      const report = await this.ledger.buildReportFromClient(clientCode, { loadTrades: false });
       if (report && this.isValidReport(report)) {
+        const current = this.report();
+        if (current?.tradesLoaded && current.trades.length) {
+          report.trades = current.trades;
+          report.tradesLoaded = true;
+          report.totalTradeCount = current.totalTradeCount ?? current.trades.length;
+        }
         this.applyFirebaseReport(report);
+        if (!report.tradesLoaded) {
+          void this.loadTradesInBackground(clientCode);
+        }
       }
     } catch {
       // Ignore background refresh errors.
@@ -109,7 +119,7 @@ export class ReportStateService {
     this.error.set(null);
     try {
       await this.auth.whenReady();
-      const report = await this.ledger.buildReportFromClient(clientCode);
+      const report = await this.ledger.buildReportFromClient(clientCode, { loadTrades: false });
       if (!report) {
         throw new Error('No trades found for this account. Upload a P&L file first.');
       }
@@ -117,12 +127,31 @@ export class ReportStateService {
       this.activeClientCode.set(clientCode);
       this.dataSource.set('firebase');
       this.applyFirebaseReport(report);
+      void this.loadTradesInBackground(clientCode);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load saved trades';
       this.error.set(message);
       throw e;
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  private async loadTradesInBackground(clientCode: string): Promise<void> {
+    this.tradesLoading.set(true);
+    try {
+      const trades = await this.ledger.getAllTrades(clientCode);
+      const current = this.report();
+      if (!current || current.summary.clientCode !== clientCode) return;
+
+      const updated = this.ledger.mergeTradesIntoReport(current, trades);
+      if (this.isValidReport(updated)) {
+        this.applyFirebaseReport(updated);
+      }
+    } catch {
+      // Keep stock-summary view if trade hydration fails.
+    } finally {
+      this.tradesLoading.set(false);
     }
   }
 
@@ -145,6 +174,9 @@ export class ReportStateService {
         this.activeClientCode.set(selected);
         this.dataSource.set('firebase');
         this.applyFirebaseReport(cached);
+        if (!cached.tradesLoaded) {
+          void this.loadTradesInBackground(selected);
+        }
         return;
       }
       try {
@@ -165,6 +197,9 @@ export class ReportStateService {
           this.activeClientCode.set(clientCode);
           this.dataSource.set('firebase');
           this.applyFirebaseReport(cached);
+          if (!cached.tradesLoaded) {
+            void this.loadTradesInBackground(clientCode);
+          }
           return;
         }
       }
@@ -319,9 +354,9 @@ export class ReportStateService {
   }
 
   private isValidReport(report: Report): boolean {
-    if (!report?.summary?.clientCode || !Array.isArray(report.trades) || !report.trades.length) {
-      return false;
-    }
+    if (!report?.summary?.clientCode) return false;
+    if (report.stockSummary?.length) return true;
+    if (!Array.isArray(report.trades) || !report.trades.length) return false;
     return report.trades.every((trade) => Number.isFinite(trade.realisedPnL));
   }
 
@@ -350,7 +385,14 @@ export class ReportStateService {
   private saveFirebaseReportToCache(uid: string, clientCode: string, report: Report): void {
     if (typeof sessionStorage === 'undefined') return;
     try {
-      const payload: CachedFirebaseReport = { savedAt: Date.now(), report };
+      const payload: CachedFirebaseReport = {
+        savedAt: Date.now(),
+        report: {
+          ...report,
+          trades: report.trades.length > 500 ? [] : report.trades,
+          tradesLoaded: report.trades.length <= 500,
+        },
+      };
       sessionStorage.setItem(firebaseReportCacheKey(uid, clientCode), JSON.stringify(payload));
     } catch {
       // Quota exceeded or report too large — skip cache for this session.

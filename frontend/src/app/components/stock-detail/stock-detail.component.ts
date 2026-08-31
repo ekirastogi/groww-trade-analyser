@@ -8,6 +8,7 @@ import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { StockLevelsService } from '../../services/stock-levels.service';
 import { WorkerJobService } from '../../services/worker-job.service';
 import { AuthService } from '../../services/auth.service';
+import { TradeLedgerService } from '../../services/trade-ledger.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { TradingChartComponent } from '../trading-chart/trading-chart.component';
@@ -30,6 +31,7 @@ export class StockDetailComponent implements OnInit {
   private location = inject(Location);
   private pageShell = inject(PageShellService);
   readonly reportState = inject(ReportStateService);
+  private ledger = inject(TradeLedgerService);
 
   readonly tableSort = new TableSortState('sellDate', 'desc');
   newLevelPrice = '';
@@ -102,24 +104,74 @@ export class StockDetailComponent implements OnInit {
     onCleanup(() => this.pageShell.clearOverride());
   }, { allowSignalWrites: true });
 
-  myTrades = computed(() => {
+  myTrades = signal<Trade[]>([]);
+  tradesLoading = signal(false);
+
+  private readonly _loadMyTrades = effect(() => {
     const sym = this.symbol();
-    const report = this.reportState.report();
-    if (!report || !sym) return [] as Trade[];
-    const trades = report.trades.filter(
-      (t) => t.stockName.toUpperCase().includes(sym.slice(0, 4)) || sym.includes(t.stockName.split(' ')[0].toUpperCase())
-    );
-    return this.tableSort.sort(trades, (trade, col) => {
-      switch (col) {
-        case 'buyDate': return trade.buyDate;
-        case 'sellDate': return trade.sellDate;
-        case 'quantity': return trade.quantity;
-        case 'tradeType': return trade.tradeType;
-        case 'realisedPnL': return trade.realisedPnL;
-        default: return 0;
-      }
-    });
-  });
+    const clientCode = this.reportState.activeClientCode();
+    if (!sym || !clientCode) {
+      this.myTrades.set([]);
+      return;
+    }
+
+    this.tradesLoading.set(true);
+    void this.ledger.getTradesForSymbol(clientCode, sym).then((rows) => {
+      const trades: Trade[] = rows.map(
+        ({
+          stockName,
+          isin,
+          quantity,
+          buyDate,
+          buyPrice,
+          buyValue,
+          sellDate,
+          sellPrice,
+          sellValue,
+          realisedPnL,
+          remark,
+          tradeType,
+          holdingDays,
+          allocatedCharges,
+          netPnL,
+        }) => ({
+          stockName,
+          isin,
+          quantity,
+          buyDate,
+          buyPrice,
+          buyValue,
+          sellDate,
+          sellPrice,
+          sellValue,
+          realisedPnL,
+          remark,
+          tradeType,
+          holdingDays,
+          allocatedCharges,
+          netPnL,
+        })
+      );
+      this.myTrades.set(
+        this.tableSort.sort(trades, (trade, col) => {
+          switch (col) {
+            case 'buyDate':
+              return trade.buyDate;
+            case 'sellDate':
+              return trade.sellDate;
+            case 'quantity':
+              return trade.quantity;
+            case 'tradeType':
+              return trade.tradeType;
+            case 'realisedPnL':
+              return trade.realisedPnL;
+            default:
+              return 0;
+          }
+        })
+      );
+    }).finally(() => this.tradesLoading.set(false));
+  }, { allowSignalWrites: true });
 
   myStockSummary = computed(() => {
     const trades = this.myTrades();

@@ -86,10 +86,9 @@ export class WatchlistsComponent implements OnInit {
 
   readonly tierStockColumns = [
     { key: 'stockName', label: 'Stock', align: 'left' as const, mobile: true },
-    { key: 'netPnL', label: 'Net P&L', align: 'right' as const, mobile: true },
-    { key: 'realisedPnL', label: 'P&L', align: 'right' as const, mobile: false },
+    { key: 'realisedPnL', label: 'P&L', align: 'right' as const, mobile: true },
     { key: 'allocatedCharges', label: 'Charges', align: 'right' as const, mobile: false },
-    { key: 'winRate', label: 'Win Rate', align: 'right' as const, mobile: false },
+    { key: 'netPnL', label: 'Net P&L', align: 'right' as const, mobile: false },
   ];
 
   autoTierTabs = computed((): AutoTierTab[] => {
@@ -317,8 +316,6 @@ export class WatchlistsComponent implements OnInit {
         return stock.allocatedCharges;
       case 'netPnL':
         return stock.netPnL;
-      case 'winRate':
-        return stock.winRate ?? -1;
       default:
         return 0;
     }
