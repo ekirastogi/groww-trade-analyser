@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/datapub"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/firebase"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/groww"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/ingestion"
@@ -44,30 +45,53 @@ func quotaBackoffDuration() time.Duration {
 
 func runFirestoreWorker(
 	ctx context.Context,
-	publisher *firebase.Publisher,
+	worker *firebase.Publisher,
+	data datapub.Backend,
 	scheduler *ingestion.Scheduler,
 	executor *groww.Executor,
 ) {
-	jobHandler := makeJobHandler(publisher, scheduler)
-	approvalHandler := makeApprovalHandler(publisher, executor)
+	jobHandler := makeJobHandler(worker, scheduler)
+	approvalHandler := makeApprovalHandler(data, executor)
 	tradingEnabled := os.Getenv("GROWW_ENABLE_TRADING") == "true"
 
 	if workerFirestoreMode() == "always" {
 		logx.Info("Worker Firestore mode: always (continuous heartbeat + job poll)")
-		go runHeartbeatLoop(ctx, publisher)
-		go func() { _ = publisher.PollWorkerJobs(ctx, jobHandler) }()
+		go runHeartbeatLoop(ctx, worker)
+		go func() { _ = worker.PollWorkerJobs(ctx, jobHandler) }()
 		if tradingEnabled {
-			go func() { _ = publisher.PollApprovals(ctx, approvalHandler) }()
+			go func() { _ = pollApprovalsLoop(ctx, data, approvalHandler) }()
 		}
 		return
 	}
 
 	logx.Info("Worker Firestore mode: ondemand (idle until Settings → Worker → Connect)")
-	go runOnDemandWorkerLoop(ctx, publisher, jobHandler, approvalHandler, tradingEnabled)
+	go runOnDemandWorkerLoop(ctx, worker, data, jobHandler, approvalHandler, tradingEnabled)
 }
 
-func runHeartbeatLoop(ctx context.Context, publisher *firebase.Publisher) {
-	if err := publisher.PublishHeartbeat(ctx); err != nil {
+func pollApprovalsLoop(ctx context.Context, data datapub.Backend, handler datapub.ApprovalHandler) error {
+	interval := 30 * time.Second
+	if v := os.Getenv("APPROVAL_POLL_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			interval = d
+		}
+	}
+	seen := make(map[string]bool)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if err := data.PollApprovalsOnce(ctx, seen, handler); err != nil {
+				logx.Warn("approval poll error: %v", err)
+			}
+		}
+	}
+}
+
+func runHeartbeatLoop(ctx context.Context, worker *firebase.Publisher) {
+	if err := worker.PublishHeartbeat(ctx); err != nil {
 		logx.Warn("worker heartbeat: %v", err)
 	}
 	heartbeat := 5 * time.Minute
@@ -83,7 +107,7 @@ func runHeartbeatLoop(ctx context.Context, publisher *firebase.Publisher) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := publisher.PublishHeartbeat(ctx); err != nil {
+			if err := worker.PublishHeartbeat(ctx); err != nil {
 				logx.Warn("worker heartbeat: %v", err)
 			}
 		}
@@ -92,9 +116,10 @@ func runHeartbeatLoop(ctx context.Context, publisher *firebase.Publisher) {
 
 func runOnDemandWorkerLoop(
 	ctx context.Context,
-	publisher *firebase.Publisher,
+	worker *firebase.Publisher,
+	data datapub.Backend,
 	jobHandler firebase.JobHandler,
-	approvalHandler firebase.ApprovalHandler,
+	approvalHandler datapub.ApprovalHandler,
 	tradingEnabled bool,
 ) {
 	seenJobs := make(map[string]bool)
@@ -115,7 +140,7 @@ func runOnDemandWorkerLoop(
 			}
 			quotaPausedUntil = time.Time{}
 
-			active, err := publisher.IsListenWindowActive(ctx)
+			active, err := worker.IsListenWindowActive(ctx)
 			if err != nil {
 				if firebase.IsQuotaError(err) {
 					logx.Warn("Firestore quota exceeded — pausing worker polls for %s", quotaBackoffDuration())
@@ -139,14 +164,14 @@ func runOnDemandWorkerLoop(
 			}
 			wasActive = true
 
-			if err := publisher.PublishHeartbeat(ctx); err != nil {
+			if err := worker.PublishHeartbeat(ctx); err != nil {
 				if firebase.IsQuotaError(err) {
 					logx.Warn("Firestore quota exceeded — pausing worker polls for %s", quotaBackoffDuration())
 					quotaPausedUntil = time.Now().Add(quotaBackoffDuration())
 				}
 				continue
 			}
-			if err := publisher.PollPendingJobsOnce(ctx, seenJobs, jobHandler); err != nil {
+			if err := worker.PollPendingJobsOnce(ctx, seenJobs, jobHandler); err != nil {
 				if firebase.IsQuotaError(err) {
 					logx.Warn("Firestore quota exceeded — pausing worker polls for %s", quotaBackoffDuration())
 					quotaPausedUntil = time.Now().Add(quotaBackoffDuration())
@@ -156,58 +181,57 @@ func runOnDemandWorkerLoop(
 				continue
 			}
 			if tradingEnabled {
-				if err := publisher.PollApprovalsOnce(ctx, seenApprovals, approvalHandler); err != nil && firebase.IsQuotaError(err) {
-					logx.Warn("Firestore quota exceeded — pausing worker polls for %s", quotaBackoffDuration())
-					quotaPausedUntil = time.Now().Add(quotaBackoffDuration())
+				if err := data.PollApprovalsOnce(ctx, seenApprovals, approvalHandler); err != nil {
+					logx.Warn("Approval poll error: %v", err)
 				}
 			}
 		}
 	}
 }
 
-func makeJobHandler(publisher *firebase.Publisher, scheduler *ingestion.Scheduler) firebase.JobHandler {
+func makeJobHandler(worker *firebase.Publisher, scheduler *ingestion.Scheduler) firebase.JobHandler {
 	return func(ctx context.Context, jobID string, data map[string]interface{}) error {
 		jobType, _ := data["type"].(string)
-		if err := publisher.MarkJobRunning(ctx, jobID); err != nil {
+		if err := worker.MarkJobRunning(ctx, jobID); err != nil {
 			return err
 		}
 		switch jobType {
 		case "hot_ingest":
-			logx.Info("Processing Firestore job %s (hot_ingest)", jobID)
+			logx.Info("Processing worker job %s (hot_ingest)", jobID)
 			count := scheduler.RunHotIngestNow(ctx)
-			return publisher.MarkJobCompleted(ctx, jobID, count)
+			return worker.MarkJobCompleted(ctx, jobID, count)
 		case "symbol_ingest":
 			symbol, _ := data["symbol"].(string)
 			symbol = strings.ToUpper(strings.TrimSpace(symbol))
 			if symbol == "" {
 				return fmt.Errorf("symbol required")
 			}
-			logx.Info("Processing Firestore job %s (symbol_ingest %s)", jobID, symbol)
+			logx.Info("Processing worker job %s (symbol_ingest %s)", jobID, symbol)
 			if err := scheduler.RunSymbolIngestNow(ctx, symbol); err != nil {
 				return err
 			}
-			return publisher.MarkJobCompleted(ctx, jobID, 1)
+			return worker.MarkJobCompleted(ctx, jobID, 1)
 		case "seed_universe":
-			logx.Info("Processing Firestore job %s (seed_universe)", jobID)
+			logx.Info("Processing worker job %s (seed_universe)", jobID)
 			count, err := scheduler.SeedUniverseFromExchanges(ctx)
 			if err != nil {
 				return err
 			}
-			return publisher.MarkJobCompleted(ctx, jobID, count)
+			return worker.MarkJobCompleted(ctx, jobID, count)
 		default:
 			return fmt.Errorf("unknown job type: %s", jobType)
 		}
 	}
 }
 
-func makeApprovalHandler(publisher *firebase.Publisher, executor *groww.Executor) firebase.ApprovalHandler {
-	return func(ctx context.Context, recID string, data map[string]interface{}) error {
-		symbol, _ := data["symbol"].(string)
-		side, _ := data["side"].(string)
-		entry, _ := data["entry"].(float64)
-		sl, _ := data["sl"].(float64)
+func makeApprovalHandler(data datapub.Backend, executor *groww.Executor) datapub.ApprovalHandler {
+	return func(ctx context.Context, recID string, recData map[string]interface{}) error {
+		symbol, _ := recData["symbol"].(string)
+		side, _ := recData["side"].(string)
+		entry, _ := recData["entry"].(float64)
+		sl, _ := recData["sl"].(float64)
 
-		_ = publisher.MarkExecuting(ctx, recID)
+		_ = data.MarkExecuting(ctx, recID)
 
 		req := groww.OrderRequest{
 			RecommendationID: recID,
@@ -226,6 +250,6 @@ func makeApprovalHandler(publisher *firebase.Publisher, executor *groww.Executor
 			return err
 		}
 		log.Printf("Order placed on Groww: %s (rec=%s)", orderID, recID)
-		return publisher.PublishOutcome(ctx, recID, entry, "executed_on_groww", 0)
+		return data.PublishOutcome(ctx, recID, entry, "executed_on_groww", 0)
 	}
 }

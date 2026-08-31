@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/datapub"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/firebase"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/indicators"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/logx"
@@ -20,18 +21,18 @@ import (
 type Scheduler struct {
 	provider     market.Provider
 	db           *store.SQLiteStore
-	publisher    *firebase.Publisher
+	publisher    datapub.Backend
 	rules        []signals.Rule
 	interval     time.Duration
 	fullBook     []string
 	hotSet       map[string]bool
 	indexCandles map[string][]market.Candle
 	lastEOD      string
-	catalogCache map[string]firebase.CatalogEntry
+	catalogCache map[string]datapub.CatalogEntry
 	lastCatalogFlush time.Time
 }
 
-func NewScheduler(provider market.Provider, db *store.SQLiteStore, pub *firebase.Publisher, symbols []string) *Scheduler {
+func NewScheduler(provider market.Provider, db *store.SQLiteStore, pub datapub.Backend, symbols []string) *Scheduler {
 	iv := 15 * time.Minute
 	if v := os.Getenv("INGEST_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
@@ -47,7 +48,7 @@ func NewScheduler(provider market.Provider, db *store.SQLiteStore, pub *firebase
 		fullBook:     symbols,
 		hotSet:       make(map[string]bool),
 		indexCandles: make(map[string][]market.Candle),
-		catalogCache: make(map[string]firebase.CatalogEntry),
+		catalogCache: make(map[string]datapub.CatalogEntry),
 	}
 }
 
@@ -177,7 +178,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 	}
 	logx.Info("Hot ingest starting for %d symbols", hotCount)
 
-	var openRecs []firebase.OpenRecommendation
+	var openRecs []datapub.OpenRecommendation
 	if s.publisher != nil {
 		var err error
 		openRecs, err = s.publisher.LoadOpenRecommendations(ctx)
@@ -240,7 +241,7 @@ func (s *Scheduler) flushCatalog(ctx context.Context, force bool) {
 		logx.Verbosef("Skipping catalog flush (throttled, last %s ago)", time.Since(s.lastCatalogFlush).Round(time.Second))
 		return
 	}
-	entries := make([]firebase.CatalogEntry, 0, len(s.catalogCache))
+	entries := make([]datapub.CatalogEntry, 0, len(s.catalogCache))
 	for _, e := range s.catalogCache {
 		entries = append(entries, e)
 	}
@@ -482,7 +483,7 @@ func (s *Scheduler) publishSymbol(ctx context.Context, symbol string, quote *mar
 		peSeries = append(peSeries, peHist[i].PE)
 	}
 
-	payload := firebase.SlimStockPayload{
+	payload := datapub.SlimStockPayload{
 		Symbol: symbol, Name: quote.Name, Quote: quote, Fundamentals: fs,
 		Indicators: map[string]float64{
 			"rsi": rsi, "macd": macd, "macdSignal": macdSig, "macdHist": macdHist,
@@ -497,13 +498,13 @@ func (s *Scheduler) publishSymbol(ctx context.Context, symbol string, quote *mar
 		return err
 	}
 	sym := strings.ToUpper(symbol)
-	s.catalogCache[sym] = firebase.CatalogEntry{
+	s.catalogCache[sym] = datapub.CatalogEntry{
 		Symbol: sym, Name: quote.Name, LTP: quote.LTP, ChangePct: quote.ChangePct,
 		MarketCap: fs.MarketCap, PE: fs.PE, Sector: sector,
 		LastUpdated: time.Now().Format(time.RFC3339), DataSource: s.provider.Name(),
 	}
 	if publishChart {
-		return s.publisher.PublishChartView(ctx, symbol, firebase.BuildChartPayload(candles))
+		return s.publisher.PublishChartView(ctx, symbol, datapub.BuildChartPayload(candles))
 	}
 	return nil
 }
@@ -590,13 +591,13 @@ func (s *Scheduler) computeVolumeShockers(ctx context.Context, tradeDate string)
 	}
 
 	var rows []store.VolumeShockerRow
-	var dayEntries []firebase.VolumeShockerEntry
+	var dayEntries []datapub.VolumeShockerEntry
 	for i, r := range all {
 		rows = append(rows, store.VolumeShockerRow{
 			TradeDate: tradeDate, Symbol: r.symbol, Rank: i + 1,
 			Volume: r.vol, Avg20: r.avg20, Ratio: r.ratio,
 		})
-		dayEntries = append(dayEntries, firebase.VolumeShockerEntry{
+		dayEntries = append(dayEntries, datapub.VolumeShockerEntry{
 			Symbol: r.symbol, Rank: i + 1, Ratio: r.ratio, DaysRemaining: holdDays,
 		})
 		s.hotSet[r.symbol] = true
@@ -604,9 +605,9 @@ func (s *Scheduler) computeVolumeShockers(ctx context.Context, tradeDate string)
 	_ = s.db.SaveVolumeShockers(tradeDate, rows)
 
 	activeMap, _ := s.db.ActiveVolumeShockers(holdDays)
-	var activeEntries []firebase.VolumeShockerEntry
+	var activeEntries []datapub.VolumeShockerEntry
 	for sym, days := range activeMap {
-		activeEntries = append(activeEntries, firebase.VolumeShockerEntry{
+		activeEntries = append(activeEntries, datapub.VolumeShockerEntry{
 			Symbol: sym, DaysRemaining: days, Ratio: 0, Rank: 0,
 		})
 	}
@@ -626,7 +627,7 @@ func (s *Scheduler) RunHotIngestNow(ctx context.Context) int {
 	s.refreshHotSet(ctx)
 	logx.Info("Manual hot ingest: processing %d symbols", len(s.hotSet))
 	count := 0
-	var openRecs []firebase.OpenRecommendation
+	var openRecs []datapub.OpenRecommendation
 	if s.publisher != nil {
 		openRecs, _ = s.publisher.LoadOpenRecommendations(ctx)
 	}

@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/config"
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/datapub"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/firebase"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/groww"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/handlers"
@@ -15,6 +16,7 @@ import (
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/logx"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/market"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/store"
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/supabase"
 )
 
 func main() {
@@ -49,34 +51,43 @@ func main() {
 	logx.Info("Market provider: %s", provider.Name())
 	if !market.ProviderConfigured(provider) {
 		logx.Warn("Groww credentials missing — quotes/OHLC ingest disabled until GROWW_ACCESS_TOKEN is set")
-		logx.Warn("Firestore jobs (e.g. Import NSE & BSE symbols) will still work")
+		logx.Warn("Worker jobs (e.g. Import NSE & BSE symbols) will still work when listen window is active")
+	}
+
+	var dataBackend datapub.Backend
+	if sb, err := supabase.NewStore(ctx); err != nil {
+		log.Fatalf("supabase: %v", err)
+	} else {
+		defer sb.Close()
+		dataBackend = sb
+		logx.Info("Supabase Postgres connected (data layer)")
 	}
 
 	projectID := os.Getenv("FIREBASE_PROJECT_ID")
 	if projectID == "" {
-		logx.Warn("FIREBASE_PROJECT_ID not set — results will not sync to Firestore")
+		logx.Warn("FIREBASE_PROJECT_ID not set — worker eventing disabled")
 		logx.Warn("Set GOOGLE_APPLICATION_CREDENTIALS to your service account JSON path")
 	}
 
-	var publisher *firebase.Publisher
+	var workerPub *firebase.Publisher
 	if projectID != "" {
 		pub, err := firebase.NewPublisher(ctx, projectID)
 		if err != nil {
-			log.Fatalf("firestore: %v", err)
+			log.Fatalf("firestore worker: %v", err)
 		}
 		defer pub.Close()
-		publisher = pub
-		logx.Info("Firestore publisher connected (project=%s)", projectID)
+		workerPub = pub
+		logx.Info("Firebase connected for worker eventing only (project=%s)", projectID)
 	}
 
 	symbols := ingestion.DefaultSymbols()
-	scheduler := ingestion.NewScheduler(provider, db, publisher, symbols)
+	scheduler := ingestion.NewScheduler(provider, db, dataBackend, symbols)
 	go scheduler.Run(ctx)
 
 	executor := groww.NewExecutor(provider.(*market.GrowwProvider))
 
-	if publisher != nil {
-		runFirestoreWorker(ctx, publisher, scheduler, executor)
+	if workerPub != nil && dataBackend != nil {
+		runFirestoreWorker(ctx, workerPub, dataBackend, scheduler, executor)
 	}
 
 	if addr := httpAddr(); addr != "" {
@@ -86,13 +97,14 @@ func main() {
 		}
 		api := handlers.NewWithScheduler(store.New(), scheduler)
 		go startHTTPServer(addr, api, map[string]any{
-			"status":           "ok",
-			"service":          "groww-trading-worker",
-			"sqlitePath":       dbPath,
-			"firebaseProject":  projectID,
-			"firebaseEnabled":  publisher != nil,
-			"marketProvider":   provider.Name(),
-			"ingestInterval":   interval,
+			"status":          "ok",
+			"service":         "groww-trading-worker",
+			"sqlitePath":      dbPath,
+			"firebaseProject": projectID,
+			"firebaseEnabled": workerPub != nil,
+			"supabaseEnabled": dataBackend != nil,
+			"marketProvider":  provider.Name(),
+			"ingestInterval":  interval,
 		})
 	} else {
 		log.Println("HTTP API disabled (HTTP_ADDR=off)")
