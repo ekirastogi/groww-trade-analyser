@@ -1,13 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import {
-  Firestore,
-  doc,
-  docData,
-  getDoc,
-  setDoc,
-} from '@angular/fire/firestore';
-import { Observable, of, switchMap } from 'rxjs';
+import { Observable, map, of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
+import { objectToSnake, rowToCamel, SupabaseService } from './supabase.service';
 
 export interface UserLevel {
   id: string;
@@ -24,32 +18,46 @@ export interface UserStockLevels {
 
 @Injectable({ providedIn: 'root' })
 export class StockLevelsService {
-  private firestore = inject(Firestore);
+  private supabase = inject(SupabaseService);
   private auth = inject(AuthService);
 
   watch(symbol: string): Observable<UserStockLevels | undefined> {
+    const sym = symbol.toUpperCase();
     return this.auth.user$.pipe(
       switchMap((user) => {
         if (!user) return of(undefined);
-        const ref = doc(this.firestore, 'users', user.uid, 'levels', symbol.toUpperCase());
-        return docData(ref, { idField: 'symbol' }) as Observable<UserStockLevels | undefined>;
+        return this.supabase
+          .watchTable(`user_stock_levels-${sym}`, () => this.fetchLevels(sym))
+          .pipe(map((levels) => levels ?? undefined));
       })
     );
   }
 
+  private async fetchLevels(symbol: string): Promise<UserStockLevels | null> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return null;
+    const { data, error } = await this.supabase.client
+      .from('user_stock_levels')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('symbol', symbol)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? rowToCamel<UserStockLevels>(data) : null;
+  }
+
   async save(symbol: string, levels: Pick<UserStockLevels, 'supports' | 'resistances'>): Promise<void> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to save levels');
-    await setDoc(
-      doc(this.firestore, 'users', uid, 'levels', symbol.toUpperCase()),
-      {
-        symbol: symbol.toUpperCase(),
-        supports: levels.supports,
-        resistances: levels.resistances,
-        updatedAt: Date.now(),
-      },
-      { merge: true }
-    );
+    const row = objectToSnake({
+      userId: uid,
+      symbol: symbol.toUpperCase(),
+      supports: levels.supports,
+      resistances: levels.resistances,
+      updatedAt: Date.now(),
+    });
+    const { error } = await this.supabase.client.from('user_stock_levels').upsert(row);
+    if (error) throw error;
   }
 
   async addLevel(symbol: string, type: 'support' | 'resistance', price: number, label: string): Promise<void> {
@@ -73,14 +81,10 @@ export class StockLevelsService {
   }
 
   private async get(symbol: string): Promise<UserStockLevels | undefined> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) return undefined;
-    return new Promise((resolve) => {
-      const sub = this.watch(symbol).subscribe((v) => {
-        sub.unsubscribe();
-        resolve(v);
-      });
-    });
+    const levels = await this.fetchLevels(symbol.toUpperCase());
+    return levels ?? undefined;
   }
 }
 
@@ -91,16 +95,25 @@ export interface VolumeShockerActive {
 
 @Injectable({ providedIn: 'root' })
 export class VolumeShockerService {
-  private firestore = inject(Firestore);
+  private supabase = inject(SupabaseService);
 
   watchActive(): Observable<VolumeShockerActive | undefined> {
-    const ref = doc(this.firestore, 'volumeShockers', 'active');
-    return docData(ref) as Observable<VolumeShockerActive | undefined>;
+    return this.supabase
+      .watchTable('volume_shockers_active', () => this.fetchActive())
+      .pipe(map((data) => data ?? undefined));
   }
 
   async fetchActive(): Promise<VolumeShockerActive | undefined> {
-    const ref = doc(this.firestore, 'volumeShockers', 'active');
-    const snap = await getDoc(ref);
-    return snap.exists() ? (snap.data() as VolumeShockerActive) : undefined;
+    const { data, error } = await this.supabase.client
+      .from('volume_shockers_active')
+      .select('symbols, updated_at')
+      .eq('id', 'active')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return undefined;
+    return {
+      symbols: (data.symbols as VolumeShockerActive['symbols']) ?? [],
+      updatedAt: data.updated_at as string | undefined,
+    };
   }
 }

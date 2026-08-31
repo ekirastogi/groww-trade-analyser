@@ -1,19 +1,4 @@
 import { Injectable, inject } from '@angular/core';
-import {
-  Firestore,
-  addDoc,
-  collection,
-  collectionData,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-  writeBatch,
-} from '@angular/fire/firestore';
 import { Observable, map, of, switchMap } from 'rxjs';
 import {
   DayTradeSummary,
@@ -25,6 +10,7 @@ import {
   TradeSegment,
 } from '../models/trading-journal.models';
 import { AuthService } from './auth.service';
+import { objectToSnake, rowToCamel, SupabaseService } from './supabase.service';
 
 export interface CreatePlannedTradeInput {
   symbol: string;
@@ -41,23 +27,71 @@ export interface CreatePlannedTradeInput {
   notes?: string;
 }
 
+type PlannedTradePayload = {
+  source?: TradePlanSource;
+  estimatedStopLossPnL?: number | null;
+  executedQuantity?: number | null;
+  executedBuyPrice?: number | null;
+  executedSellPrice?: number | null;
+  updatedAt?: number;
+};
+
+function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
+  const camel = rowToCamel<Record<string, unknown>>(row);
+  const payload = (camel['payload'] as PlannedTradePayload | undefined) ?? {};
+  return {
+    id: String(camel['id'] ?? ''),
+    symbol: String(camel['symbol'] ?? ''),
+    stockName: camel['stockName'] as string | undefined,
+    tradeDate: String(camel['tradeDate'] ?? ''),
+    segment: camel['segment'] as TradeSegment,
+    direction: camel['direction'] as TradeDirection,
+    quantity: Number(camel['quantity'] ?? 0),
+    cmp: camel['cmp'] as number | undefined,
+    entryPrice: Number(camel['entryPrice'] ?? 0),
+    targetPrice: Number(camel['targetPrice'] ?? 0),
+    stopLoss: camel['stopLoss'] as number | undefined,
+    source: payload.source ?? 'manual',
+    status: (camel['status'] as TradeExecutionStatus) ?? 'planned',
+    estimatedPnL: Number(camel['estimatedPnl'] ?? 0),
+    estimatedStopLossPnL: payload.estimatedStopLossPnL ?? undefined,
+    realizedPnL: camel['realizedPnl'] as number | undefined,
+    executedQuantity: payload.executedQuantity ?? undefined,
+    executedBuyPrice: payload.executedBuyPrice ?? undefined,
+    executedSellPrice: payload.executedSellPrice ?? undefined,
+    notes: camel['notes'] as string | undefined,
+    createdAt: Number(camel['createdAt'] ?? 0),
+    updatedAt: payload.updatedAt ?? Number(camel['createdAt'] ?? 0),
+  };
+}
+
 @Injectable({ providedIn: 'root' })
 export class TradePlanService {
-  private firestore = inject(Firestore);
+  private supabase = inject(SupabaseService);
   private auth = inject(AuthService);
 
   watchForDate(tradeDate: string): Observable<PlannedTrade[]> {
     return this.auth.user$.pipe(
       switchMap((user) => {
         if (!user) return of([]);
-        const q = query(
-          collection(this.firestore, 'users', user.uid, 'plannedTrades'),
-          where('tradeDate', '==', tradeDate),
-          orderBy('createdAt', 'asc')
+        return this.supabase.watchTable(`planned_trades-${tradeDate}`, () =>
+          this.fetchForDate(tradeDate)
         );
-        return collectionData(q, { idField: 'id' }) as Observable<PlannedTrade[]>;
       })
     );
+  }
+
+  private async fetchForDate(tradeDate: string): Promise<PlannedTrade[]> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+    const { data, error } = await this.supabase.client
+      .from('planned_trades')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('trade_date', tradeDate)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((row) => rowToPlannedTrade(row));
   }
 
   watchInMonth(year: number, month: number): Observable<PlannedTrade[]> {
@@ -67,15 +101,25 @@ export class TradePlanService {
     return this.auth.user$.pipe(
       switchMap((user) => {
         if (!user) return of([]);
-        const q = query(
-          collection(this.firestore, 'users', user.uid, 'plannedTrades'),
-          where('tradeDate', '>=', start),
-          where('tradeDate', '<=', end),
-          orderBy('tradeDate', 'asc')
+        return this.supabase.watchTable(`planned_trades-${year}-${month}`, () =>
+          this.fetchInRange(start, end)
         );
-        return collectionData(q, { idField: 'id' }) as Observable<PlannedTrade[]>;
       })
     );
+  }
+
+  private async fetchInRange(start: string, end: string): Promise<PlannedTrade[]> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+    const { data, error } = await this.supabase.client
+      .from('planned_trades')
+      .select('*')
+      .eq('user_id', uid)
+      .gte('trade_date', start)
+      .lte('trade_date', end)
+      .order('trade_date', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((row) => rowToPlannedTrade(row));
   }
 
   daySummariesForMonth$(year: number, month: number): Observable<DayTradeSummary[]> {
@@ -137,8 +181,9 @@ export class TradePlanService {
     return diff * quantity;
   }
 
-  /** Estimated P&L if stop loss is hit. Returns null when no stop is set. */
-  static stopLossPnL(trade: Pick<PlannedTrade, 'segment' | 'direction' | 'quantity' | 'entryPrice' | 'stopLoss' | 'estimatedStopLossPnL'>): number | null {
+  static stopLossPnL(
+    trade: Pick<PlannedTrade, 'segment' | 'direction' | 'quantity' | 'entryPrice' | 'stopLoss' | 'estimatedStopLossPnL'>
+  ): number | null {
     if (trade.estimatedStopLossPnL != null) return trade.estimatedStopLossPnL;
     if (!trade.stopLoss) return null;
     return TradePlanService.estimatePnL(
@@ -150,7 +195,6 @@ export class TradePlanService {
     );
   }
 
-  /** Stop loss level as % from entry (direction-aware). */
   static stopLossPctVsEntry(
     entry: number,
     stopLoss: number | undefined,
@@ -161,19 +205,16 @@ export class TradePlanService {
     return TradePlanService.exitPctVsEntry(entry, stopLoss, segment, direction);
   }
 
-  /** Realized P&L from per-share buy and sell prices. */
   static realizedPnLFromPrices(quantity: number, buyPrice: number, sellPrice: number): number {
     if (!quantity || !buyPrice || !sellPrice) return 0;
     return (sellPrice - buyPrice) * quantity;
   }
 
-  /** Entry price as % above/below CMP. */
   static pctVsCmp(entry: number, cmp?: number): number | null {
     if (!cmp || !entry) return null;
     return ((entry - cmp) / cmp) * 100;
   }
 
-  /** Planned exit move as % from entry (direction-aware). */
   static exitPctVsEntry(
     entry: number,
     exit: number,
@@ -188,7 +229,7 @@ export class TradePlanService {
   }
 
   async create(input: CreatePlannedTradeInput): Promise<string> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to add trades');
 
     const segment = input.segment;
@@ -198,6 +239,7 @@ export class TradePlanService {
     }
 
     const now = Date.now();
+    const id = crypto.randomUUID();
     const estimatedPnL = TradePlanService.estimatePnL(
       segment,
       direction,
@@ -215,7 +257,9 @@ export class TradePlanService {
         )
       : null;
 
-    const ref = await addDoc(collection(this.firestore, 'users', uid, 'plannedTrades'), {
+    const row = objectToSnake({
+      id,
+      userId: uid,
       symbol: input.symbol.toUpperCase(),
       stockName: input.stockName ?? input.symbol.toUpperCase(),
       tradeDate: input.tradeDate,
@@ -226,19 +270,23 @@ export class TradePlanService {
       entryPrice: input.entryPrice,
       targetPrice: input.targetPrice,
       stopLoss: input.stopLoss ?? null,
-      source: input.source ?? 'manual',
       status: 'planned' as TradeExecutionStatus,
-      estimatedPnL,
-      estimatedStopLossPnL,
-      realizedPnL: null,
-      executedQuantity: null,
-      executedBuyPrice: null,
-      executedSellPrice: null,
+      estimatedPnl: estimatedPnL,
+      realizedPnl: null,
       notes: input.notes ?? '',
       createdAt: now,
-      updatedAt: now,
+      payload: {
+        source: input.source ?? 'manual',
+        estimatedStopLossPnL,
+        executedQuantity: null,
+        executedBuyPrice: null,
+        executedSellPrice: null,
+        updatedAt: now,
+      },
     });
-    return ref.id;
+    const { error } = await this.supabase.client.from('planned_trades').insert(row);
+    if (error) throw error;
+    return id;
   }
 
   async updateExecution(
@@ -246,48 +294,60 @@ export class TradePlanService {
     status: TradeExecutionStatus,
     execution?: TradeExecutionInput
   ): Promise<void> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to update trades');
-    const patch: {
-      status: TradeExecutionStatus;
-      updatedAt: number;
-      realizedPnL?: number | null;
-      executedQuantity?: number | null;
-      executedBuyPrice?: number | null;
-      executedSellPrice?: number | null;
-    } = {
-      status,
+    const existing = await this.getById(id);
+    const payload: PlannedTradePayload = {
+      source: existing?.source,
+      estimatedStopLossPnL: existing?.estimatedStopLossPnL ?? null,
       updatedAt: Date.now(),
+      executedQuantity: null,
+      executedBuyPrice: null,
+      executedSellPrice: null,
     };
+    let realizedPnl: number | null = null;
     if (status === 'executed' && execution) {
-      patch.realizedPnL = TradePlanService.realizedPnLFromPrices(
+      realizedPnl = TradePlanService.realizedPnLFromPrices(
         execution.quantity,
         execution.buyPrice,
         execution.sellPrice
       );
-      patch.executedQuantity = execution.quantity;
-      patch.executedBuyPrice = execution.buyPrice;
-      patch.executedSellPrice = execution.sellPrice;
-    } else {
-      patch.realizedPnL = null;
-      patch.executedQuantity = null;
-      patch.executedBuyPrice = null;
-      patch.executedSellPrice = null;
+      payload.executedQuantity = execution.quantity;
+      payload.executedBuyPrice = execution.buyPrice;
+      payload.executedSellPrice = execution.sellPrice;
     }
-    await updateDoc(doc(this.firestore, 'users', uid, 'plannedTrades', id), patch);
+    const { error } = await this.supabase.client
+      .from('planned_trades')
+      .update(
+        objectToSnake({
+          status,
+          realizedPnl,
+          executedAt: status === 'executed' ? Date.now() : null,
+          payload,
+        })
+      )
+      .eq('id', id)
+      .eq('user_id', uid);
+    if (error) throw error;
   }
 
   async getById(id: string): Promise<PlannedTrade | null> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) return null;
-    const snap = await getDoc(doc(this.firestore, 'users', uid, 'plannedTrades', id));
-    if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data() } as PlannedTrade;
+    const { data, error } = await this.supabase.client
+      .from('planned_trades')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', uid)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? rowToPlannedTrade(data) : null;
   }
 
   async update(id: string, input: CreatePlannedTradeInput): Promise<void> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to update trades');
+    const existing = await this.getById(id);
 
     const segment = input.segment;
     let direction = input.direction;
@@ -312,38 +372,61 @@ export class TradePlanService {
         )
       : null;
 
-    await updateDoc(doc(this.firestore, 'users', uid, 'plannedTrades', id), {
-      symbol: input.symbol.toUpperCase(),
-      stockName: input.stockName ?? input.symbol.toUpperCase(),
-      tradeDate: input.tradeDate,
-      segment,
-      direction,
-      quantity: input.quantity,
-      cmp: input.cmp ?? null,
-      entryPrice: input.entryPrice,
-      targetPrice: input.targetPrice,
-      stopLoss: input.stopLoss ?? null,
-      notes: input.notes ?? '',
-      estimatedPnL,
+    const payload: PlannedTradePayload = {
+      source: input.source ?? existing?.source ?? 'manual',
       estimatedStopLossPnL,
+      executedQuantity: existing?.executedQuantity ?? null,
+      executedBuyPrice: existing?.executedBuyPrice ?? null,
+      executedSellPrice: existing?.executedSellPrice ?? null,
       updatedAt: Date.now(),
-    });
+    };
+
+    const { error } = await this.supabase.client
+      .from('planned_trades')
+      .update(
+        objectToSnake({
+          symbol: input.symbol.toUpperCase(),
+          stockName: input.stockName ?? input.symbol.toUpperCase(),
+          tradeDate: input.tradeDate,
+          segment,
+          direction,
+          quantity: input.quantity,
+          cmp: input.cmp ?? null,
+          entryPrice: input.entryPrice,
+          targetPrice: input.targetPrice,
+          stopLoss: input.stopLoss ?? null,
+          notes: input.notes ?? '',
+          estimatedPnl: estimatedPnL,
+          payload,
+        })
+      )
+      .eq('id', id)
+      .eq('user_id', uid);
+    if (error) throw error;
   }
 
   async remove(id: string): Promise<void> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to delete trades');
-    await deleteDoc(doc(this.firestore, 'users', uid, 'plannedTrades', id));
+    const { error } = await this.supabase.client
+      .from('planned_trades')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', uid);
+    if (error) throw error;
   }
 
   async deleteAll(): Promise<number> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) return 0;
-    const snap = await getDocs(collection(this.firestore, 'users', uid, 'plannedTrades'));
-    if (snap.empty) return 0;
-    const batch = writeBatch(this.firestore);
-    snap.docs.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-    return snap.size;
+    const { data, error: selectError } = await this.supabase.client
+      .from('planned_trades')
+      .select('id')
+      .eq('user_id', uid);
+    if (selectError) throw selectError;
+    if (!data?.length) return 0;
+    const { error } = await this.supabase.client.from('planned_trades').delete().eq('user_id', uid);
+    if (error) throw error;
+    return data.length;
   }
 }

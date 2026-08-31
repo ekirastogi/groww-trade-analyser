@@ -14,6 +14,7 @@ import {
 
 import { routes } from './app.routes';
 import { AuthService } from './services/auth.service';
+import { SupabaseService } from './services/supabase.service';
 
 export function buildAppConfig(firebase: FirebaseOptions): ApplicationConfig {
   return {
@@ -35,8 +36,11 @@ export function buildAppConfig(firebase: FirebaseOptions): ApplicationConfig {
       provideFirestore(() => getFirestore()),
       {
         provide: APP_INITIALIZER,
-        useFactory: (authService: AuthService) => () => authService.whenReady(),
-        deps: [AuthService],
+        useFactory: (supabase: SupabaseService, authService: AuthService) => async () => {
+          await supabase.whenReady();
+          await authService.whenReady();
+        },
+        deps: [SupabaseService, AuthService],
         multi: true,
       },
     ],

@@ -1,16 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
-import {
-  Firestore,
-  collection,
-  collectionData,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  setDoc,
-} from '@angular/fire/firestore';
-import { AuthService } from './auth.service';
 import { Observable, of, switchMap } from 'rxjs';
+import { AuthService } from './auth.service';
+import { objectToSnake, rowToCamel, rowsToCamel, SupabaseService } from './supabase.service';
 
 export interface ClientAccount {
   clientCode: string;
@@ -27,7 +18,7 @@ const SELECTED_CLIENT_KEY = 'kairo-selected-client';
 
 @Injectable({ providedIn: 'root' })
 export class ClientAccountService {
-  private firestore = inject(Firestore);
+  private supabase = inject(SupabaseService);
   private auth = inject(AuthService);
 
   selectedClientCode = signal<string | null>(this.loadSelected());
@@ -36,20 +27,21 @@ export class ClientAccountService {
     return this.auth.user$.pipe(
       switchMap((user) => {
         if (!user) return of([]);
-        const ref = collection(this.firestore, 'users', user.uid, 'clients');
-        return collectionData(query(ref, orderBy('lastUploadAt', 'desc')), {
-          idField: 'clientCode',
-        }) as Observable<ClientAccount[]>;
+        return this.supabase.watchTable('client_accounts', () => this.listClients());
       })
     );
   }
 
   async listClients(): Promise<ClientAccount[]> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) return [];
-    const ref = collection(this.firestore, 'users', uid, 'clients');
-    const snap = await getDocs(query(ref, orderBy('lastUploadAt', 'desc')));
-    return snap.docs.map((d) => d.data() as ClientAccount);
+    const { data, error } = await this.supabase.client
+      .from('client_accounts')
+      .select('*')
+      .eq('user_id', uid)
+      .order('last_upload_at', { ascending: false });
+    if (error) throw error;
+    return rowsToCamel<ClientAccount>(data ?? []);
   }
 
   selectClient(clientCode: string): void {
@@ -77,29 +69,33 @@ export class ClientAccountService {
     tradeCount: number,
     summary?: Pick<ClientAccount, 'totalRealisedPnL' | 'totalNetPnL' | 'totalCharges' | 'periodLabel'>
   ): Promise<void> {
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) return;
     const now = Date.now();
-    await setDoc(
-      doc(this.firestore, 'users', uid, 'clients', clientCode),
-      {
-        clientCode,
-        clientName,
-        tradeCount,
-        lastUploadAt: now,
-        updatedAt: now,
-        ...summary,
-      },
-      { merge: true }
-    );
+    const row = objectToSnake({
+      userId: uid,
+      clientCode,
+      clientName,
+      tradeCount,
+      lastUploadAt: now,
+      updatedAt: now,
+      ...summary,
+    });
+    const { error } = await this.supabase.client.from('client_accounts').upsert(row);
+    if (error) throw error;
     if (!this.selectedClientCode()) {
       this.selectClient(clientCode);
     }
   }
 
-  clientCol(clientCode: string, name: string) {
-    const uid = this.auth.uid;
-    if (!uid) throw new Error('Not authenticated');
-    return collection(this.firestore, 'users', uid, 'clients', clientCode, name);
+  async deleteClient(clientCode: string): Promise<void> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return;
+    const { error } = await this.supabase.client
+      .from('client_accounts')
+      .delete()
+      .eq('user_id', uid)
+      .eq('client_code', clientCode);
+    if (error) throw error;
   }
 }

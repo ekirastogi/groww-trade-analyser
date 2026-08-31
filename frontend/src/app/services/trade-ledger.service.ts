@@ -1,21 +1,5 @@
 import { Injectable, inject } from '@angular/core';
 import {
-  CollectionReference,
-  DocumentReference,
-  Firestore,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  setDoc,
-  where,
-  writeBatch,
-} from '@angular/fire/firestore';
-import {
   Report,
   StockProfile,
   StockSummary,
@@ -30,6 +14,8 @@ import { ParserService } from './parser.service';
 import { RegistryStockService } from './registry-stock.service';
 import { TradePlanService } from './trade-plan.service';
 import { UniverseService } from './universe.service';
+import { WatchlistService } from './watchlist.service';
+import { objectToSnake, rowToCamel, rowsToCamel, SupabaseService } from './supabase.service';
 import {
   buildTradeTypeStats,
   computeChargeRatio,
@@ -73,24 +59,103 @@ export interface BackfillUniverseResult {
   profilesRebuilt: number;
 }
 
-const FIRESTORE_BATCH_LIMIT = 400;
+const UPSERT_BATCH_LIMIT = 400;
+
+function profileFromRow(row: Record<string, unknown>, clientCode: string, clientName: string): StockProfile {
+  const camel = rowToCamel<Record<string, unknown>>(row);
+  const buyValue = Number(camel['buyValue'] ?? 0);
+  const netPnL = Number(camel['netPnl'] ?? 0);
+  return {
+    symbol: String(camel['symbol'] ?? ''),
+    stockName: String(camel['stockName'] ?? ''),
+    isin: String(camel['isin'] ?? ''),
+    clientCode,
+    clientName,
+    tradeCount: Number(camel['tradeCount'] ?? 0),
+    winningTrades: Number(camel['winningTrades'] ?? 0),
+    losingTrades: Number(camel['losingTrades'] ?? 0),
+    breakEvenTrades: 0,
+    winRate: Number(camel['winRate'] ?? 0),
+    totalBuyValue: buyValue,
+    totalSellValue: Number(camel['sellValue'] ?? 0),
+    grossProfit: 0,
+    grossLoss: 0,
+    realisedPnL: Number(camel['realisedPnl'] ?? 0),
+    allocatedCharges: Number(camel['allocatedCharges'] ?? 0),
+    netPnL,
+    netPnLPct: buyValue ? (netPnL / buyValue) * 100 : 0,
+    avgHoldingDays: 0,
+    dateRange: { first: '', last: '' },
+    byTradeType: {},
+    uploadIds: [],
+    updatedAt: Date.now(),
+  };
+}
+
+function profileToRow(profile: StockProfile, userId: string): Record<string, unknown> {
+  return objectToSnake({
+    userId,
+    clientCode: profile.clientCode,
+    symbol: profile.symbol,
+    stockName: profile.stockName,
+    isin: profile.isin,
+    quantity: profile.tradeCount,
+    buyValue: profile.totalBuyValue,
+    sellValue: profile.totalSellValue,
+    realisedPnl: profile.realisedPnL,
+    allocatedCharges: profile.allocatedCharges,
+    netPnl: profile.netPnL,
+    tradeCount: profile.tradeCount,
+    winningTrades: profile.winningTrades,
+    losingTrades: profile.losingTrades,
+    winRate: profile.winRate,
+  });
+}
+
+function tradeToRow(trade: StoredTrade, userId: string): Record<string, unknown> {
+  return objectToSnake({
+    id: trade.dedupeKey,
+    userId,
+    clientCode: trade.clientCode,
+    dedupeKey: trade.dedupeKey,
+    fingerprint: trade.fingerprint,
+    uploadId: trade.uploadId,
+    symbol: trade.symbol,
+    stockName: trade.stockName,
+    isin: trade.isin,
+    quantity: trade.quantity,
+    buyDate: trade.buyDate,
+    buyPrice: trade.buyPrice,
+    buyValue: trade.buyValue,
+    sellDate: trade.sellDate,
+    sellPrice: trade.sellPrice,
+    sellValue: trade.sellValue,
+    realisedPnl: trade.realisedPnL,
+    remark: trade.remark,
+    tradeType: trade.tradeType,
+    holdingDays: trade.holdingDays,
+    allocatedCharges: trade.allocatedCharges,
+    netPnl: trade.netPnL,
+    clientName: trade.clientName,
+    createdAt: trade.createdAt,
+  });
+}
 
 @Injectable({ providedIn: 'root' })
 export class TradeLedgerService {
-  private firestore = inject(Firestore);
+  private supabase = inject(SupabaseService);
   private auth = inject(AuthService);
   private clientSvc = inject(ClientAccountService);
   private parser = inject(ParserService);
   private registry = inject(RegistryStockService);
   private tradePlans = inject(TradePlanService);
   private universe = inject(UniverseService);
+  private watchlists = inject(WatchlistService);
 
   async uploadReport(file: File, options: UploadOptions = {}): Promise<UploadResult> {
     await this.auth.whenReady();
-    const uid = this.auth.uid;
-    if (!uid) throw new Error('Sign in to push data to Firebase');
-
-    await this.ensureUserProfile();
+    const uid = await this.auth.getDataUserId();
+    if (!uid) throw new Error('Sign in to push data');
 
     const buffer = await file.arrayBuffer();
     const contentHash = await computeFileContentHash(buffer);
@@ -107,15 +172,19 @@ export class TradeLedgerService {
       await this.deleteClientData(clientCode);
     }
 
-    const uploadsCol = this.clientSvc.clientCol(clientCode, 'uploads');
     if (!options.forceReingest) {
-      const existingFile = await getDocs(
-        query(uploadsCol, where('contentHash', '==', contentHash), limit(1))
-      );
-      if (!existingFile.empty) {
+      const { data: existingFile } = await this.supabase.client
+        .from('uploads')
+        .select('id')
+        .eq('user_id', uid)
+        .eq('client_code', clientCode)
+        .eq('content_hash', contentHash)
+        .limit(1)
+        .maybeSingle();
+      if (existingFile) {
         const syncedReport = await this.syncDerivedData(clientCode, clientName);
         return {
-          uploadId: existingFile.docs[0].id,
+          uploadId: existingFile.id,
           clientCode,
           clientName,
           newTradesAdded: 0,
@@ -130,14 +199,12 @@ export class TradeLedgerService {
     const uploadId = crypto.randomUUID();
     const totalSellValue = report.trades.reduce((s, t) => s + t.sellValue, 0);
     const chargeRatio = computeChargeRatio(totalSellValue, report.charges.total);
-
-    const tradesCol = this.clientSvc.clientCol(clientCode, 'trades');
     const now = Date.now();
 
     let newTradesAdded = 0;
     const duplicatesSkipped = 0;
     const affectedSymbols = new Set<string>();
-    const pendingWrites: Array<{ ref: DocumentReference; data: StoredTrade }> = [];
+    const pendingWrites: StoredTrade[] = [];
 
     for (let index = 0; index < report.trades.length; index++) {
       const trade = report.trades[index];
@@ -146,25 +213,22 @@ export class TradeLedgerService {
       const symbol = normalizeSymbol(trade.stockName);
       const enriched = enrichTradeWithCharges(trade, chargeRatio);
       pendingWrites.push({
-        ref: doc(tradesCol, dedupeKey),
-        data: {
-          ...trade,
-          dedupeKey,
-          fingerprint,
-          uploadId,
-          clientCode,
-          clientName,
-          symbol,
-          allocatedCharges: enriched.allocatedCharges,
-          netPnL: enriched.netPnL,
-          createdAt: now,
-        },
+        ...trade,
+        dedupeKey,
+        fingerprint,
+        uploadId,
+        clientCode,
+        clientName,
+        symbol,
+        allocatedCharges: enriched.allocatedCharges,
+        netPnL: enriched.netPnL,
+        createdAt: now,
       });
       newTradesAdded++;
       affectedSymbols.add(symbol);
     }
 
-    await this.commitInChunks(pendingWrites);
+    await this.commitTradesInChunks(pendingWrites, uid);
 
     const uploadRecord: Omit<UploadRecord, 'id'> = {
       fileName: file.name,
@@ -184,11 +248,17 @@ export class TradeLedgerService {
       duplicatesSkipped,
       status: 'completed',
     };
-    await setDoc(doc(uploadsCol, uploadId), uploadRecord);
+    const { error: uploadError } = await this.supabase.client.from('uploads').insert(
+      objectToSnake({
+        id: uploadId,
+        userId: uid,
+        ...uploadRecord,
+      })
+    );
+    if (uploadError) throw uploadError;
 
-    const uploadedTrades = pendingWrites.map((entry) => entry.data);
     const syncedReport = await this.syncDerivedData(clientCode, clientName, {
-      trades: options.forceReingest ? uploadedTrades : undefined,
+      trades: options.forceReingest ? pendingWrites : undefined,
       uploadMeta: uploadRecord,
     });
 
@@ -206,7 +276,7 @@ export class TradeLedgerService {
 
   async backfillUniverse(options: BackfillUniverseOptions = {}): Promise<BackfillUniverseResult> {
     await this.auth.whenReady();
-    if (!this.auth.uid) throw new Error('Sign in to backfill universe');
+    if (!(await this.auth.getDataUserId())) throw new Error('Sign in to backfill universe');
 
     const clients = await this.clientSvc.listClients();
     const symbolMap = new Map<string, { symbol: string; name?: string; isin?: string }>();
@@ -248,7 +318,7 @@ export class TradeLedgerService {
 
   async resetAllData(): Promise<ResetAllDataResult> {
     await this.auth.whenReady();
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to reset data');
 
     const clients = await this.clientSvc.listClients();
@@ -256,7 +326,7 @@ export class TradeLedgerService {
       await this.deleteClientData(client.clientCode);
     }
 
-    const watchlistsRemoved = await this.deleteAllWatchlists(uid);
+    const watchlistsRemoved = await this.watchlists.deleteAllWatchlists();
     const registryStocksRemoved = await this.registry.deleteAll();
     const plannedTradesRemoved = await this.tradePlans.deleteAll();
     const levelsRemoved = await this.deleteUserLevels(uid);
@@ -272,45 +342,51 @@ export class TradeLedgerService {
     };
   }
 
-  private async deleteAllWatchlists(uid: string): Promise<number> {
-    const snap = await getDocs(collection(this.firestore, 'users', uid, 'watchlists'));
-    if (snap.empty) return 0;
-    const batch = writeBatch(this.firestore);
-    snap.docs.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-    return snap.size;
-  }
-
   private async deleteUserLevels(uid: string): Promise<number> {
-    const snap = await getDocs(collection(this.firestore, 'users', uid, 'levels'));
-    if (snap.empty) return 0;
-    const batch = writeBatch(this.firestore);
-    snap.docs.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-    return snap.size;
+    const { data, error: selectError } = await this.supabase.client
+      .from('user_stock_levels')
+      .select('symbol')
+      .eq('user_id', uid);
+    if (selectError) throw selectError;
+    if (!data?.length) return 0;
+    const { error } = await this.supabase.client.from('user_stock_levels').delete().eq('user_id', uid);
+    if (error) throw error;
+    return data.length;
   }
 
   async getAllTrades(clientCode: string): Promise<StoredTrade[]> {
-    const snap = await getDocs(
-      query(this.clientSvc.clientCol(clientCode, 'trades'), orderBy('sellDate', 'desc'))
-    );
-    return snap.docs.map((d) => d.data() as StoredTrade);
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+    const { data, error } = await this.supabase.client
+      .from('trades')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('client_code', clientCode)
+      .order('sell_date', { ascending: false });
+    if (error) throw error;
+    return rowsToCamel<StoredTrade>(data ?? []);
   }
 
   async buildReportFromClient(clientCode: string): Promise<Report | null> {
     const trades = await this.getAllTrades(clientCode);
     if (!trades.length) return null;
 
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) return null;
 
-    const clientSnap = await getDoc(doc(this.firestore, 'users', uid, 'clients', clientCode));
-    const clientName = clientSnap.data()?.['clientName'] ?? clientCode;
+    const clients = await this.clientSvc.listClients();
+    const client = clients.find((c) => c.clientCode === clientCode);
+    const clientName = client?.clientName ?? clientCode;
 
-    const uploadsSnap = await getDocs(
-      query(this.clientSvc.clientCol(clientCode, 'uploads'), orderBy('uploadedAt', 'desc'), limit(1))
-    );
-    const lastUpload = uploadsSnap.docs[0]?.data() as UploadRecord | undefined;
+    const { data: lastUploadRow } = await this.supabase.client
+      .from('uploads')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('client_code', clientCode)
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const lastUpload = lastUploadRow ? rowToCamel<UploadRecord>(lastUploadRow) : undefined;
     const stockProfiles = await this.getStockProfiles(clientCode);
 
     if (stockProfiles.length) {
@@ -334,10 +410,19 @@ export class TradeLedgerService {
   }
 
   async getStockProfiles(clientCode: string): Promise<StockProfile[]> {
-    const snap = await getDocs(
-      query(this.clientSvc.clientCol(clientCode, 'stockProfiles'), orderBy('netPnL', 'desc'))
-    );
-    return snap.docs.map((d) => d.data() as StockProfile);
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+    const clients = await this.clientSvc.listClients();
+    const client = clients.find((c) => c.clientCode === clientCode);
+    const clientName = client?.clientName ?? clientCode;
+    const { data, error } = await this.supabase.client
+      .from('stock_profiles')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('client_code', clientCode)
+      .order('net_pnl', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => profileFromRow(row, clientCode, clientName));
   }
 
   private async syncDerivedData(
@@ -351,13 +436,21 @@ export class TradeLedgerService {
     const trades = options.trades ?? (await this.getAllTrades(clientCode));
     if (!trades.length) return null;
 
-    const uploadMeta =
-      options.uploadMeta ??
-      ((
-        await getDocs(
-          query(this.clientSvc.clientCol(clientCode, 'uploads'), orderBy('uploadedAt', 'desc'), limit(1))
-        )
-      ).docs[0]?.data() as UploadRecord | undefined);
+    let uploadMeta = options.uploadMeta;
+    if (!uploadMeta) {
+      const uid = await this.auth.getDataUserId();
+      if (uid) {
+        const { data } = await this.supabase.client
+          .from('uploads')
+          .select('*')
+          .eq('user_id', uid)
+          .eq('client_code', clientCode)
+          .order('uploaded_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        uploadMeta = data ? rowToCamel<UploadRecord>(data) : undefined;
+      }
+    }
 
     await this.clientSvc.registerClient(clientCode, clientName, trades.length, {
       totalRealisedPnL: trades.reduce((sum, trade) => sum + trade.realisedPnL, 0),
@@ -568,58 +661,45 @@ export class TradeLedgerService {
     };
   }
 
-  private async commitInChunks(
-    writes: Array<{ ref: DocumentReference; data: StoredTrade }>
-  ): Promise<void> {
-    for (let i = 0; i < writes.length; i += FIRESTORE_BATCH_LIMIT) {
-      const batch = writeBatch(this.firestore);
-      const chunk = writes.slice(i, i + FIRESTORE_BATCH_LIMIT);
-      chunk.forEach(({ ref, data }) => batch.set(ref, data));
-      await batch.commit();
+  private async commitTradesInChunks(trades: StoredTrade[], userId: string): Promise<void> {
+    for (let i = 0; i < trades.length; i += UPSERT_BATCH_LIMIT) {
+      const chunk = trades.slice(i, i + UPSERT_BATCH_LIMIT).map((t) => tradeToRow(t, userId));
+      const { error } = await this.supabase.client.from('trades').upsert(chunk);
+      if (error) throw error;
     }
   }
 
   private async writeStockProfiles(clientCode: string, profiles: StockProfile[]): Promise<void> {
-    for (let i = 0; i < profiles.length; i += FIRESTORE_BATCH_LIMIT) {
-      const batch = writeBatch(this.firestore);
-      const chunk = profiles.slice(i, i + FIRESTORE_BATCH_LIMIT);
-      chunk.forEach((profile) =>
-        batch.set(doc(this.clientSvc.clientCol(clientCode, 'stockProfiles'), profile.symbol), profile)
-      );
-      await batch.commit();
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return;
+    for (let i = 0; i < profiles.length; i += UPSERT_BATCH_LIMIT) {
+      const chunk = profiles
+        .slice(i, i + UPSERT_BATCH_LIMIT)
+        .map((profile) => profileToRow(profile, uid));
+      const { error } = await this.supabase.client.from('stock_profiles').upsert(chunk);
+      if (error) throw error;
     }
   }
 
   private async deleteClientData(clientCode: string): Promise<void> {
-    await this.deleteCollection(this.clientSvc.clientCol(clientCode, 'trades'));
-    await this.deleteCollection(this.clientSvc.clientCol(clientCode, 'uploads'));
-    await this.deleteCollection(this.clientSvc.clientCol(clientCode, 'stockProfiles'));
-    await deleteDoc(doc(this.firestore, 'users', this.auth.uid!, 'clients', clientCode));
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return;
+    await this.deleteTableRows('trades', uid, clientCode);
+    await this.deleteTableRows('uploads', uid, clientCode);
+    await this.deleteTableRows('stock_profiles', uid, clientCode);
+    await this.clientSvc.deleteClient(clientCode);
   }
 
-  private async deleteCollection(colRef: CollectionReference): Promise<void> {
-    while (true) {
-      const snap = await getDocs(query(colRef, limit(FIRESTORE_BATCH_LIMIT)));
-      if (snap.empty) return;
-      const batch = writeBatch(this.firestore);
-      snap.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-      await batch.commit();
-      if (snap.size < FIRESTORE_BATCH_LIMIT) return;
-    }
-  }
-
-  private async ensureUserProfile(): Promise<void> {
-    const uid = this.auth.uid;
-    const user = this.auth.currentUser;
-    if (!uid || !user) return;
-    await setDoc(
-      doc(this.firestore, 'users', uid),
-      {
-        email: user.email ?? '',
-        displayName: user.displayName ?? '',
-        updatedAt: Date.now(),
-      },
-      { merge: true }
-    );
+  private async deleteTableRows(
+    table: 'trades' | 'uploads' | 'stock_profiles',
+    userId: string,
+    clientCode: string
+  ): Promise<void> {
+    const { error } = await this.supabase.client
+      .from(table)
+      .delete()
+      .eq('user_id', userId)
+      .eq('client_code', clientCode);
+    if (error) throw error;
   }
 }

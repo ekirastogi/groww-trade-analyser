@@ -1,16 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import {
-  Firestore,
-  collection,
-  collectionData,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  writeBatch,
-} from '@angular/fire/firestore';
 import { Observable, of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
+import { objectToSnake, rowsToCamel, SupabaseService } from './supabase.service';
 
 export interface UniverseEntry {
   symbol: string;
@@ -23,25 +14,27 @@ export interface UniverseEntry {
 
 @Injectable({ providedIn: 'root' })
 export class UniverseService {
-  private firestore = inject(Firestore);
+  private supabase = inject(SupabaseService);
   private auth = inject(AuthService);
 
   watchAll(): Observable<UniverseEntry[]> {
     return this.auth.user$.pipe(
       switchMap((user) => {
         if (!user) return of([]);
-        const q = query(collection(this.firestore, 'universe'), orderBy('symbol', 'asc'));
-        return collectionData(q, { idField: 'symbol' }) as Observable<UniverseEntry[]>;
+        return this.supabase.watchTable('universe', () => this.listAll());
       })
     );
   }
 
   async listAll(): Promise<UniverseEntry[]> {
     await this.auth.whenReady();
-    if (!this.auth.uid) return [];
-    const q = query(collection(this.firestore, 'universe'), orderBy('symbol', 'asc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ symbol: d.id, ...d.data() }) as UniverseEntry);
+    if (!(await this.auth.getDataUserId())) return [];
+    const { data, error } = await this.supabase.client
+      .from('universe')
+      .select('*')
+      .order('symbol', { ascending: true });
+    if (error) throw error;
+    return rowsToCamel<UniverseEntry>(data ?? []);
   }
 
   async syncSymbols(
@@ -49,33 +42,31 @@ export class UniverseService {
     source: UniverseEntry['source'] = 'pnl_upload'
   ): Promise<number> {
     await this.auth.whenReady();
-    if (!this.auth.uid) return 0;
+    if (!(await this.auth.getDataUserId())) return 0;
 
     const now = Date.now();
-    const batch = writeBatch(this.firestore);
-    let count = 0;
+    const rows: Record<string, unknown>[] = [];
     const seen = new Set<string>();
 
     for (const entry of symbols) {
       const sym = entry.symbol.toUpperCase().trim();
       if (!sym || seen.has(sym)) continue;
       seen.add(sym);
-      batch.set(
-        doc(this.firestore, 'universe', sym),
-        {
+      rows.push(
+        objectToSnake({
           symbol: sym,
           name: entry.name ?? sym,
           isin: entry.isin ?? '',
+          exchange: 'NSE',
           source,
           updatedAt: now,
-        },
-        { merge: true }
+        })
       );
-      count++;
     }
-    if (count > 0) {
-      await batch.commit();
-    }
-    return count;
+
+    if (!rows.length) return 0;
+    const { error } = await this.supabase.client.from('universe').upsert(rows);
+    if (error) throw error;
+    return rows.length;
   }
 }

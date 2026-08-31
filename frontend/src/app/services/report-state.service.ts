@@ -103,7 +103,7 @@ export class ReportStateService {
     if (!forceRefresh && this.report() && this.dataSource() === 'firebase') return;
 
     await this.auth.whenReady();
-    const uid = this.auth.uid;
+    const uid = await this.auth.getDataUserId();
     if (!uid) return;
 
     const selected = this.clientSvc.selectedClientCode();
@@ -229,7 +229,11 @@ export class ReportStateService {
     this.activeHistoryId.set(null);
     this.applyReport(report);
     this.error.set(null);
-    const uid = this.auth.uid;
+    void this.saveReportCache(report);
+  }
+
+  private async saveReportCache(report: Report): Promise<void> {
+    const uid = await this.auth.getDataUserId();
     const clientCode = report.summary.clientCode;
     if (uid && clientCode) {
       this.saveFirebaseReportToCache(uid, clientCode, report);
@@ -307,14 +311,15 @@ export class ReportStateService {
 
   private clearFirebaseReportCache(): void {
     if (typeof sessionStorage === 'undefined') return;
-    const uid = this.auth.uid;
-    if (!uid) return;
-    const prefix = `${FIREBASE_REPORT_CACHE_PREFIX}:${uid}:`;
-    for (let i = sessionStorage.length - 1; i >= 0; i--) {
-      const key = sessionStorage.key(i);
-      if (key?.startsWith(prefix)) {
-        sessionStorage.removeItem(key);
+    void this.auth.getDataUserId().then((uid) => {
+      if (!uid) return;
+      const prefix = `${FIREBASE_REPORT_CACHE_PREFIX}:${uid}:`;
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i);
+        if (key?.startsWith(prefix)) {
+          sessionStorage.removeItem(key);
+        }
       }
-    }
+    });
   }
 }

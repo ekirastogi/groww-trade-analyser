@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/datapub"
-	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/firebase"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/indicators"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/logx"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/market"
