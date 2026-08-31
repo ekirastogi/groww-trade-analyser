@@ -406,14 +406,23 @@ export class TradeLedgerService {
   async getAllTrades(clientCode: string): Promise<StoredTrade[]> {
     const uid = await this.auth.getDataUserId();
     if (!uid) return [];
-    const { data, error } = await this.supabase.client
-      .from('trades')
-      .select('*')
-      .eq('user_id', uid)
-      .eq('client_code', clientCode)
-      .order('sell_date', { ascending: false });
-    if (error) throw error;
-    return (data ?? []).map((row) => tradeFromRow(row));
+
+    const pageSize = 1000;
+    const all: StoredTrade[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.supabase.client
+        .from('trades')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('client_code', clientCode)
+        .order('sell_date', { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data?.length) break;
+      all.push(...data.map((row) => tradeFromRow(row)));
+      if (data.length < pageSize) break;
+    }
+    return all;
   }
 
   async buildReportFromClient(clientCode: string): Promise<Report | null> {
@@ -464,14 +473,23 @@ export class TradeLedgerService {
     const clients = await this.clientSvc.listClients();
     const client = clients.find((c) => c.clientCode === clientCode);
     const clientName = client?.clientName ?? clientCode;
-    const { data, error } = await this.supabase.client
-      .from('stock_profiles')
-      .select('*')
-      .eq('user_id', uid)
-      .eq('client_code', clientCode)
-      .order('net_pnl', { ascending: false });
-    if (error) throw error;
-    return (data ?? []).map((row) => profileFromRow(row, clientCode, clientName));
+
+    const pageSize = 1000;
+    const all: StockProfile[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.supabase.client
+        .from('stock_profiles')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('client_code', clientCode)
+        .order('net_pnl', { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data?.length) break;
+      all.push(...data.map((row) => profileFromRow(row, clientCode, clientName)));
+      if (data.length < pageSize) break;
+    }
+    return all;
   }
 
   private async syncDerivedData(
