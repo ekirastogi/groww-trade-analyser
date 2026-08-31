@@ -8,6 +8,15 @@ import { RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency } from '../../utils/format.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 
+type RegistryColumnKey =
+  | 'symbol'
+  | 'name'
+  | 'currentPrice'
+  | 'marketCap'
+  | 'pe'
+  | 'rsi'
+  | 'updatedAt';
+
 @Component({
   selector: 'app-stock-registry',
   standalone: true,
@@ -25,12 +34,29 @@ export class StockRegistryComponent implements OnInit {
   tableSort = new TableSortState('symbol', 'asc');
   fmt = formatCurrency;
 
+  showAddForm = signal(false);
+  searchQuery = signal('');
+  pageSize = signal(25);
+  currentPage = signal(1);
+
   editingSymbol = signal<string | null>(null);
   error = signal<string | null>(null);
   success = signal<string | null>(null);
   busy = signal(false);
   seedBusy = signal(false);
   symbolQuery = signal('');
+
+  readonly columns: { key: RegistryColumnKey; label: string; align?: 'left' | 'right' }[] = [
+    { key: 'symbol', label: 'Symbol' },
+    { key: 'name', label: 'Name' },
+    { key: 'currentPrice', label: 'Price', align: 'right' },
+    { key: 'marketCap', label: 'Mkt cap', align: 'right' },
+    { key: 'pe', label: 'P/E', align: 'right' },
+    { key: 'rsi', label: 'RSI', align: 'right' },
+    { key: 'updatedAt', label: 'Updated', align: 'right' },
+  ];
+
+  readonly pageSizeOptions = [10, 25, 50, 100];
 
   form = {
     symbol: '',
@@ -66,6 +92,41 @@ export class StockRegistryComponent implements OnInit {
       .slice(0, 30);
   });
 
+  filteredStocks = computed(() => {
+    this.tableSort.column();
+    this.tableSort.direction();
+
+    const q = this.searchQuery().trim().toLowerCase();
+    let rows = this.stocks();
+    if (q) {
+      rows = rows.filter(
+        (s) =>
+          s.symbol.toLowerCase().includes(q) ||
+          (s.name ?? '').toLowerCase().includes(q)
+      );
+    }
+    return this.tableSort.sort(rows, (stock, col) => this.sortValue(stock, col));
+  });
+
+  totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.filteredStocks().length / this.pageSize()))
+  );
+
+  paginatedStocks = computed(() => {
+    const page = Math.min(this.currentPage(), this.totalPages());
+    const start = (page - 1) * this.pageSize();
+    return this.filteredStocks().slice(start, start + this.pageSize());
+  });
+
+  pageSummary = computed(() => {
+    const total = this.filteredStocks().length;
+    if (!total) return 'No stocks';
+    const page = Math.min(this.currentPage(), this.totalPages());
+    const start = (page - 1) * this.pageSize() + 1;
+    const end = Math.min(page * this.pageSize(), total);
+    return `Showing ${start}–${end} of ${total}`;
+  });
+
   ngOnInit(): void {
     void this.reload();
   }
@@ -80,6 +141,7 @@ export class StockRegistryComponent implements OnInit {
       ]);
       this.stocks.set(stocks);
       this.universe.set(universe);
+      this.currentPage.set(1);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
     } finally {
@@ -87,16 +149,62 @@ export class StockRegistryComponent implements OnInit {
     }
   }
 
-  sortedStocks(): RegistryStock[] {
-    return this.tableSort.sort(this.stocks(), (stock, col) => {
-      switch (col) {
-        case 'symbol': return stock.symbol;
-        case 'name': return stock.name;
-        case 'currentPrice': return stock.currentPrice;
-        case 'pe': return stock.pe ?? 0;
-        case 'rsi': return stock.rsi ?? 0;
-        default: return stock.symbol;
-      }
+  onSearchChange(value: string): void {
+    this.searchQuery.set(value);
+    this.currentPage.set(1);
+  }
+
+  onPageSizeChange(value: string): void {
+    const size = parseInt(value, 10);
+    if (!Number.isFinite(size) || size < 1) return;
+    this.pageSize.set(size);
+    this.currentPage.set(1);
+  }
+
+  goToPage(page: number): void {
+    const next = Math.max(1, Math.min(page, this.totalPages()));
+    this.currentPage.set(next);
+  }
+
+  openAddForm(): void {
+    this.resetForm();
+    this.showAddForm.set(true);
+    this.error.set(null);
+    this.success.set(null);
+  }
+
+  closeAddForm(): void {
+    this.showAddForm.set(false);
+    this.resetForm();
+  }
+
+  private sortValue(stock: RegistryStock, col: string): string | number {
+    switch (col) {
+      case 'symbol':
+        return stock.symbol;
+      case 'name':
+        return stock.name;
+      case 'currentPrice':
+        return stock.currentPrice;
+      case 'marketCap':
+        return stock.marketCap ?? 0;
+      case 'pe':
+        return stock.pe ?? 0;
+      case 'rsi':
+        return stock.rsi ?? 0;
+      case 'updatedAt':
+        return stock.updatedAt ?? 0;
+      default:
+        return stock.symbol;
+    }
+  }
+
+  formatUpdated(ts: number | undefined): string {
+    if (!ts) return '—';
+    return new Date(ts).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
     });
   }
 
@@ -122,6 +230,7 @@ export class StockRegistryComponent implements OnInit {
   }
 
   edit(stock: RegistryStock): void {
+    this.showAddForm.set(true);
     this.editingSymbol.set(stock.symbol);
     this.form.symbol = stock.symbol;
     this.symbolQuery.set(stock.symbol);
@@ -142,6 +251,8 @@ export class StockRegistryComponent implements OnInit {
     this.form.resistance2 = stock.resistances[1] != null ? String(stock.resistances[1]) : '';
     this.form.resistance3 = stock.resistances[2] != null ? String(stock.resistances[2]) : '';
     this.form.notes = stock.notes ?? '';
+    this.error.set(null);
+    this.success.set(null);
   }
 
   private num(v: string): number | undefined {
@@ -183,6 +294,7 @@ export class StockRegistryComponent implements OnInit {
         notes: this.form.notes.trim() || undefined,
       });
       this.success.set(`Saved ${this.form.symbol.toUpperCase()}`);
+      this.showAddForm.set(false);
       this.resetForm();
       await this.reload();
     } catch (e) {
@@ -195,7 +307,7 @@ export class StockRegistryComponent implements OnInit {
   async remove(symbol: string): Promise<void> {
     if (!confirm(`Remove ${symbol} from registry?`)) return;
     await this.registrySvc.remove(symbol);
-    if (this.editingSymbol() === symbol) this.resetForm();
+    if (this.editingSymbol() === symbol) this.closeAddForm();
     await this.reload();
   }
 
