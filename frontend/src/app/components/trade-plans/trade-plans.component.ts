@@ -51,7 +51,10 @@ interface PriceLevel {
       @apply absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white;
     }
     .action-menu {
-      @apply absolute right-0 top-full z-20 mt-1 min-w-[9rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg;
+      @apply absolute right-0 top-full z-30 mt-1 min-w-[9rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg;
+    }
+    .action-menu-up {
+      @apply bottom-full top-auto mb-1 mt-0;
     }
     .action-menu-item {
       @apply flex w-full items-center px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50;
@@ -322,13 +325,15 @@ export class TradePlansComponent implements OnInit {
   }
 
   flowArrow(t: PlannedTrade): string {
-    if (t.targetPrice === t.entryPrice) return '→';
-    return t.targetPrice > t.entryPrice ? '↑' : '↓';
+    return this.isShort(t) ? '←' : '→';
   }
 
   flowArrowClass(t: PlannedTrade): string {
+    const profitable = this.isShort(t)
+      ? t.targetPrice < t.entryPrice
+      : t.targetPrice > t.entryPrice;
     if (t.targetPrice === t.entryPrice) return 'text-slate-400';
-    return t.targetPrice > t.entryPrice ? 'text-emerald-600' : 'text-rose-600';
+    return profitable ? 'text-emerald-600' : 'text-red-600';
   }
 
   priceLevels(t: PlannedTrade): PriceLevel[] {

@@ -122,9 +122,9 @@
       </div>
     </div>
 
-    <div class="card divide-y divide-slate-100 overflow-hidden">
-      @for (t of sortedTrades(); track t.id) {
-        <article class="trade-item group">
+    <div class="card divide-y divide-slate-100">
+      @for (t of sortedTrades(); track t.id; let last = $last) {
+        <article class="trade-item group" [class.z-20]="menuOpenId() === t.id" [class.relative]="menuOpenId() === t.id">
           <div class="flex">
             <div class="w-1 shrink-0" [class]="accentClass(t)"></div>
             <div class="flex min-w-0 flex-1 flex-col gap-3 p-3 lg:flex-row lg:items-center lg:gap-4">
@@ -156,23 +156,41 @@
 
               <!-- Price ribbon + levels -->
               <div class="min-w-0 flex-1">
-                <!-- Trade flow: entry → exit (direction-aware) -->
+                <!-- Trade flow: long entry→target, short exit←entry -->
                 <div class="mb-2 flex items-center justify-center gap-3 rounded-lg bg-slate-50 px-3 py-1.5">
-                  <div class="text-center">
-                    <p class="text-[9px] font-semibold uppercase tracking-wide text-kairo-600">Entry</p>
-                    <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.entryPrice) }}</p>
-                    @if (entryPct(t) != null) {
-                      <p class="text-[10px] tabular-nums" [class]="pnlClass(entryPct(t) ?? 0)">{{ fmtPct(entryPct(t)) }}</p>
-                    }
-                  </div>
-                  <span class="text-base font-bold" [class]="flowArrowClass(t)" aria-hidden="true">{{ flowArrow(t) }}</span>
-                  <div class="text-center">
-                    <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">{{ exitLabel(t) }}</p>
-                    <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.targetPrice) }}</p>
-                    @if (exitPct(t) != null) {
-                      <p class="text-[10px] tabular-nums" [class]="pnlClass(exitPct(t) ?? 0)">{{ fmtPct(exitPct(t)) }}</p>
-                    }
-                  </div>
+                  @if (isShort(t)) {
+                    <div class="text-center">
+                      <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">{{ exitLabel(t) }}</p>
+                      <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.targetPrice) }}</p>
+                      @if (exitPct(t) != null) {
+                        <p class="text-[10px] tabular-nums" [class]="pnlClass(exitPct(t) ?? 0)">{{ fmtPct(exitPct(t)) }}</p>
+                      }
+                    </div>
+                    <span class="text-base font-bold" [class]="flowArrowClass(t)" aria-hidden="true">{{ flowArrow(t) }}</span>
+                    <div class="text-center">
+                      <p class="text-[9px] font-semibold uppercase tracking-wide text-kairo-600">Entry</p>
+                      <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.entryPrice) }}</p>
+                      @if (entryPct(t) != null) {
+                        <p class="text-[10px] tabular-nums" [class]="pnlClass(entryPct(t) ?? 0)">{{ fmtPct(entryPct(t)) }}</p>
+                      }
+                    </div>
+                  } @else {
+                    <div class="text-center">
+                      <p class="text-[9px] font-semibold uppercase tracking-wide text-kairo-600">Entry</p>
+                      <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.entryPrice) }}</p>
+                      @if (entryPct(t) != null) {
+                        <p class="text-[10px] tabular-nums" [class]="pnlClass(entryPct(t) ?? 0)">{{ fmtPct(entryPct(t)) }}</p>
+                      }
+                    </div>
+                    <span class="text-base font-bold" [class]="flowArrowClass(t)" aria-hidden="true">{{ flowArrow(t) }}</span>
+                    <div class="text-center">
+                      <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">{{ exitLabel(t) }}</p>
+                      <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.targetPrice) }}</p>
+                      @if (exitPct(t) != null) {
+                        <p class="text-[10px] tabular-nums" [class]="pnlClass(exitPct(t) ?? 0)">{{ fmtPct(exitPct(t)) }}</p>
+                      }
+                    </div>
+                  }
                 </div>
 
                 <div class="price-ribbon mx-1">
@@ -180,9 +198,12 @@
                     <span class="price-marker" [class]="level.markerClass" [style.left.%]="markerLeft(level.price, t)"></span>
                   }
                 </div>
-                <div class="mt-2 flex justify-between gap-1">
+                <div class="relative mx-1 mt-2 h-14">
                   @for (level of priceLevels(t); track level.key) {
-                    <div class="min-w-0 flex-1 text-center">
+                    <div
+                      class="absolute top-0 w-16 -translate-x-1/2 text-center"
+                      [style.left.%]="markerLeft(level.price, t)"
+                    >
                       <p class="text-[9px] font-semibold uppercase tracking-wide" [class]="level.labelClass">{{ level.label }}</p>
                       <p class="text-xs font-semibold tabular-nums text-slate-900">{{ fmt(level.price) }}</p>
                       @if (level.pct != null) {
@@ -236,7 +257,11 @@
                   ⋯
                 </button>
                 @if (menuOpenId() === t.id) {
-                  <div class="action-menu" (click)="$event.stopPropagation()">
+                  <div
+                    class="action-menu"
+                    [class.action-menu-up]="last"
+                    (click)="$event.stopPropagation()"
+                  >
                     <a
                       [routerLink]="['/trade-plans', t.id, 'edit']"
                       class="action-menu-item"
