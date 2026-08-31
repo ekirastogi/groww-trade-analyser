@@ -682,7 +682,7 @@ export class TradeLedgerService {
       avgSellPrice: profile.tradeCount ? profile.totalSellValue / profile.tradeCount : 0,
       sellValue: profile.totalSellValue,
       realisedPnL: profile.realisedPnL,
-      realisedPnLPct: profile.netPnLPct,
+      realisedPnLPct: profile.totalBuyValue ? profile.realisedPnL / profile.totalBuyValue : 0,
       tradeCount: profile.tradeCount,
       allocatedCharges: profile.allocatedCharges,
       netPnL: profile.netPnL,

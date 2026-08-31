@@ -41,6 +41,9 @@ export class AuthService {
       this.error.set(e instanceof Error ? e.message : 'Sign in failed');
     }
     await this.auth.authStateReady();
+    if (this.auth.currentUser) {
+      await this.refreshFirebaseToken(true);
+    }
     await this.supabase.whenReady();
     await this.rejectIfNotAllowed();
   }

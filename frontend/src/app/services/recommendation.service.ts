@@ -69,7 +69,9 @@ export class RecommendationService {
     const { data, error } = await this.supabase.client
       .from('recommendations')
       .select('*')
-      .in('status', ['executed', 'hit_target', 'hit_sl', 'expired', 'rejected'])
+      .or(
+        'status.in.(executed,rejected,expired),approval_status.eq.rejected,exit_reason.in.(hit_target,hit_sl,executed_on_groww)'
+      )
       .order('created_at', { ascending: false })
       .limit(50);
     if (error) throw error;

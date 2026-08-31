@@ -231,8 +231,6 @@ func makeApprovalHandler(data datapub.Backend, executor *groww.Executor) datapub
 		entry, _ := recData["entry"].(float64)
 		sl, _ := recData["sl"].(float64)
 
-		_ = data.MarkExecuting(ctx, recID)
-
 		req := groww.OrderRequest{
 			RecommendationID: recID,
 			Symbol:           symbol,
@@ -242,6 +240,10 @@ func makeApprovalHandler(data datapub.Backend, executor *groww.Executor) datapub
 			Quantity:         groww.DefaultQuantity(symbol),
 		}
 		if err := groww.ValidateRequest(req); err != nil {
+			return err
+		}
+
+		if err := data.MarkExecuting(ctx, recID); err != nil {
 			return err
 		}
 		orderID, err := executor.Execute(ctx, req)

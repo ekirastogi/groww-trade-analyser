@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -487,12 +488,13 @@ func (s *Store) PollApprovalsOnce(ctx context.Context, seen map[string]bool, han
 		if seen[id] {
 			continue
 		}
-		seen[id] = true
 		data := map[string]interface{}{}
 		_ = json.Unmarshal(raw, &data)
 		if err := handler(ctx, id, normalizeRecRow(data)); err != nil {
-			return err
+			log.Printf("approval handler failed for %s: %v", id, err)
+			continue
 		}
+		seen[id] = true
 	}
 	return nil
 }
