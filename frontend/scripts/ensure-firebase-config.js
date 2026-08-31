@@ -47,6 +47,26 @@ function fetchFromFirebaseCli() {
 }
 
 if (fromSecrets) {
+  if (process.env.FIREBASE_WEB_CONFIG) {
+    try {
+      const config = JSON.parse(process.env.FIREBASE_WEB_CONFIG);
+      writeConfigTs(config);
+      console.log('Wrote firebase.config.ts from FIREBASE_WEB_CONFIG env.');
+      process.exit(0);
+    } catch (err) {
+      console.error('FIREBASE_WEB_CONFIG is set but not valid JSON.');
+      if (err.message) console.error(err.message);
+      process.exit(1);
+    }
+  }
+
+  if (!process.env.FIREBASE_TOKEN && !process.env.CI) {
+    // Local --from-secrets without token may still use logged-in CLI below.
+  } else if (process.env.CI && !process.env.FIREBASE_TOKEN) {
+    console.error('CI deploy requires FIREBASE_TOKEN or FIREBASE_WEB_CONFIG.');
+    process.exit(1);
+  }
+
   try {
     const config = fetchFromSecretManager();
     writeConfigTs(config);

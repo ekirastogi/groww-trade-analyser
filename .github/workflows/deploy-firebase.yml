@@ -1,9 +1,19 @@
+# Optional manual Firebase deploy from GitHub Actions.
+#
+# Day-to-day deploys use ./scripts/ship.sh (local Firebase CLI login).
+# Auto-deploy on push was disabled because it duplicated ship.sh and failed when
+# GitHub repo secrets were missing/expired — causing failure notification emails.
+#
+# To use this workflow manually, set GitHub repo secrets:
+#   FIREBASE_TOKEN      — firebase login:ci
+#   SUPABASE_URL        — Supabase project URL
+#   SUPABASE_ANON_KEY   — Supabase anon key
+#   FIREBASE_WEB_CONFIG — (optional) full Firebase web config JSON; else uses CLI + token
+
 name: Deploy to Firebase
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -19,6 +29,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Validate secrets
+        run: |
+          test -n "${{ secrets.FIREBASE_TOKEN }}" || { echo "Missing FIREBASE_TOKEN secret"; exit 1; }
+          test -n "${{ secrets.SUPABASE_URL }}" || { echo "Missing SUPABASE_URL secret"; exit 1; }
+          test -n "${{ secrets.SUPABASE_ANON_KEY }}" || { echo "Missing SUPABASE_ANON_KEY secret"; exit 1; }
+
       - name: Install dependencies
         working-directory: frontend
         run: npm ci --legacy-peer-deps
@@ -33,3 +49,4 @@ jobs:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          FIREBASE_WEB_CONFIG: ${{ secrets.FIREBASE_WEB_CONFIG }}

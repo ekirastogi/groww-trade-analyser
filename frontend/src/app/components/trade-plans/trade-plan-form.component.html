@@ -41,6 +41,7 @@
               class="input-field mt-1 w-full uppercase"
               [ngModel]="symbolQuery()"
               (ngModelChange)="onSymbolQuery($event)"
+              (blur)="onSymbolBlur()"
               placeholder="Search symbol or name…"
               list="universe-symbols"
             />

@@ -2,7 +2,10 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
+import { take } from 'rxjs/operators';
 import { RegistryStockService } from '../../services/registry-stock.service';
+import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { TradePlanService } from '../../services/trade-plan.service';
 import { TradeDirection, TradeSegment, RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency, formatPctSigned, pnlClass } from '../../utils/format.utils';
@@ -21,6 +24,7 @@ import {
 })
 export class TradePlanFormComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
+  private stockSvc = inject(StockFirestoreService);
   private planSvc = inject(TradePlanService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -104,12 +108,12 @@ export class TradePlanFormComponent implements OnInit {
     return TradePlanService.estimatePnL(this.form.segment, this.form.direction, qty, entry, target);
   });
 
-  ngOnInit(): void {
-    void this.loadLookupData();
+  async ngOnInit(): Promise<void> {
+    await this.loadLookupData();
 
     const editId = this.route.snapshot.paramMap.get('id');
     if (editId) {
-      void this.loadForEdit(editId);
+      await this.loadForEdit(editId);
       return;
     }
     const date = clampToUpcomingPlanDate(this.route.snapshot.queryParamMap.get('date'));
@@ -117,7 +121,7 @@ export class TradePlanFormComponent implements OnInit {
     const tab = this.route.snapshot.queryParamMap.get('tab');
     if (tab === 'auto') this.activeTab.set('auto');
     const symbol = this.route.snapshot.queryParamMap.get('symbol');
-    if (symbol) this.pickSymbol(symbol);
+    if (symbol) await this.pickSymbol(symbol);
   }
 
   private async loadLookupData(): Promise<void> {
@@ -176,23 +180,71 @@ export class TradePlanFormComponent implements OnInit {
 
   onSymbolQuery(value: string): void {
     this.symbolQuery.set(value);
-    this.form.symbol = value.toUpperCase();
+    const sym = value.trim().toUpperCase();
+    this.form.symbol = sym;
+    const registryEntry = this.registry().find((s) => s.symbol === sym);
+    if (!registryEntry) return;
+    void this.applySymbolPrefill(sym, {
+      fillEntry: !this.form.entryPrice,
+      fillTargets: !this.form.targetPrice && !this.form.stopLoss,
+    });
   }
 
-  pickSymbol(symbol: string): void {
-    const entry = this.registry().find((s) => s.symbol === symbol.toUpperCase());
-    this.form.symbol = symbol.toUpperCase();
-    this.form.name = entry?.name ?? symbol.toUpperCase();
-    this.symbolQuery.set(this.form.symbol);
-    if (entry) {
-      if (entry.currentPrice > 0) {
-        this.form.cmp = String(entry.currentPrice);
-        this.form.entryPrice = String(entry.currentPrice);
-      }
-      if (entry.resistances[0]) this.form.targetPrice = String(entry.resistances[0]);
-      if (entry.supports[0]) this.form.stopLoss = String(entry.supports[0]);
-    }
+  onSymbolBlur(): void {
+    const sym = this.form.symbol.trim().toUpperCase();
+    if (!sym || this.form.cmp) return;
+    void this.applySymbolPrefill(sym, {
+      fillEntry: !this.form.entryPrice,
+      fillTargets: false,
+    });
+  }
+
+  async pickSymbol(symbol: string): Promise<void> {
+    this.symbolQuery.set(symbol.toUpperCase());
+    await this.applySymbolPrefill(symbol, { fillEntry: true, fillTargets: true });
     this.activeTab.set('manual');
+  }
+
+  private async applySymbolPrefill(
+    symbol: string,
+    options: { fillEntry?: boolean; fillTargets?: boolean } = {}
+  ): Promise<void> {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym) return;
+
+    const registryEntry = this.registry().find((s) => s.symbol === sym);
+    this.form.symbol = sym;
+    this.form.name = registryEntry?.name ?? sym;
+
+    const cmp = await this.resolveCmp(sym, registryEntry);
+    if (cmp != null && cmp > 0) {
+      this.form.cmp = String(cmp);
+      if (options.fillEntry !== false && !this.form.entryPrice) {
+        this.form.entryPrice = String(cmp);
+      }
+    }
+
+    if (options.fillTargets !== false && registryEntry) {
+      if (registryEntry.resistances[0] && !this.form.targetPrice) {
+        this.form.targetPrice = String(registryEntry.resistances[0]);
+      }
+      if (registryEntry.supports[0] && !this.form.stopLoss) {
+        this.form.stopLoss = String(registryEntry.supports[0]);
+      }
+    }
+  }
+
+  private async resolveCmp(symbol: string, registryEntry?: RegistryStock): Promise<number | null> {
+    if (registryEntry?.currentPrice && registryEntry.currentPrice > 0) {
+      return registryEntry.currentPrice;
+    }
+    try {
+      const snap = await firstValueFrom(this.stockSvc.watchStock(symbol).pipe(take(1)));
+      const ltp = snap?.ltp;
+      return ltp && ltp > 0 ? ltp : null;
+    } catch {
+      return null;
+    }
   }
 
   async save(source: 'manual' | 'auto' = 'manual'): Promise<void> {
