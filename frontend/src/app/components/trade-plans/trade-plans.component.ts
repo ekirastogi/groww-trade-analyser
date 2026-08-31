@@ -204,7 +204,7 @@ export class TradePlansComponent implements OnInit {
   }
 
   exitPct(t: PlannedTrade): number | null {
-    return TradePlanService.exitPctVsEntry(t.entryPrice, t.targetPrice, t.segment, t.direction);
+    return TradePlanService.pctVsCmp(t.targetPrice, t.cmp);
   }
 
   stopLossPnL(t: PlannedTrade): number | null {
