@@ -89,7 +89,7 @@
             <button
               type="button"
               class="tier-segment-item"
-              [class.tier-segment-item-active]="activeAutoWatchlist()?.id === tab.watchlist.id"
+              [class.tier-segment-item-active]="activeAutoWatchlist().id === tab.watchlist.id"
               (click)="selectAutoTier(tab.watchlist.id)"
             >
               @if (tab.watchlist.id !== allSubtabId) {
@@ -215,7 +215,7 @@
             } @empty {
               <tr>
                 <td [attr.colspan]="tierStockColumns.length + 2" class="py-10 text-center text-sm text-slate-400">
-                  @if (activeAutoWatchlist()?.id === allSubtabId) {
+                  @if (activeAutoWatchlist().id === allSubtabId) {
                     No {{ activeTab() === 'profitable' ? 'profitable' : 'loss-making' }} stocks found.
                   } @else {
                     No stocks in this tier yet.
