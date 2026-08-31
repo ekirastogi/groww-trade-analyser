@@ -4,6 +4,7 @@ import {
   computed,
   signal,
   HostListener,
+  OnInit,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -37,7 +38,7 @@ import { ReportHistoryComponent } from '../shared/report-history/report-history.
   imports: [CommonModule, RouterLink, FilterPanelComponent, ChartCardComponent, ReportHistoryComponent],
   templateUrl: './analytics.component.html',
 })
-export class AnalyticsComponent {
+export class AnalyticsComponent implements OnInit {
   readonly state = inject(ReportStateService);
   readonly formatCurrency = formatCurrency;
   readonly pnlClass = pnlClass;
@@ -47,6 +48,10 @@ export class AnalyticsComponent {
   winRateShowDots = signal(false);
 
   analysis = computed(() => this.state.analysis());
+
+  async ngOnInit(): Promise<void> {
+    await this.state.ensureLoadedFromFirebase();
+  }
 
   bestWorstDays = computed(() => {
     const daily = this.analysis()?.daily ?? [];

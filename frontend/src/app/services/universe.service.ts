@@ -4,6 +4,7 @@ import {
   collection,
   collectionData,
   doc,
+  getDocs,
   orderBy,
   query,
   writeBatch,
@@ -33,6 +34,14 @@ export class UniverseService {
         return collectionData(q, { idField: 'symbol' }) as Observable<UniverseEntry[]>;
       })
     );
+  }
+
+  async listAll(): Promise<UniverseEntry[]> {
+    await this.auth.whenReady();
+    if (!this.auth.uid) return [];
+    const q = query(collection(this.firestore, 'universe'), orderBy('symbol', 'asc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ symbol: d.id, ...d.data() }) as UniverseEntry);
   }
 
   async syncSymbols(

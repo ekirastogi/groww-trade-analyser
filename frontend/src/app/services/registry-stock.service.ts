@@ -33,6 +33,18 @@ export class RegistryStockService {
     );
   }
 
+  async listAll(): Promise<RegistryStock[]> {
+    await this.auth.whenReady();
+    const uid = this.auth.uid;
+    if (!uid) return [];
+    const q = query(
+      collection(this.firestore, 'users', uid, 'registryStocks'),
+      orderBy('symbol', 'asc')
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ symbol: d.id, ...d.data() }) as RegistryStock);
+  }
+
   async save(stock: Omit<RegistryStock, 'updatedAt'>): Promise<void> {
     const uid = this.auth.uid;
     if (!uid) throw new Error('Sign in to save stocks');

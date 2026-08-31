@@ -174,9 +174,6 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     }
 
     await this.auth.whenReady();
-    if (this.auth.hasAccess) {
-      await this.state.ensureLoadedFromFirebase();
-    }
   }
 
   ngOnDestroy(): void {

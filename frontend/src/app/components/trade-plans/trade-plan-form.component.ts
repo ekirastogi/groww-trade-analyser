@@ -2,11 +2,10 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { RegistryStockService } from '../../services/registry-stock.service';
 import { TradePlanService } from '../../services/trade-plan.service';
-import { UniverseService } from '../../services/universe.service';
-import { TradeDirection, TradeSegment } from '../../models/trading-journal.models';
+import { UniverseService, UniverseEntry } from '../../services/universe.service';
+import { TradeDirection, TradeSegment, RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency, formatPctSigned, pnlClass } from '../../utils/format.utils';
 import {
   clampToUpcomingPlanDate,
@@ -28,8 +27,8 @@ export class TradePlanFormComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
-  registry = toSignal(this.registrySvc.watchAll(), { initialValue: [] });
-  universe = toSignal(this.universeSvc.watchAll(), { initialValue: [] });
+  registry = signal<RegistryStock[]>([]);
+  universe = signal<UniverseEntry[]>([]);
 
   tradeDate = signal(todayIso());
   dateTabs = computed(() =>
@@ -109,6 +108,8 @@ export class TradePlanFormComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    void this.loadLookupData();
+
     const editId = this.route.snapshot.paramMap.get('id');
     if (editId) {
       void this.loadForEdit(editId);
@@ -120,6 +121,19 @@ export class TradePlanFormComponent implements OnInit {
     if (tab === 'auto') this.activeTab.set('auto');
     const symbol = this.route.snapshot.queryParamMap.get('symbol');
     if (symbol) this.pickSymbol(symbol);
+  }
+
+  private async loadLookupData(): Promise<void> {
+    try {
+      const [registry, universe] = await Promise.all([
+        this.registrySvc.listAll(),
+        this.universeSvc.listAll(),
+      ]);
+      this.registry.set(registry);
+      this.universe.set(universe);
+    } catch {
+      // Symbol search falls back to manual entry.
+    }
   }
 
   private async loadForEdit(id: string): Promise<void> {

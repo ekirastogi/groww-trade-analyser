@@ -3,6 +3,7 @@ import {
   Firestore,
   doc,
   docData,
+  getDoc,
   setDoc,
 } from '@angular/fire/firestore';
 import { Observable, of, switchMap } from 'rxjs';
@@ -95,5 +96,11 @@ export class VolumeShockerService {
   watchActive(): Observable<VolumeShockerActive | undefined> {
     const ref = doc(this.firestore, 'volumeShockers', 'active');
     return docData(ref) as Observable<VolumeShockerActive | undefined>;
+  }
+
+  async fetchActive(): Promise<VolumeShockerActive | undefined> {
+    const ref = doc(this.firestore, 'volumeShockers', 'active');
+    const snap = await getDoc(ref);
+    return snap.exists() ? (snap.data() as VolumeShockerActive) : undefined;
   }
 }

@@ -1,7 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { RecommendationService } from '../../services/recommendation.service';
 import { VolumeShockerService } from '../../services/stock-levels.service';
 import { AuthService } from '../../services/auth.service';
@@ -17,13 +16,16 @@ type HorizonFilter = 'all' | TradeHorizon;
   imports: [CommonModule, RouterLink],
   templateUrl: './signals.component.html',
 })
-export class SignalsComponent {
+export class SignalsComponent implements OnInit {
   private recSvc = inject(RecommendationService);
   private shockerSvc = inject(VolumeShockerService);
   readonly auth = inject(AuthService);
 
-  recommendations = toSignal(this.recSvc.watchTopPending(30), { initialValue: [] as TradeSuggestion[] });
-  shockers = toSignal(this.shockerSvc.watchActive(), { initialValue: undefined });
+  recommendations = signal<TradeSuggestion[]>([]);
+  shockers = signal<{ symbols: Array<{ symbol: string; rank: number; ratio: number; daysRemaining: number }> } | undefined>(
+    undefined
+  );
+  loading = signal(false);
   horizonFilter = signal<HorizonFilter>('all');
   processing = signal<string | null>(null);
   error = signal<string | null>(null);
@@ -51,11 +53,33 @@ export class SignalsComponent {
 
   shockerList = computed(() => this.shockers()?.symbols ?? []);
 
+  ngOnInit(): void {
+    void this.refresh();
+  }
+
+  async refresh(): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const [recs, active] = await Promise.all([
+        this.recSvc.fetchTopPending(30),
+        this.shockerSvc.fetchActive(),
+      ]);
+      this.recommendations.set(recs);
+      this.shockers.set(active);
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Failed to load signals');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   async approve(rec: TradeSuggestion): Promise<void> {
     this.processing.set(rec.id);
     this.error.set(null);
     try {
       await this.recSvc.approve(rec.id);
+      await this.refresh();
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Approval failed');
     } finally {
@@ -67,6 +91,7 @@ export class SignalsComponent {
     this.processing.set(rec.id);
     try {
       await this.recSvc.reject(rec.id);
+      await this.refresh();
     } finally {
       this.processing.set(null);
     }

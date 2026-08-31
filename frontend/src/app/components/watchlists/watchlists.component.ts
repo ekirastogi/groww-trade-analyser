@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -55,12 +55,16 @@ interface AutoTierTab {
   imports: [CommonModule, RouterLink, TradeTypeFilterComponent, MarketCapFilterComponent],
   templateUrl: './watchlists.component.html',
 })
-export class WatchlistsComponent {
+export class WatchlistsComponent implements OnInit {
   private stockSvc = inject(StockFirestoreService);
   readonly auth = inject(AuthService);
   readonly state = inject(ReportStateService);
 
   stocks = toSignal(this.stockSvc.watchMarketCatalog(), { initialValue: [] as StockSnapshot[] });
+
+  async ngOnInit(): Promise<void> {
+    await this.state.ensureLoadedFromFirebase();
+  }
 
   readonly mainTabs: { id: WatchlistTab; label: string }[] = [
     { id: 'losing', label: 'Loss making' },

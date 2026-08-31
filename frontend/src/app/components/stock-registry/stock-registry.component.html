@@ -3,6 +3,9 @@
     <p class="text-sm text-slate-500">
       {{ universe().length ? universe().length + ' symbols in universe' : 'Import NSE/BSE symbols once to enable search.' }}
     </p>
+    <button type="button" class="btn-secondary" [disabled]="seedBusy() || loading()" (click)="reload()">
+      {{ loading() ? 'Loading…' : 'Refresh' }}
+    </button>
     <button type="button" class="btn-secondary" [disabled]="seedBusy()" (click)="importExchangeUniverse()">
       {{ seedBusy() ? 'Importing…' : 'Import NSE & BSE symbols' }}
     </button>

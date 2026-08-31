@@ -134,6 +134,7 @@ export class StockDetailComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    void this.reportState.ensureLoadedFromFirebase();
     void this.workerJobs.getWorkerOnline().then((online) => this.workerOnline.set(online));
   }
 

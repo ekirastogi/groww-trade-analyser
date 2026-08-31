@@ -3,6 +3,7 @@ import {
   computed,
   effect,
   inject,
+  OnInit,
   signal,
   viewChild,
   ElementRef,
@@ -61,7 +62,7 @@ interface HeatmapSection {
   imports: [CommonModule, RouterLink, TradeTypeFilterComponent],
   templateUrl: './heatmap.component.html',
 })
-export class HeatmapComponent {
+export class HeatmapComponent implements OnInit {
   readonly reportState = inject(ReportStateService);
   readonly fmt = formatCurrency;
   readonly heatmapHeight = HEATMAP_HEIGHT_PX;
@@ -90,6 +91,10 @@ export class HeatmapComponent {
       this.updatePaneSize(el);
       onCleanup(() => observer.disconnect());
     }, { allowSignalWrites: true });
+  }
+
+  async ngOnInit(): Promise<void> {
+    await this.reportState.ensureLoadedFromFirebase();
   }
 
   othersTooltip(symbols: string[]): string {

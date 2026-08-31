@@ -1,11 +1,10 @@
-import { Component, signal, computed, inject, HostListener, effect } from '@angular/core';
+import { Component, signal, computed, inject, HostListener, effect, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { ReportStateService } from '../../services/report-state.service';
 import { PageShellService } from '../../services/page-shell.service';
-import { ClientAccountService } from '../../services/client-account.service';
+import { ClientAccountService, ClientAccount } from '../../services/client-account.service';
 import {
   PeriodBucket,
   StockSummary,
@@ -78,11 +77,11 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
   imports: [CommonModule, FormsModule, RouterLink, FilterPanelComponent, ReportHistoryComponent, ChartCardComponent],
   templateUrl: './dashboard.component.html',
 })
-export class DashboardComponent {
+export class DashboardComponent implements OnInit {
   readonly state = inject(ReportStateService);
   private pageShell = inject(PageShellService);
   private clientSvc = inject(ClientAccountService);
-  readonly clients = toSignal(this.clientSvc.watchClients(), { initialValue: [] });
+  readonly clients = signal<ClientAccount[]>([]);
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
   readonly formatCurrency = formatCurrency;
   readonly formatPct = formatPct;
@@ -97,6 +96,11 @@ export class DashboardComponent {
     }
     onCleanup(() => this.pageShell.clearOverride());
   }, { allowSignalWrites: true });
+
+  async ngOnInit(): Promise<void> {
+    await this.state.ensureLoadedFromFirebase();
+    this.clients.set(await this.clientSvc.listClients());
+  }
 
   activeTab = signal<TabId>('stocks');
   dragOver = signal(false);
@@ -333,6 +337,7 @@ export class DashboardComponent {
 
   async loadClient(clientCode: string): Promise<void> {
     await this.state.loadFromClient(clientCode);
+    this.clients.set(await this.clientSvc.listClients());
   }
 
   onDrop(event: DragEvent): void {

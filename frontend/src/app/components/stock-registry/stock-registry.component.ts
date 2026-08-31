@@ -1,9 +1,8 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { RegistryStockService } from '../../services/registry-stock.service';
-import { UniverseService } from '../../services/universe.service';
+import { UniverseService, UniverseEntry } from '../../services/universe.service';
 import { WorkerJobService } from '../../services/worker-job.service';
 import { RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency } from '../../utils/format.utils';
@@ -15,13 +14,14 @@ import { TableSortState } from '../../utils/table-sort.utils';
   imports: [CommonModule, FormsModule],
   templateUrl: './stock-registry.component.html',
 })
-export class StockRegistryComponent {
+export class StockRegistryComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
   private universeSvc = inject(UniverseService);
   private workerJobs = inject(WorkerJobService);
 
-  stocks = toSignal(this.registrySvc.watchAll(), { initialValue: [] as RegistryStock[] });
-  universe = toSignal(this.universeSvc.watchAll(), { initialValue: [] });
+  stocks = signal<RegistryStock[]>([]);
+  universe = signal<UniverseEntry[]>([]);
+  loading = signal(false);
   tableSort = new TableSortState('symbol', 'asc');
   fmt = formatCurrency;
 
@@ -65,6 +65,27 @@ export class StockRegistryComponent {
       )
       .slice(0, 30);
   });
+
+  ngOnInit(): void {
+    void this.reload();
+  }
+
+  async reload(): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const [stocks, universe] = await Promise.all([
+        this.registrySvc.listAll(),
+        this.universeSvc.listAll(),
+      ]);
+      this.stocks.set(stocks);
+      this.universe.set(universe);
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
+    } finally {
+      this.loading.set(false);
+    }
+  }
 
   sortedStocks(): RegistryStock[] {
     return this.tableSort.sort(this.stocks(), (stock, col) => {
@@ -163,6 +184,7 @@ export class StockRegistryComponent {
       });
       this.success.set(`Saved ${this.form.symbol.toUpperCase()}`);
       this.resetForm();
+      await this.reload();
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -174,6 +196,7 @@ export class StockRegistryComponent {
     if (!confirm(`Remove ${symbol} from registry?`)) return;
     await this.registrySvc.remove(symbol);
     if (this.editingSymbol() === symbol) this.resetForm();
+    await this.reload();
   }
 
   async importExchangeUniverse(): Promise<void> {
@@ -190,6 +213,7 @@ export class StockRegistryComponent {
       if (job.status === 'failed') {
         throw new Error(job.error ?? 'Universe import failed');
       }
+      await this.reload();
       this.success.set(
         `Imported ${job.symbolsIngested ?? 0} NSE/BSE symbols. Search by symbol when adding stocks.`
       );

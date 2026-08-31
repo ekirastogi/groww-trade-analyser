@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
@@ -14,7 +14,7 @@ type SortDir = 'asc' | 'desc';
   imports: [CommonModule, RouterLink, FilterPanelComponent, ReportHistoryComponent],
   templateUrl: './charges.component.html',
 })
-export class ChargesComponent {
+export class ChargesComponent implements OnInit {
   readonly state = inject(ReportStateService);
   readonly formatCurrency = formatCurrency;
 
@@ -22,6 +22,10 @@ export class ChargesComponent {
   sortDirection = signal<SortDir>('desc');
 
   analysis = computed(() => this.state.analysis());
+
+  async ngOnInit(): Promise<void> {
+    await this.state.ensureLoadedFromFirebase();
+  }
 
   readonly chargeColumns = [
     { key: 'label', label: 'Charge Type' },

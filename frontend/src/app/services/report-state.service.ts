@@ -15,7 +15,12 @@ import { AuthService } from './auth.service';
 
 const MAX_REPORT_HISTORY = 5;
 const HISTORY_STORAGE_KEY = 'groww-pl-report-history';
+const FIREBASE_REPORT_CACHE_PREFIX = 'kairo-firebase-report';
 const DEFAULT_TRADE_TYPES: TradeType[] = ['intraday'];
+
+function firebaseReportCacheKey(uid: string, clientCode: string): string {
+  return `${FIREBASE_REPORT_CACHE_PREFIX}:${uid}:${clientCode}`;
+}
 
 function defaultTradeTypesForReport(report: Report): TradeType[] {
   return report.tradeTypes.includes('intraday') ? DEFAULT_TRADE_TYPES : ['all'];
@@ -94,14 +99,23 @@ export class ReportStateService {
     }
   }
 
-  async ensureLoadedFromFirebase(): Promise<void> {
-    if (this.report() && this.dataSource() === 'firebase') return;
+  async ensureLoadedFromFirebase(forceRefresh = false): Promise<void> {
+    if (!forceRefresh && this.report() && this.dataSource() === 'firebase') return;
 
     await this.auth.whenReady();
-    if (!this.auth.currentUser) return;
+    const uid = this.auth.uid;
+    if (!uid) return;
 
     const selected = this.clientSvc.selectedClientCode();
-    if (selected) {
+    if (selected && !forceRefresh) {
+      const cached = this.restoreFirebaseReportFromCache(uid, selected);
+      if (cached) {
+        this.clientSvc.selectClient(selected);
+        this.activeClientCode.set(selected);
+        this.dataSource.set('firebase');
+        this.applyFirebaseReport(cached);
+        return;
+      }
       try {
         await this.loadFromClient(selected);
         return;
@@ -112,7 +126,18 @@ export class ReportStateService {
 
     const clients = await this.clientSvc.listClients();
     if (clients.length) {
-      await this.loadFromClient(clients[0].clientCode);
+      const clientCode = clients[0].clientCode;
+      if (!forceRefresh) {
+        const cached = this.restoreFirebaseReportFromCache(uid, clientCode);
+        if (cached) {
+          this.clientSvc.selectClient(clientCode);
+          this.activeClientCode.set(clientCode);
+          this.dataSource.set('firebase');
+          this.applyFirebaseReport(cached);
+          return;
+        }
+      }
+      await this.loadFromClient(clientCode);
     }
   }
 
@@ -204,6 +229,11 @@ export class ReportStateService {
     this.activeHistoryId.set(null);
     this.applyReport(report);
     this.error.set(null);
+    const uid = this.auth.uid;
+    const clientCode = report.summary.clientCode;
+    if (uid && clientCode) {
+      this.saveFirebaseReportToCache(uid, clientCode, report);
+    }
   }
 
   applyUploadResult(result: { clientCode: string; report?: Report | null }): void {
@@ -250,5 +280,41 @@ export class ReportStateService {
     this.error.set(null);
     this.reportHistory.set([]);
     this.saveHistoryToStorage([]);
+    this.clearFirebaseReportCache();
+  }
+
+  private restoreFirebaseReportFromCache(uid: string, clientCode: string): Report | null {
+    if (typeof sessionStorage === 'undefined') return null;
+    try {
+      const raw = sessionStorage.getItem(firebaseReportCacheKey(uid, clientCode));
+      if (!raw) return null;
+      const report = JSON.parse(raw) as Report;
+      if (!report?.summary?.clientCode || !Array.isArray(report.trades)) return null;
+      return report;
+    } catch {
+      return null;
+    }
+  }
+
+  private saveFirebaseReportToCache(uid: string, clientCode: string, report: Report): void {
+    if (typeof sessionStorage === 'undefined') return;
+    try {
+      sessionStorage.setItem(firebaseReportCacheKey(uid, clientCode), JSON.stringify(report));
+    } catch {
+      // Quota exceeded or report too large — skip cache for this session.
+    }
+  }
+
+  private clearFirebaseReportCache(): void {
+    if (typeof sessionStorage === 'undefined') return;
+    const uid = this.auth.uid;
+    if (!uid) return;
+    const prefix = `${FIREBASE_REPORT_CACHE_PREFIX}:${uid}:`;
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith(prefix)) {
+        sessionStorage.removeItem(key);
+      }
+    }
   }
 }

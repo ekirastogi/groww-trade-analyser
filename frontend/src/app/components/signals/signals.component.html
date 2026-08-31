@@ -26,7 +26,10 @@
   <section>
     <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
       <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Most recommended trades</h3>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="btn-secondary px-3 py-1 text-xs" [disabled]="loading()" (click)="refresh()">
+          {{ loading() ? 'Refreshing…' : 'Refresh' }}
+        </button>
         <button type="button" class="rounded-lg px-3 py-1 text-xs font-medium" [class.bg-kairo-600]="horizonFilter() === 'all'" [class.text-white]="horizonFilter() === 'all'" [class.bg-slate-100]="horizonFilter() !== 'all'" (click)="setHorizon('all')">All</button>
         <button type="button" class="rounded-lg px-3 py-1 text-xs font-medium" [class.bg-kairo-600]="horizonFilter() === 'intraday'" [class.text-white]="horizonFilter() === 'intraday'" [class.bg-slate-100]="horizonFilter() !== 'intraday'" (click)="setHorizon('intraday')">Intraday</button>
         <button type="button" class="rounded-lg px-3 py-1 text-xs font-medium" [class.bg-kairo-600]="horizonFilter() === 'btst'" [class.text-white]="horizonFilter() === 'btst'" [class.bg-slate-100]="horizonFilter() !== 'btst'" (click)="setHorizon('btst')">BTST</button>

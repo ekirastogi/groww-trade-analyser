@@ -5,6 +5,8 @@ import {
   collectionData,
   doc,
   docData,
+  getDoc,
+  getDocs,
   limit,
   orderBy,
   query,
@@ -29,6 +31,18 @@ export class RecommendationService {
       limit(limitCount)
     );
     return collectionData(q, { idField: 'id' }) as Observable<TradeSuggestion[]>;
+  }
+
+  /** One-shot fetch — avoids a live listener on the Signals page. */
+  async fetchTopPending(limitCount = 30): Promise<TradeSuggestion[]> {
+    const q = query(
+      this.col,
+      where('approvalStatus', '==', 'pending'),
+      orderBy('confidence', 'desc'),
+      limit(limitCount)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as TradeSuggestion);
   }
 
   watchByHorizon(horizon: 'intraday' | 'btst', limitCount = 20): Observable<TradeSuggestion[]> {
