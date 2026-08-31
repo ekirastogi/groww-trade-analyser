@@ -132,6 +132,7 @@ export interface AnalysisOptions {
 
 export interface StoredTrade extends Trade {
   dedupeKey: string;
+  fingerprint?: string;
   uploadId: string;
   clientCode: string;
   clientName: string;

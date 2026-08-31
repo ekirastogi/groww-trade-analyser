@@ -17,17 +17,52 @@ export async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
-export async function computeTradeDedupeKey(trade: Trade, clientCode: string): Promise<string> {
+/** Stable fingerprint for a trade row — includes value totals so same-day legs stay distinct. */
+export async function computeTradeFingerprint(trade: Trade, clientCode: string): Promise<string> {
   const raw = [
     clientCode,
     trade.isin,
+    trade.stockName,
     trade.buyDate,
     trade.sellDate,
     trade.quantity,
     trade.buyPrice,
+    trade.buyValue,
     trade.sellPrice,
+    trade.sellValue,
+    trade.realisedPnL,
+    trade.tradeType,
+    trade.remark,
   ].join('|');
   return sha256Hex(raw);
+}
+
+/** @deprecated Use computeTradeFingerprint */
+export async function computeTradeDedupeKey(trade: Trade, clientCode: string): Promise<string> {
+  return computeTradeFingerprint(trade, clientCode);
+}
+
+/**
+ * Assign a unique Firestore doc id for each parsed row.
+ * Identical rows in the same file get suffixes; only exact keys already in Firestore are skipped.
+ */
+export async function resolveTradeDedupeKey(
+  trade: Trade,
+  clientCode: string,
+  occurrenceInFile: number,
+  takenKeys: Set<string>
+): Promise<string> {
+  const base = await computeTradeFingerprint(trade, clientCode);
+  let suffix = occurrenceInFile;
+  let key = suffix === 0 ? base : await sha256Hex(`${base}|${suffix}`);
+
+  while (takenKeys.has(key)) {
+    suffix++;
+    key = await sha256Hex(`${base}|${suffix}`);
+  }
+
+  takenKeys.add(key);
+  return key;
 }
 
 export async function computeFileContentHash(buffer: ArrayBuffer): Promise<string> {

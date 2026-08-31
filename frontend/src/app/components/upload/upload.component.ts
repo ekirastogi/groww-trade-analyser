@@ -69,7 +69,7 @@ export class UploadComponent {
         } else {
           this.pushResult.set(
             `Saved to Firebase for ${result.clientName} (${result.clientCode}): ` +
-              `${result.newTradesAdded} new trades, ${result.duplicatesSkipped} duplicates skipped.`
+              `${result.newTradesAdded} trades imported.`
           );
         }
 

@@ -34,7 +34,7 @@ import {
   buildTradeTypeStats,
   computeChargeRatio,
   computeFileContentHash,
-  computeTradeDedupeKey,
+  computeTradeFingerprint,
   enrichTradeWithCharges,
   normalizeSymbol,
 } from '../utils/upload-merge.utils';
@@ -133,21 +133,16 @@ export class TradeLedgerService {
 
     const tradesCol = this.clientSvc.clientCol(clientCode, 'trades');
     const now = Date.now();
-    const existingKeys =
-      options.forceReingest ? new Set<string>() : await this.loadExistingTradeKeys(tradesCol);
 
     let newTradesAdded = 0;
-    let duplicatesSkipped = 0;
+    const duplicatesSkipped = 0;
     const affectedSymbols = new Set<string>();
     const pendingWrites: Array<{ ref: DocumentReference; data: StoredTrade }> = [];
 
-    for (const trade of report.trades) {
-      const dedupeKey = await computeTradeDedupeKey(trade, clientCode);
-      if (existingKeys.has(dedupeKey)) {
-        duplicatesSkipped++;
-        continue;
-      }
-
+    for (let index = 0; index < report.trades.length; index++) {
+      const trade = report.trades[index];
+      const fingerprint = await computeTradeFingerprint(trade, clientCode);
+      const dedupeKey = `${uploadId}_${String(index).padStart(6, '0')}`;
       const symbol = normalizeSymbol(trade.stockName);
       const enriched = enrichTradeWithCharges(trade, chargeRatio);
       pendingWrites.push({
@@ -155,6 +150,7 @@ export class TradeLedgerService {
         data: {
           ...trade,
           dedupeKey,
+          fingerprint,
           uploadId,
           clientCode,
           clientName,
@@ -551,15 +547,6 @@ export class TradeLedgerService {
       uploadIds: [...uploadIds],
       updatedAt: Date.now(),
     };
-  }
-
-  private async loadExistingTradeKeys(
-    tradesCol: ReturnType<ClientAccountService['clientCol']>
-  ): Promise<Set<string>> {
-    const keys = new Set<string>();
-    const snap = await getDocs(tradesCol);
-    snap.forEach((docSnap) => keys.add(docSnap.id));
-    return keys;
   }
 
   private profileToStockSummary(profile: StockProfile): StockSummary {
