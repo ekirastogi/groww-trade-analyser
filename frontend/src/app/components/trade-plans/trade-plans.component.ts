@@ -47,6 +47,9 @@ interface PriceLevel {
     .price-ribbon {
       @apply relative h-2 rounded-full bg-slate-100;
     }
+    .ribbon-pin-label {
+      @apply absolute bottom-0 w-[4.5rem] -translate-x-1/2 text-center;
+    }
     .ribbon-segment {
       @apply absolute top-0 h-full rounded-full;
     }

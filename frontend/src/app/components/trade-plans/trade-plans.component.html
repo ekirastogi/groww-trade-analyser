@@ -156,17 +156,16 @@
 
               <!-- Price levels -->
               <div class="min-w-0 flex-1">
-                <div class="mb-2 flex items-center justify-center gap-3 rounded-lg bg-slate-50 px-3 py-1.5">
-                  <div class="text-center">
-                    <p class="text-[9px] font-semibold uppercase tracking-wide text-kairo-600">Entry</p>
+                <div class="relative mx-1 mb-1 h-14">
+                  <div class="ribbon-pin-label" [style.left.%]="markerLeft(t.entryPrice, t)">
+                    <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">Entry</p>
                     <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.entryPrice) }}</p>
                     @if (entryPct(t) != null) {
                       <p class="text-[10px] tabular-nums" [class]="pnlClass(entryPct(t) ?? 0)">{{ fmtPct(entryPct(t)) }}</p>
                     }
                   </div>
-                  <span class="text-base font-bold" [class]="flowArrowClass(t)" aria-hidden="true">{{ flowArrow(t) }}</span>
-                  <div class="text-center">
-                    <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">{{ exitLabel(t) }}</p>
+                  <div class="ribbon-pin-label" [style.left.%]="markerLeft(t.targetPrice, t)">
+                    <p class="text-[9px] font-semibold uppercase tracking-wide text-red-600">{{ exitLabel(t) }}</p>
                     <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.targetPrice) }}</p>
                     @if (exitPct(t) != null) {
                       <p class="text-[10px] tabular-nums" [class]="pnlClass(exitPct(t) ?? 0)">{{ fmtPct(exitPct(t)) }}</p>
