@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
+import { LazyTradeLoaderService } from '../../services/lazy-trade-loader.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { ClientAccountService, ClientAccount } from '../../services/client-account.service';
 import {
@@ -81,6 +82,7 @@ export class DashboardComponent implements OnInit {
   readonly state = inject(ReportStateService);
   private pageShell = inject(PageShellService);
   private clientSvc = inject(ClientAccountService);
+  readonly lazyTrades = inject(LazyTradeLoaderService);
   readonly clients = signal<ClientAccount[]>([]);
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
   readonly formatCurrency = formatCurrency;
@@ -371,6 +373,7 @@ export class DashboardComponent implements OnInit {
     this.expandedPeriod.set(null);
     this.expandedStock.set(null);
     this.expandedPerStock.set(null);
+    this.lazyTrades.clear();
     this.resetSortForTab(tab);
     this.chartVersion.update((v) => v + 1);
   }
@@ -384,10 +387,11 @@ export class DashboardComponent implements OnInit {
     if (this.expandedPeriod() === period) {
       this.expandedPeriod.set(null);
       this.expandedStock.set(null);
-    } else {
-      this.expandedPeriod.set(period);
-      this.expandedStock.set(null);
+      return;
     }
+    this.expandedPeriod.set(period);
+    this.expandedStock.set(null);
+    void this.ensurePeriodTradesLoaded(period);
   }
 
   toggleStockExpand(accKey: string, event: Event): void {
@@ -413,7 +417,9 @@ export class DashboardComponent implements OnInit {
 
   togglePerStockExpand(stock: StockSummary): void {
     const key = this.stockRowKey(stock);
-    this.expandedPerStock.set(this.expandedPerStock() === key ? null : key);
+    const expanding = this.expandedPerStock() !== key;
+    this.expandedPerStock.set(expanding ? key : null);
+    if (expanding) void this.ensureStockTradesLoaded(stock);
   }
 
   isPerStockExpanded(stock: StockSummary): boolean {
@@ -421,10 +427,36 @@ export class DashboardComponent implements OnInit {
   }
 
   tradesForStock(stock: StockSummary): Trade[] {
-    const key = this.stockRowKey(stock);
-    return (this.analysis()?.filteredTrades ?? [])
-      .filter((t) => (t.isin || t.stockName) === key)
-      .sort((a, b) => b.sellDate.localeCompare(a.sellDate));
+    return this.lazyTrades.tradesForKey(this.lazyTrades.cacheKeyForStock(stock));
+  }
+
+  isStockTradesLoading(stock: StockSummary): boolean {
+    return this.lazyTrades.isLoading(this.lazyTrades.cacheKeyForStock(stock));
+  }
+
+  periodTrades(period: string): Trade[] {
+    const tab = this.activeTab();
+    if (tab !== 'daily' && tab !== 'weekly' && tab !== 'monthly') return [];
+    return this.lazyTrades.tradesForKey(`period:${tab}:${period}`);
+  }
+
+  periodStockGroups(period: string) {
+    const loaded = this.periodTrades(period);
+    if (loaded.length) return this.groupTradesByStock(loaded);
+    const row = this.activePeriodData().find((item) => item.period === period);
+    return row ? this.groupTradesByStock(row.trades) : [];
+  }
+
+  isPeriodTradesLoading(period: string): boolean {
+    const tab = this.activeTab();
+    if (tab !== 'daily' && tab !== 'weekly' && tab !== 'monthly') return false;
+    return this.lazyTrades.isLoading(`period:${tab}:${period}`);
+  }
+
+  periodTradeCount(period: string): number {
+    const loaded = this.periodTrades(period);
+    if (loaded.length) return loaded.length;
+    return this.activePeriodData().find((item) => item.period === period)?.tradeCount ?? 0;
   }
 
   tradeDetailColumnLabel(key: StockColumnKey): string {
@@ -666,6 +698,34 @@ export class DashboardComponent implements OnInit {
 
   tradeTypeLabel(type: TradeType): string {
     return this.tradeTypeLabels[type] || type;
+  }
+
+  private clientCode(): string | null {
+    return this.state.activeClientCode() ?? this.state.report()?.summary.clientCode ?? null;
+  }
+
+  private async ensureStockTradesLoaded(stock: StockSummary): Promise<void> {
+    const clientCode = this.clientCode();
+    if (!clientCode) return;
+    await this.lazyTrades.loadForStock(
+      clientCode,
+      stock,
+      this.state.report(),
+      this.state.analysisOptions()
+    );
+  }
+
+  private async ensurePeriodTradesLoaded(period: string): Promise<void> {
+    const clientCode = this.clientCode();
+    const tab = this.activeTab();
+    if (!clientCode || (tab !== 'daily' && tab !== 'weekly' && tab !== 'monthly')) return;
+    await this.lazyTrades.loadForPeriod(
+      clientCode,
+      period,
+      tab,
+      this.state.report(),
+      this.state.analysisOptions()
+    );
   }
 
   private resetSortForTab(tab: TabId): void {

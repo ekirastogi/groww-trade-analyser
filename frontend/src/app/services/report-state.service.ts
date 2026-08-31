@@ -105,9 +105,6 @@ export class ReportStateService {
           report.totalTradeCount = current.totalTradeCount ?? current.trades.length;
         }
         this.applyFirebaseReport(report);
-        if (!report.tradesLoaded) {
-          void this.loadTradesInBackground(clientCode);
-        }
       }
     } catch {
       // Ignore background refresh errors.
@@ -127,31 +124,12 @@ export class ReportStateService {
       this.activeClientCode.set(clientCode);
       this.dataSource.set('firebase');
       this.applyFirebaseReport(report);
-      void this.loadTradesInBackground(clientCode);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load saved trades';
       this.error.set(message);
       throw e;
     } finally {
       this.loading.set(false);
-    }
-  }
-
-  private async loadTradesInBackground(clientCode: string): Promise<void> {
-    this.tradesLoading.set(true);
-    try {
-      const trades = await this.ledger.getAllTrades(clientCode);
-      const current = this.report();
-      if (!current || current.summary.clientCode !== clientCode) return;
-
-      const updated = this.ledger.mergeTradesIntoReport(current, trades);
-      if (this.isValidReport(updated)) {
-        this.applyFirebaseReport(updated);
-      }
-    } catch {
-      // Keep stock-summary view if trade hydration fails.
-    } finally {
-      this.tradesLoading.set(false);
     }
   }
 
@@ -174,9 +152,6 @@ export class ReportStateService {
         this.activeClientCode.set(selected);
         this.dataSource.set('firebase');
         this.applyFirebaseReport(cached);
-        if (!cached.tradesLoaded) {
-          void this.loadTradesInBackground(selected);
-        }
         return;
       }
       try {
@@ -197,9 +172,6 @@ export class ReportStateService {
           this.activeClientCode.set(clientCode);
           this.dataSource.set('firebase');
           this.applyFirebaseReport(cached);
-          if (!cached.tradesLoaded) {
-            void this.loadTradesInBackground(clientCode);
-          }
           return;
         }
       }

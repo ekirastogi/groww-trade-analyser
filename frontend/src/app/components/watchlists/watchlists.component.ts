@@ -5,10 +5,11 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { AuthService } from '../../services/auth.service';
 import { ReportStateService } from '../../services/report-state.service';
+import { LazyTradeLoaderService } from '../../services/lazy-trade-loader.service';
 import { Watchlist } from '../../models/watchlist.models';
-import { StockSummary, TRADE_TYPE_LABELS } from '../../models/trade.models';
+import { StockSummary, TRADE_TYPE_LABELS, Trade } from '../../models/trade.models';
 import { StockSnapshot } from '../../models/market.models';
-import { formatCurrency, pnlClass } from '../../utils/format.utils';
+import { formatCurrency, formatDate, pnlClass } from '../../utils/format.utils';
 import {
   getPnlWatchlistTier,
   loadPnlTierMode,
@@ -59,12 +60,15 @@ export class WatchlistsComponent implements OnInit {
   private stockSvc = inject(StockFirestoreService);
   readonly auth = inject(AuthService);
   readonly state = inject(ReportStateService);
+  readonly lazyTrades = inject(LazyTradeLoaderService);
 
   stocks = toSignal(this.stockSvc.watchMarketCatalog(), { initialValue: [] as StockSnapshot[] });
 
   async ngOnInit(): Promise<void> {
     await this.state.ensureLoadedFromFirebase();
   }
+
+  readonly formatDate = formatDate;
 
   readonly mainTabs: { id: WatchlistTab; label: string }[] = [
     { id: 'losing', label: 'Loss making' },
@@ -92,7 +96,7 @@ export class WatchlistsComponent implements OnInit {
   ];
 
   autoTierTabs = computed((): AutoTierTab[] => {
-    const summaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
+    const summaries = this.filterByMarketCap(this.stockSummaries());
     const mode = this.tierMode();
 
     return PNL_WATCHLIST_TIERS.map((tier) => {
@@ -139,7 +143,7 @@ export class WatchlistsComponent implements OnInit {
   visibleAutoTierTabs = computed((): AutoTierTab[] => {
     const tiers =
       this.activeTab() === 'profitable' ? this.profitTierTabs() : this.lossTierTabs();
-    const summaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
+    const summaries = this.filterByMarketCap(this.stockSummaries());
     const allCount = summaries.filter((stock) =>
       this.activeTab() === 'profitable' ? stock.netPnL > 0 : stock.netPnL < 0
     ).length;
@@ -179,7 +183,7 @@ export class WatchlistsComponent implements OnInit {
   activeViewLabel = computed(() => this.activeAutoTierMeta()?.fullLabel ?? '');
 
   tierStocks = computed(() => {
-    const stockSummaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
+    const stockSummaries = this.filterByMarketCap(this.stockSummaries());
     const watchlist = this.activeAutoWatchlist();
     if (!watchlist) return [] as StockSummary[];
 
@@ -204,20 +208,12 @@ export class WatchlistsComponent implements OnInit {
     const stocks = this.tierStocks();
     if (!stocks.length) return null;
 
-    const symbolSet = new Set(stocks.map((stock) => this.stockSymbol(stock).toUpperCase()));
-    const trades = (this.state.analysis()?.filteredTrades ?? []).filter((trade) => {
-      const symbol = normalizeSymbol(trade.stockName);
-      return symbolSet.has(symbol);
-    });
-
-    let winningTrades = 0;
-    let losingTrades = 0;
-    for (const trade of trades) {
-      if (trade.realisedPnL > 0) winningTrades++;
-      else if (trade.realisedPnL < 0) losingTrades++;
-    }
-
-    const tradeCount = trades.length || stocks.reduce((sum, stock) => sum + stock.tradeCount, 0);
+    const tradeCount = stocks.reduce((sum, stock) => sum + stock.tradeCount, 0);
+    const winningTrades = stocks.reduce(
+      (sum, stock) => sum + Math.round(stock.tradeCount * ((stock.winRate ?? 0) / 100)),
+      0
+    );
+    const losingTrades = Math.max(0, tradeCount - winningTrades);
 
     return {
       stockCount: stocks.length,
@@ -236,12 +232,16 @@ export class WatchlistsComponent implements OnInit {
   setTab(tab: WatchlistTab): void {
     this.activeTab.set(tab);
     this.selectedAutoTierId.set(null);
+    this.expandedStockKey.set(null);
+    this.lazyTrades.clear();
   }
 
   setTierMode(mode: PnlTierMode): void {
     this.tierMode.set(mode);
     savePnlTierMode(mode);
     this.selectedAutoTierId.set(null);
+    this.expandedStockKey.set(null);
+    this.lazyTrades.clear();
   }
 
   toggleMobileFilters(): void {
@@ -252,11 +252,13 @@ export class WatchlistsComponent implements OnInit {
     this.selectedMarketCapTiers.set(tiers);
     this.selectedAutoTierId.set(null);
     this.expandedStockKey.set(null);
+    this.lazyTrades.clear();
   }
 
   selectAutoTier(id: string): void {
     this.selectedAutoTierId.set(id);
     this.expandedStockKey.set(null);
+    this.lazyTrades.clear();
   }
 
   stockRowKey(stock: StockSummary): string {
@@ -270,7 +272,21 @@ export class WatchlistsComponent implements OnInit {
   toggleStockExpand(stock: StockSummary, event?: Event): void {
     event?.stopPropagation();
     const key = this.stockRowKey(stock);
-    this.expandedStockKey.set(this.expandedStockKey() === key ? null : key);
+    const expanding = this.expandedStockKey() !== key;
+    this.expandedStockKey.set(expanding ? key : null);
+    if (expanding) void this.ensureStockTradesLoaded(stock);
+  }
+
+  tradesForStock(stock: StockSummary): Trade[] {
+    return this.lazyTrades.tradesForKey(this.lazyTrades.cacheKeyForStock(stock));
+  }
+
+  isStockTradesLoading(stock: StockSummary): boolean {
+    return this.lazyTrades.isLoading(this.lazyTrades.cacheKeyForStock(stock));
+  }
+
+  tradeTypeLabel(type: string): string {
+    return TRADE_TYPE_LABELS[type] || type;
   }
 
   tierTabLabel(tab: AutoTierTab): string {
@@ -323,6 +339,27 @@ export class WatchlistsComponent implements OnInit {
 
   stockSymbol(stock: StockSummary): string {
     return stock.symbol || normalizeSymbol(stock.stockName);
+  }
+
+  private stockSummaries(): StockSummary[] {
+    const report = this.state.report();
+    if (report?.stockSummary?.length) return report.stockSummary;
+    return this.state.analysis()?.stocks ?? [];
+  }
+
+  private clientCode(): string | null {
+    return this.state.activeClientCode() ?? this.state.report()?.summary.clientCode ?? null;
+  }
+
+  private async ensureStockTradesLoaded(stock: StockSummary): Promise<void> {
+    const clientCode = this.clientCode();
+    if (!clientCode) return;
+    await this.lazyTrades.loadForStock(
+      clientCode,
+      stock,
+      this.state.report(),
+      this.state.analysisOptions()
+    );
   }
 
   private marketCapForStock(stock: StockSummary): number | undefined {

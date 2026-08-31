@@ -437,20 +437,52 @@ export class TradeLedgerService {
     return count ?? 0;
   }
 
-  async getTradesForSymbol(clientCode: string, symbol: string): Promise<StoredTrade[]> {
+  async getTradesForSymbol(
+    clientCode: string,
+    symbol: string,
+    filters: { startDate?: string; endDate?: string; tradeTypes?: TradeType[] } = {}
+  ): Promise<StoredTrade[]> {
+    return this.queryTrades(clientCode, { symbol: normalizeSymbol(symbol), ...filters });
+  }
+
+  async getTradesForDateRange(
+    clientCode: string,
+    startDate: string,
+    endDate: string,
+    filters: { tradeTypes?: TradeType[] } = {}
+  ): Promise<StoredTrade[]> {
+    return this.queryTrades(clientCode, { startDate, endDate, ...filters });
+  }
+
+  private async queryTrades(
+    clientCode: string,
+    filters: {
+      symbol?: string;
+      startDate?: string;
+      endDate?: string;
+      tradeTypes?: TradeType[];
+    }
+  ): Promise<StoredTrade[]> {
     const uid = await this.auth.getDataUserId();
     if (!uid) return [];
-    const sym = normalizeSymbol(symbol);
 
     const pageSize = 1000;
     const all: StoredTrade[] = [];
     for (let from = 0; ; from += pageSize) {
-      const { data, error } = await this.supabase.client
+      let query = this.supabase.client
         .from('trades')
         .select('*')
         .eq('user_id', uid)
-        .eq('client_code', clientCode)
-        .eq('symbol', sym)
+        .eq('client_code', clientCode);
+
+      if (filters.symbol) query = query.eq('symbol', filters.symbol);
+      if (filters.startDate) query = query.gte('sell_date', filters.startDate);
+      if (filters.endDate) query = query.lte('sell_date', filters.endDate);
+      if (filters.tradeTypes?.length && !filters.tradeTypes.includes('all')) {
+        query = query.in('trade_type', filters.tradeTypes);
+      }
+
+      const { data, error } = await query
         .order('sell_date', { ascending: false })
         .range(from, from + pageSize - 1);
       if (error) throw error;

@@ -1,4 +1,4 @@
-import { Trade } from '../models/trade.models';
+import { Trade, StoredTrade } from '../models/trade.models';
 
 export interface StockTradeGroup {
   key: string;
@@ -40,5 +40,54 @@ export function groupTradesByStock(trades: Trade[]): StockTradeGroup[] {
     group.trades.push(t);
   }
 
+  for (const group of map.values()) {
+    group.trades = sortTradesBySellDateDesc(group.trades);
+  }
+
   return [...map.values()].sort((a, b) => b.totalPnL - a.totalPnL);
+}
+
+export function storedTradeToTrade(trade: StoredTrade): Trade {
+  const {
+    stockName,
+    isin,
+    quantity,
+    buyDate,
+    buyPrice,
+    buyValue,
+    sellDate,
+    sellPrice,
+    sellValue,
+    realisedPnL,
+    remark,
+    tradeType,
+    holdingDays,
+    allocatedCharges,
+    netPnL,
+  } = trade;
+  return {
+    stockName,
+    isin,
+    quantity,
+    buyDate,
+    buyPrice,
+    buyValue,
+    sellDate,
+    sellPrice,
+    sellValue,
+    realisedPnL,
+    remark,
+    tradeType,
+    holdingDays,
+    allocatedCharges,
+    netPnL,
+  };
+}
+
+export function sortTradesBySellDateDesc(trades: Trade[]): Trade[] {
+  return [...trades].sort((a, b) => {
+    const bySell = b.sellDate.localeCompare(a.sellDate);
+    if (bySell !== 0) return bySell;
+    return b.buyDate.localeCompare(a.buyDate);
+  });
 }

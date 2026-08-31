@@ -187,12 +187,16 @@
                       <td [attr.colspan]="visiblePeriodColumnList().length + 2" class="!border-t-0 bg-slate-50 p-0">
                         <div class="border-t-2 border-kairo-500 px-3 py-3 sm:px-4">
                           <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            {{ groupTradesByStock(row.trades).length }} stocks · {{ row.tradeCount }} trades
+                            @if (isPeriodTradesLoading(row.period)) {
+                              Loading trades…
+                            } @else {
+                              {{ periodStockGroups(row.period).length }} stocks · {{ periodTradeCount(row.period) }} trades
+                            }
                           </div>
 
                           <!-- Stock accordions -->
                           <div class="space-y-2">
-                            @for (group of groupTradesByStock(row.trades); track group.key; let gi = $index) {
+                            @for (group of periodStockGroups(row.period); track group.key; let gi = $index) {
                               <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                                 <!-- Stock header -->
                                 <button
@@ -220,6 +224,7 @@
                                         <thead>
                                           <tr>
                                             <th class="w-8 text-center">#</th>
+                                            <th class="text-left">Date</th>
                                             <th>Type</th>
                                             <th>Qty</th>
                                             <th>Buy</th>
@@ -233,6 +238,7 @@
                                           @for (trade of group.trades; track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
                                             <tr>
                                               <td class="text-center text-slate-400">{{ ti + 1 }}</td>
+                                              <td class="whitespace-nowrap text-xs text-slate-600">{{ formatDate(trade.sellDate) }}</td>
                                               <td>
                                                 <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                                                   {{ tradeTypeLabel(trade.tradeType) }}
@@ -496,7 +502,11 @@
                       <td [attr.colspan]="visibleStockColumnList().length + 2" class="!border-t-0 bg-slate-50 p-0">
                         <div class="border-t-2 border-kairo-500 px-3 py-3 sm:px-4">
                           <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            {{ tradesForStock(stock).length }} trades
+                            @if (isStockTradesLoading(stock)) {
+                              Loading trades…
+                            } @else {
+                              {{ tradesForStock(stock).length }} trades
+                            }
                           </div>
                           <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                             @if (visibleTradeDetailColumns().length) {
@@ -504,6 +514,7 @@
                                 <thead>
                                   <tr>
                                     <th class="w-8 text-center">#</th>
+                                    <th class="text-left">Date</th>
                                     @for (col of visibleTradeDetailColumns(); track col.key) {
                                       <th [class]="col.key === 'tradeCount' ? 'text-left' : 'text-right'">
                                         {{ tradeDetailColumnLabel(col.key) }}
@@ -515,6 +526,7 @@
                                   @for (trade of tradesForStock(stock); track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
                                     <tr>
                                       <td class="text-center text-slate-400">{{ ti + 1 }}</td>
+                                      <td class="whitespace-nowrap text-xs text-slate-600">{{ formatDate(trade.sellDate) }}</td>
                                       @for (col of visibleTradeDetailColumns(); track col.key) {
                                         <td [class]="col.key === 'tradeCount' ? '' : tradeDetailCellClass(col.key, trade)">
                                           @switch (col.key) {

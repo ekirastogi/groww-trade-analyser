@@ -207,6 +207,62 @@
                           <div class="mt-0.5 text-sm font-bold text-slate-700">{{ stockPrice(stockSymbol(stock)) }}</div>
                         </div>
                       </div>
+
+                      <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                        <div class="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          @if (isStockTradesLoading(stock)) {
+                            Loading trades…
+                          } @else {
+                            {{ tradesForStock(stock).length }} trades
+                          }
+                        </div>
+                        <table class="data-table min-w-[640px]">
+                          <thead>
+                            <tr>
+                              <th class="w-8 text-center">#</th>
+                              <th class="text-left">Date</th>
+                              <th class="text-left">Type</th>
+                              <th class="text-right">Qty</th>
+                              <th class="text-right">Buy</th>
+                              <th class="text-right hidden sm:table-cell">Buy Value</th>
+                              <th class="text-right">Sell</th>
+                              <th class="text-right hidden sm:table-cell">Sell Value</th>
+                              <th class="text-right">P&amp;L</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (trade of tradesForStock(stock); track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
+                              <tr>
+                                <td class="text-center text-slate-400">{{ ti + 1 }}</td>
+                                <td class="whitespace-nowrap text-xs text-slate-600">{{ formatDate(trade.sellDate) }}</td>
+                                <td>
+                                  <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                    {{ tradeTypeLabel(trade.tradeType) }}
+                                  </span>
+                                </td>
+                                <td class="text-right">{{ trade.quantity | number }}</td>
+                                <td class="text-right">
+                                  <div class="text-xs text-slate-500">{{ formatDate(trade.buyDate) }}</div>
+                                  <div>{{ formatCurrency(trade.buyPrice) }}</div>
+                                </td>
+                                <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.buyValue) }}</td>
+                                <td class="text-right">
+                                  <div class="text-xs text-slate-500">{{ formatDate(trade.sellDate) }}</div>
+                                  <div>{{ formatCurrency(trade.sellPrice) }}</div>
+                                </td>
+                                <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.sellValue) }}</td>
+                                <td class="text-right font-medium" [class]="pnlClass(trade.realisedPnL)">{{ formatCurrency(trade.realisedPnL) }}</td>
+                              </tr>
+                            } @empty {
+                              @if (!isStockTradesLoading(stock)) {
+                                <tr>
+                                  <td colspan="9" class="py-6 text-center text-sm text-slate-400">No trades found for this stock.</td>
+                                </tr>
+                              }
+                            }
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </td>
                 </tr>
