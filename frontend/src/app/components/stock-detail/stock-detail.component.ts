@@ -21,7 +21,7 @@ import { Trade } from '../../models/trade.models';
   imports: [CommonModule, FormsModule, RouterLink, TradingChartComponent],
   templateUrl: './stock-detail.component.html',
 })
-export class StockDetailComponent implements OnInit, OnDestroy {
+export class StockDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private stockSvc = inject(StockFirestoreService);
   private levelsSvc = inject(StockLevelsService);
@@ -30,8 +30,6 @@ export class StockDetailComponent implements OnInit, OnDestroy {
   private location = inject(Location);
   private pageShell = inject(PageShellService);
   readonly reportState = inject(ReportStateService);
-
-  private workerSub?: Subscription;
 
   readonly tableSort = new TableSortState('sellDate', 'desc');
   newLevelPrice = '';
@@ -136,13 +134,7 @@ export class StockDetailComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.workerSub = this.workerJobs.watchWorkerOnline().subscribe((online) => {
-      this.workerOnline.set(online);
-    });
-  }
-
-  ngOnDestroy(): void {
-    this.workerSub?.unsubscribe();
+    void this.workerJobs.getWorkerOnline().then((online) => this.workerOnline.set(online));
   }
 
   async backfillStock(): Promise<void> {
