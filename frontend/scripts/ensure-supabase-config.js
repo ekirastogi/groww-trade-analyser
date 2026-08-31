@@ -30,15 +30,24 @@ function writeConfigFromEnv() {
 const fromEnv = process.argv.includes('--from-env');
 
 if (fromEnv) {
-  try {
-    writeConfigFromEnv();
-    console.log('Wrote supabase.config.ts from environment variables.');
-  } catch (err) {
-    console.error('Could not generate Supabase config from environment.');
-    if (err.message) console.error(err.message);
-    process.exit(1);
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+    try {
+      writeConfigFromEnv();
+      console.log('Wrote supabase.config.ts from environment variables.');
+      process.exit(0);
+    } catch (err) {
+      console.error('Could not generate Supabase config from environment.');
+      if (err.message) console.error(err.message);
+      process.exit(1);
+    }
   }
-  process.exit(0);
+  if (fs.existsSync(configPath)) {
+    console.log('Using local supabase.config.ts for deploy (SUPABASE_URL/SUPABASE_ANON_KEY not set).');
+    process.exit(0);
+  }
+  console.error('Could not generate Supabase config.');
+  console.error('Set SUPABASE_URL and SUPABASE_ANON_KEY, or create src/environments/supabase.config.ts locally.');
+  process.exit(1);
 }
 
 if (fs.existsSync(configPath)) {
