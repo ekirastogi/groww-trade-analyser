@@ -151,6 +151,12 @@ export class StockRegistryComponent implements OnInit {
         }
       }
 
+      const deduped = await this.registrySvc.dedupeByIsin();
+      if (deduped > 0) {
+        stocks = await this.registrySvc.listAll();
+        stockCount = await this.registrySvc.count();
+      }
+
       this.stocks.set(stocks);
       this.stockCount.set(stockCount);
       this.universe.set(universe);
@@ -345,11 +351,13 @@ export class StockRegistryComponent implements OnInit {
       }
 
       const sync = await this.registrySvc.syncFromUniverse();
+      const deduped = await this.registrySvc.dedupeByIsin();
       await this.reload();
 
       const imported = job.symbolsIngested ?? sync.added;
+      const dedupeNote = deduped > 0 ? ` Removed ${deduped} duplicate listing(s) for the same company.` : '';
       this.success.set(
-        `Imported ${imported} NSE/BSE symbols into your registry. Edit any stock to add price, indicators, and notes.`
+        `Imported ${imported} NSE/BSE symbols into your registry.${dedupeNote} Edit any stock to add price, indicators, and notes.`
       );
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Import failed');

@@ -124,15 +124,32 @@ func FetchBSEEquities(ctx context.Context) ([]ExchangeSymbol, error) {
 	return out, nil
 }
 
-// MergeExchangeSymbols merges NSE and BSE lists, preferring NSE names on duplicate symbols.
+// MergeExchangeSymbols merges NSE and BSE lists. NSE wins on symbol collision;
+// when the same ISIN appears on both exchanges, only the NSE row is kept.
 func MergeExchangeSymbols(nse, bse []ExchangeSymbol) []ExchangeSymbol {
 	bySymbol := make(map[string]ExchangeSymbol, len(nse)+len(bse))
-	for _, s := range bse {
-		bySymbol[s.Symbol] = s
-	}
+	byISIN := make(map[string]string, len(nse))
+
 	for _, s := range nse {
 		bySymbol[s.Symbol] = s
+		if isin := strings.TrimSpace(s.ISIN); isin != "" {
+			byISIN[isin] = s.Symbol
+		}
 	}
+
+	for _, s := range bse {
+		if isin := strings.TrimSpace(s.ISIN); isin != "" {
+			if _, exists := byISIN[isin]; exists {
+				continue
+			}
+			byISIN[isin] = s.Symbol
+		}
+		if _, exists := bySymbol[s.Symbol]; exists {
+			continue
+		}
+		bySymbol[s.Symbol] = s
+	}
+
 	out := make([]ExchangeSymbol, 0, len(bySymbol))
 	for _, s := range bySymbol {
 		out = append(out, s)

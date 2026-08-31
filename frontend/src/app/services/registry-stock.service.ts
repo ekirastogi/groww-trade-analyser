@@ -95,6 +95,42 @@ export class RegistryStockService {
     return { added: rows.length, total: existing.length + rows.length };
   }
 
+  /** Remove registry rows that duplicate the same ISIN (keeps NSE symbol when listed). */
+  async dedupeByIsin(): Promise<number> {
+    await this.auth.whenReady();
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return 0;
+
+    const [entries, stocks] = await Promise.all([this.universe.listAll(), this.listAll()]);
+    const stockSymbols = new Set(stocks.map((stock) => stock.symbol));
+    const canonicalByIsin = new Map<string, string>();
+
+    for (const entry of entries) {
+      const isin = entry.isin?.trim();
+      if (!isin) continue;
+      const existing = canonicalByIsin.get(isin);
+      if (!existing || entry.exchange === 'NSE') {
+        canonicalByIsin.set(isin, entry.symbol);
+      }
+    }
+
+    const symbolsToRemove = new Set<string>();
+    for (const entry of entries) {
+      const isin = entry.isin?.trim();
+      if (!isin) continue;
+      const canonical = canonicalByIsin.get(isin);
+      if (!canonical || canonical === entry.symbol || !stockSymbols.has(canonical)) continue;
+      if (stockSymbols.has(entry.symbol) && entry.symbol !== canonical) {
+        symbolsToRemove.add(entry.symbol);
+      }
+    }
+
+    for (const symbol of symbolsToRemove) {
+      await this.remove(symbol);
+    }
+    return symbolsToRemove.size;
+  }
+
   async save(stock: Omit<RegistryStock, 'updatedAt'>): Promise<void> {
     const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to save stocks');
