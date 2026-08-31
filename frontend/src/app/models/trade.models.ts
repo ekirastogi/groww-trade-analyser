@@ -65,6 +65,8 @@ export interface StockSummary {
   allocatedCharges: number;
   netPnL: number;
   winRate?: number;
+  winningTrades?: number;
+  losingTrades?: number;
 }
 
 /** Pre-aggregated daily bucket stored in Supabase (sell date × trade type). */
@@ -101,6 +103,8 @@ export interface Report {
   charges: ChargesSummary;
   trades: Trade[];
   stockSummary: StockSummary[];
+  /** Full profiles with per-trade-type aggregates (source of truth for filtered stock views). */
+  stockProfiles?: StockProfile[];
   dateRange: DateRange;
   tradeTypes: TradeType[];
   /** Authoritative trade count from DB (may exceed trades.length while trades load lazily). */
@@ -166,6 +170,8 @@ export interface TradeTypeStats {
   winningTrades: number;
   losingTrades: number;
   winRate: number;
+  totalBuyValue: number;
+  totalSellValue: number;
   realisedPnL: number;
   allocatedCharges: number;
   netPnL: number;

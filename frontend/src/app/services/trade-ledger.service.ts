@@ -24,7 +24,7 @@ import {
   enrichTradeWithCharges,
   normalizeSymbol,
 } from '../utils/upload-merge.utils';
-import { expandTradeTypes } from '../utils/trade-type-filter.utils';
+import { expandTradeTypes, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
 import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
 
 export interface UploadResult {
@@ -520,10 +520,6 @@ export class TradeLedgerService {
       if (filters.symbol) query = query.eq('symbol', filters.symbol);
       if (filters.startDate) query = query.gte('sell_date', filters.startDate);
       if (filters.endDate) query = query.lte('sell_date', filters.endDate);
-      if (filters.tradeTypes?.length && !filters.tradeTypes.includes('all')) {
-        const expanded = expandTradeTypes(filters.tradeTypes);
-        if (expanded?.length) query = query.in('trade_type', expanded);
-      }
 
       const { data, error } = await query
         .order('sell_date', { ascending: false })
@@ -532,6 +528,10 @@ export class TradeLedgerService {
       if (!data?.length) break;
       all.push(...data.map((row) => tradeFromRow(row)));
       if (data.length < pageSize) break;
+    }
+
+    if (filters.tradeTypes?.length && !filters.tradeTypes.includes('all')) {
+      return all.filter((trade) => tradeMatchesTypeFilter(trade, filters.tradeTypes));
     }
     return all;
   }
@@ -966,6 +966,8 @@ export class TradeLedgerService {
       allocatedCharges: profile.allocatedCharges,
       netPnL: profile.netPnL,
       winRate: profile.winRate,
+      winningTrades: profile.winningTrades,
+      losingTrades: profile.losingTrades,
     };
   }
 

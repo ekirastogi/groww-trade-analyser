@@ -7,16 +7,47 @@ const ROUTES_WITH_INTRADAY_DEFAULT = [
   '/dashboard',
   '/watchlists',
   '/heatmap',
-  '/analytics',
   '/charges',
 ];
 
+const ROUTES_WITH_ALL_DEFAULT = ['/analytics'];
+
+export interface TradeTypeSource {
+  tradeType: TradeType;
+  buyDate: string;
+  sellDate: string;
+  remark?: string;
+  holdingDays?: number;
+}
+
 export function defaultTradeTypesForRoute(url: string): TradeType[] {
+  if (ROUTES_WITH_ALL_DEFAULT.some((route) => url.includes(route))) return ['all'];
   return ROUTES_WITH_INTRADAY_DEFAULT.some((route) => url.includes(route)) ? ['intraday'] : ['all'];
 }
 
 export function routeNeedsDefaultTypes(url: string, hasTypesParam: boolean): boolean {
-  return ROUTES_WITH_INTRADAY_DEFAULT.some((route) => url.includes(route)) && !hasTypesParam;
+  const needsDefault =
+    ROUTES_WITH_INTRADAY_DEFAULT.some((route) => url.includes(route)) ||
+    ROUTES_WITH_ALL_DEFAULT.some((route) => url.includes(route));
+  return needsDefault && !hasTypesParam;
+}
+
+/**
+ * Resolve the effective trade type from stored data.
+ * Matches parser.classifyTradeType so filters work even when trade_type in DB is stale/null.
+ */
+export function effectiveTradeType(trade: TradeTypeSource): TradeType {
+  const remark = (trade.remark ?? '').toLowerCase();
+  if (remark.includes('intraday')) return 'intraday';
+  if (remark.includes('mtf')) return 'mtf';
+  if (remark.includes('fno') || remark.includes('future') || remark.includes('option')) return 'fno';
+
+  if (trade.buyDate && trade.sellDate && trade.buyDate === trade.sellDate) return 'same_day';
+  if (trade.holdingDays === 0) return 'same_day';
+
+  const stored = trade.tradeType;
+  if (stored && stored !== 'all') return stored;
+  return 'delivery';
 }
 
 /** Expand UI filter types to the trade_type values stored in the database. */
@@ -43,4 +74,8 @@ export function matchesTradeTypeFilter(tradeType: TradeType, types?: TradeType[]
   const filter = buildTradeTypeFilter(types);
   if (!filter) return true;
   return filter.has(tradeType);
+}
+
+export function tradeMatchesTypeFilter(trade: TradeTypeSource, types?: TradeType[]): boolean {
+  return matchesTradeTypeFilter(effectiveTradeType(trade), types);
 }

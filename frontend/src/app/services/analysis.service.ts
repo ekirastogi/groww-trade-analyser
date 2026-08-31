@@ -13,7 +13,7 @@ import {
   filterDailyAnalytics,
   rollupDailyToPeriodBuckets,
 } from '../utils/analytics-aggregation.utils';
-import { buildTradeTypeFilter } from '../utils/trade-type-filter.utils';
+import { buildTradeTypeFilter, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
 
 @Injectable({ providedIn: 'root' })
 export class AnalysisService {
@@ -72,17 +72,12 @@ export class AnalysisService {
   }
 
   private filterTrades(trades: Trade[], opts: AnalysisOptions): Trade[] {
-    const typeFilter = this.buildTypeFilter(opts.tradeTypes);
     return trades.filter((t) => {
       if (opts.startDate && t.sellDate < opts.startDate) return false;
       if (opts.endDate && t.sellDate > opts.endDate) return false;
-      if (typeFilter && !typeFilter.has(t.tradeType)) return false;
+      if (!tradeMatchesTypeFilter(t, opts.tradeTypes)) return false;
       return true;
     });
-  }
-
-  private buildTypeFilter(types?: TradeType[]): Set<TradeType> | null {
-    return buildTradeTypeFilter(types);
   }
 
   private buildSummaryFromStocks(stocks: StockSummary[], chargeRatio: number) {

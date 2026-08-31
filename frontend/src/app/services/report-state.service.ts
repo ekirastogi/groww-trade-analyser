@@ -22,7 +22,7 @@ interface CachedFirebaseReport {
   savedAt: number;
   report: Report;
 }
-const DEFAULT_TRADE_TYPES: TradeType[] = ['intraday'];
+const DEFAULT_TRADE_TYPES: TradeType[] = ['all'];
 
 function firebaseReportCacheKey(uid: string, clientCode: string): string {
   return `${FIREBASE_REPORT_CACHE_PREFIX}:${uid}:${clientCode}`;
@@ -313,7 +313,9 @@ export class ReportStateService {
   private applyReport(report: Report): void {
     const prev = this.report();
     this.report.set(report);
-    if (!prev || prev.summary.clientCode !== report.summary.clientCode) {
+    const clientChanged = !prev || prev.summary.clientCode !== report.summary.clientCode;
+    const rangeMissing = !this.startDate() || !this.endDate();
+    if (clientChanged || (rangeMissing && report.dateRange.min && report.dateRange.max)) {
       this.startDate.set(report.dateRange.min);
       this.endDate.set(report.dateRange.max);
     }

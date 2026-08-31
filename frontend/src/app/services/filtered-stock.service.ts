@@ -10,7 +10,9 @@ function isUnfiltered(
   const allTypes = !opts.tradeTypes?.length || opts.tradeTypes.includes('all');
   const start = opts.startDate || report.dateRange.min;
   const end = opts.endDate || report.dateRange.max;
-  return allTypes && start === report.dateRange.min && end === report.dateRange.max;
+  const hasRange = !!(report.dateRange.min && report.dateRange.max);
+  const rangeOk = !hasRange || (start === report.dateRange.min && end === report.dateRange.max);
+  return allTypes && rangeOk;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -63,7 +65,9 @@ export class FilteredStockService {
         tradeTypes: opts.tradeTypes,
       });
       if (seq === this.loadSeq) {
-        this.summaries.set(stocks);
+        this.summaries.set(
+          stocks.length ? stocks : isUnfiltered(report, opts) ? (report.stockSummary ?? []) : []
+        );
       }
     } catch {
       if (seq === this.loadSeq) {

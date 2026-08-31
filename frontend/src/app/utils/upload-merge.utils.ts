@@ -93,11 +93,15 @@ export function enrichTradeWithCharges(trade: Trade, chargeRatio: number): Trade
 export function buildTradeTypeStats(trades: TradeWithCharges[]): TradeTypeStats {
   let winningTrades = 0;
   let losingTrades = 0;
+  let totalBuyValue = 0;
+  let totalSellValue = 0;
   let realisedPnL = 0;
   let allocatedCharges = 0;
   let netPnL = 0;
 
   for (const t of trades) {
+    totalBuyValue += t.buyValue;
+    totalSellValue += t.sellValue;
     realisedPnL += t.realisedPnL;
     allocatedCharges += t.allocatedCharges;
     netPnL += t.netPnL;
@@ -111,6 +115,8 @@ export function buildTradeTypeStats(trades: TradeWithCharges[]): TradeTypeStats 
     winningTrades,
     losingTrades,
     winRate: tradeCount ? (winningTrades / tradeCount) * 100 : 0,
+    totalBuyValue,
+    totalSellValue,
     realisedPnL,
     allocatedCharges,
     netPnL,

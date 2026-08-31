@@ -44,15 +44,11 @@ export function buildDailyAnalyticsFromTrades(trades: StoredTrade[]): DailyAnaly
   return [...buckets.values()].sort((a, b) => a.sellDate.localeCompare(b.sellDate));
 }
 
-function buildTypeFilter(types?: TradeType[]): Set<TradeType> | null {
-  return buildTradeTypeFilter(types);
-}
-
 export function filterDailyAnalytics(
   rows: DailyAnalyticsRow[],
   opts: AnalysisOptions
 ): DailyAnalyticsRow[] {
-  const typeFilter = buildTypeFilter(opts.tradeTypes);
+  const typeFilter = buildTradeTypeFilter(opts.tradeTypes);
   return rows.filter((row) => {
     if (opts.startDate && row.sellDate < opts.startDate) return false;
     if (opts.endDate && row.sellDate > opts.endDate) return false;

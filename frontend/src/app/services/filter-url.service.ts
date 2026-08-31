@@ -48,12 +48,12 @@ export class FilterUrlService {
     if (needsDefaultTypes) {
       if (report) {
         this.applyParsedFilters(
-          readGlobalFilters(paramMap, ['intraday']),
+          readGlobalFilters(paramMap, defaults),
           report.dateRange.min,
           report.dateRange.max
         );
       }
-      this.replaceQuery({ [FILTER_QUERY_KEYS.types]: 'intraday' }, true);
+      this.replaceQuery({ [FILTER_QUERY_KEYS.types]: serializeTradeTypes(defaults) }, true);
       return;
     }
 

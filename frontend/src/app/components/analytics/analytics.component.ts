@@ -131,12 +131,23 @@ export class AnalyticsComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.state.ensureLoadedFromFirebase();
+    void this.state.ensureTradesLoaded();
   }
 
   setTab(tab: AnalyticsTab): void {
     this.activeTab.set(tab);
     this.chartVersion.update((v) => v + 1);
+    if (tab === 'overview' || tab === 'stocks') {
+      void this.state.ensureTradesLoaded();
+    }
   }
+
+  /** Stock summaries for charts — filtered query with fallback to analysis stocks. */
+  visibleStocks = computed(() => {
+    const filtered = this.filteredStocks.stocks();
+    if (filtered.length) return filtered;
+    return this.analysis()?.stocks ?? [];
+  });
 
   setStockSort(key: StockSortKey): void {
     this.stockSort.set(key);
@@ -171,7 +182,7 @@ export class AnalyticsComponent implements OnInit {
   bestMonth = computed(() => pickExtremePeriod(this.analysis()?.monthly ?? [], 'best'));
   worstMonth = computed(() => pickExtremePeriod(this.analysis()?.monthly ?? [], 'worst'));
 
-  stockRows = computed(() => sortedStocks(this.filteredStocks.stocks(), this.stockSort()));
+  stockRows = computed(() => sortedStocks(this.visibleStocks(), this.stockSort()));
 
   weekdayMaxAbs = computed(() =>
     Math.max(...this.weekdayBuckets().map((b) => Math.abs(b.netPnL)), 1)
@@ -599,7 +610,7 @@ export class AnalyticsComponent implements OnInit {
 
   topStocksChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = [...(this.filteredStocks.stocks())].sort((a, b) => b.netPnL - a.netPnL);
+    const stocks = [...this.visibleStocks()].sort((a, b) => b.netPnL - a.netPnL);
     const n = this.state.topStocksCount();
     const top = stocks.slice(0, n);
     if (!top.length) return null;
@@ -616,7 +627,7 @@ export class AnalyticsComponent implements OnInit {
 
   bottomStocksChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = [...(this.filteredStocks.stocks())].sort((a, b) => a.netPnL - b.netPnL);
+    const stocks = [...this.visibleStocks()].sort((a, b) => a.netPnL - b.netPnL);
     const n = Math.min(this.state.topStocksCount(), stocks.length);
     const bottom = stocks.slice(0, n);
     if (!bottom.length) return null;
@@ -682,7 +693,7 @@ export class AnalyticsComponent implements OnInit {
 
   tradesVsPnLChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = this.filteredStocks.stocks();
+    const stocks = this.visibleStocks();
     if (stocks.length < 2) return null;
     return {
       type: 'scatter' as const,
@@ -752,7 +763,7 @@ export class AnalyticsComponent implements OnInit {
 
   pnlEfficiencyChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = [...(this.filteredStocks.stocks())]
+    const stocks = [...this.visibleStocks()]
       .filter((s) => s.tradeCount > 0)
       .map((s) => ({ ...s, pnlPerTrade: s.netPnL / s.tradeCount }))
       .sort((a, b) => Math.abs(b.pnlPerTrade) - Math.abs(a.pnlPerTrade))
@@ -772,33 +783,66 @@ export class AnalyticsComponent implements OnInit {
   winLossByStockChartConfig = computed(() => {
     this.chartVersion();
     const trades = this.analysis()?.filteredTrades ?? [];
-    if (!trades.length) return null;
-    const map = new Map<string, { wins: number; losses: number }>();
-    for (const t of trades) {
-      const k = t.stockName;
-      if (!map.has(k)) map.set(k, { wins: 0, losses: 0 });
-      const entry = map.get(k)!;
-      if (t.realisedPnL > 0) entry.wins++; else entry.losses++;
-    }
-    const sorted = [...map.entries()]
-      .sort((a, b) => (b[1].wins + b[1].losses) - (a[1].wins + a[1].losses))
-      .slice(0, 12);
     const mobile = isMobileChart();
+
+    if (trades.length) {
+      const map = new Map<string, { wins: number; losses: number }>();
+      for (const t of trades) {
+        const k = t.stockName;
+        if (!map.has(k)) map.set(k, { wins: 0, losses: 0 });
+        const entry = map.get(k)!;
+        if (t.realisedPnL > 0) entry.wins++;
+        else entry.losses++;
+      }
+      const sorted = [...map.entries()]
+        .sort((a, b) => (b[1].wins + b[1].losses) - (a[1].wins + a[1].losses))
+        .slice(0, 12);
+      if (!sorted.length) return null;
+      return {
+        type: 'bar' as const,
+        data: {
+          labels: sorted.map(([name]) => abbreviateLabel(name, mobile ? 10 : 16)),
+          datasets: [
+            {
+              label: 'Winning',
+              data: sorted.map(([, v]) => v.wins),
+              backgroundColor: 'rgba(16,185,129,0.82)',
+              borderRadius: 4,
+              maxBarThickness: 32,
+            },
+            {
+              label: 'Losing',
+              data: sorted.map(([, v]) => v.losses),
+              backgroundColor: 'rgba(239,68,68,0.82)',
+              borderRadius: 4,
+              maxBarThickness: 32,
+            },
+          ],
+        },
+        options: groupedBarChartOptions(''),
+      };
+    }
+
+    const stocks = this.visibleStocks()
+      .filter((s) => s.tradeCount > 0 && ((s.winningTrades ?? 0) + (s.losingTrades ?? 0) > 0))
+      .sort((a, b) => b.tradeCount - a.tradeCount)
+      .slice(0, 12);
+    if (!stocks.length) return null;
     return {
       type: 'bar' as const,
       data: {
-        labels: sorted.map(([name]) => abbreviateLabel(name, mobile ? 10 : 16)),
+        labels: stocks.map((s) => abbreviateLabel(s.stockName, mobile ? 10 : 16)),
         datasets: [
           {
             label: 'Winning',
-            data: sorted.map(([, v]) => v.wins),
+            data: stocks.map((s) => s.winningTrades ?? 0),
             backgroundColor: 'rgba(16,185,129,0.82)',
             borderRadius: 4,
             maxBarThickness: 32,
           },
           {
             label: 'Losing',
-            data: sorted.map(([, v]) => v.losses),
+            data: stocks.map((s) => s.losingTrades ?? 0),
             backgroundColor: 'rgba(239,68,68,0.82)',
             borderRadius: 4,
             maxBarThickness: 32,
