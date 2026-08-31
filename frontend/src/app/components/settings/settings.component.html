@@ -2,7 +2,7 @@
   <section class="card overflow-hidden">
     <div class="border-b border-slate-100 px-4 py-3 sm:px-5">
       <h2 class="text-sm font-semibold text-slate-900">Account</h2>
-      <p class="text-xs text-slate-500">Signed-in user for Firebase sync</p>
+      <p class="text-xs text-slate-500">Signed-in user for cloud sync</p>
     </div>
     <div class="px-4 py-4 sm:px-5">
       @if (auth.user(); as user) {
@@ -192,7 +192,7 @@
             [checked]="resetConfirmChecked()"
             (change)="resetConfirmChecked.set($any($event.target).checked)"
           />
-          <span class="text-sm text-slate-700">I understand this permanently deletes my uploaded trade data from Firebase.</span>
+          <span class="text-sm text-slate-700">I understand this permanently deletes my uploaded trade data from Supabase.</span>
         </label>
 
         <div>

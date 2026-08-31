@@ -84,14 +84,14 @@ export class ReportStateService {
       await this.auth.whenReady();
       const report = await this.ledger.buildReportFromClient(clientCode);
       if (!report) {
-        throw new Error('No trades found in Firebase for this account. Upload a P&L file first.');
+        throw new Error('No trades found for this account. Upload a P&L file first.');
       }
       this.clientSvc.selectClient(clientCode);
       this.activeClientCode.set(clientCode);
       this.dataSource.set('firebase');
       this.applyFirebaseReport(report);
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to load from Firebase';
+      const message = e instanceof Error ? e.message : 'Failed to load saved trades';
       this.error.set(message);
       throw e;
     } finally {

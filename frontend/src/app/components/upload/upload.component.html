@@ -10,10 +10,10 @@
   }
 
   <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
-    <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-kairo-500" [checked]="pushToFirebase()" (change)="pushToFirebase.set($any($event.target).checked)" />
+    <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-kairo-500" [checked]="saveToSupabase()" (change)="saveToSupabase.set($any($event.target).checked)" />
     <div>
-      <div class="text-sm font-medium text-slate-900">Save to Firebase (recommended)</div>
-      <div class="text-xs text-slate-500">Stores trades under your account in Firestore (users → clients → trades). Dashboards load from there.</div>
+      <div class="text-sm font-medium text-slate-900">Save to cloud (recommended)</div>
+      <div class="text-xs text-slate-500">Stores trades under your account in Supabase. Dashboards load from there.</div>
     </div>
   </label>
 

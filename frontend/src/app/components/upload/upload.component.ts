@@ -18,7 +18,7 @@ export class UploadComponent {
   private router = inject(Router);
   readonly auth = inject(AuthService);
 
-  pushToFirebase = signal(true);
+  saveToSupabase = signal(true);
   dragOver = signal(false);
   uploading = signal(false);
   pushResult = signal<string | null>(null);
@@ -53,9 +53,9 @@ export class UploadComponent {
     try {
       await this.auth.whenReady();
 
-      if (this.pushToFirebase()) {
+      if (this.saveToSupabase()) {
         if (!this.auth.currentUser) {
-          this.pushError.set('Sign in to store uploads in Firebase and load dashboards from the cloud.');
+          this.pushError.set('Sign in to store uploads in Supabase and load dashboards from the cloud.');
           return;
         }
 
@@ -64,11 +64,11 @@ export class UploadComponent {
 
         if (result.fileDuplicate) {
           this.pushResult.set(
-            `File already in Firebase for ${result.clientName} (${result.clientCode}). Dashboard refreshed from cloud.`
+            `File already saved for ${result.clientName} (${result.clientCode}). Dashboard refreshed from cloud.`
           );
         } else {
           this.pushResult.set(
-            `Saved to Firebase for ${result.clientName} (${result.clientCode}): ` +
+            `Saved to Supabase for ${result.clientName} (${result.clientCode}): ` +
               `${result.newTradesAdded} trades imported.`
           );
         }
