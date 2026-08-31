@@ -45,10 +45,19 @@ interface PriceLevel {
       @apply transition hover:bg-slate-50/60;
     }
     .price-ribbon {
-      @apply relative h-2 rounded-full bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100;
+      @apply relative h-2 rounded-full bg-slate-100;
+    }
+    .ribbon-segment {
+      @apply absolute top-0 h-full rounded-full;
+    }
+    .ribbon-profit {
+      @apply bg-emerald-500;
+    }
+    .ribbon-loss {
+      @apply bg-red-500;
     }
     .price-marker {
-      @apply absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white;
+      @apply absolute top-1/2 z-10 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white;
     }
     .action-menu {
       @apply fixed z-50 min-w-[9rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg;
@@ -320,6 +329,21 @@ export class TradePlansComponent implements OnInit {
     return ((value - min) / (max - min)) * 100;
   }
 
+  private ribbonSegment(from: number, to: number, t: PlannedTrade): { left: number; width: number } {
+    const leftPct = this.markerLeft(Math.min(from, to), t);
+    const rightPct = this.markerLeft(Math.max(from, to), t);
+    return { left: leftPct, width: Math.max(rightPct - leftPct, 1) };
+  }
+
+  ribbonProfitSegment(t: PlannedTrade): { left: number; width: number } {
+    return this.ribbonSegment(t.entryPrice, t.targetPrice, t);
+  }
+
+  ribbonLossSegment(t: PlannedTrade): { left: number; width: number } | null {
+    if (t.stopLoss == null) return null;
+    return this.ribbonSegment(t.entryPrice, t.stopLoss, t);
+  }
+
   isShort(t: PlannedTrade): boolean {
     return t.segment === 'intraday' && t.direction === 'short';
   }
@@ -351,8 +375,8 @@ export class TradePlansComponent implements OnInit {
         label: 'CMP',
         price: t.cmp,
         pct: null,
-        labelClass: 'text-slate-400',
-        markerClass: 'bg-slate-400',
+        labelClass: 'text-blue-600',
+        markerClass: 'bg-blue-500',
       });
     }
     levels.push({
@@ -360,16 +384,16 @@ export class TradePlansComponent implements OnInit {
       label: 'Entry',
       price: t.entryPrice,
       pct: this.entryPct(t),
-      labelClass: 'text-kairo-600',
-      markerClass: 'bg-kairo-600',
+      labelClass: 'text-emerald-600',
+      markerClass: 'bg-emerald-500',
     });
     levels.push({
       key: 'exit',
       label: this.exitLabel(t),
       price: t.targetPrice,
       pct: this.exitPct(t),
-      labelClass: 'text-emerald-600',
-      markerClass: 'bg-emerald-500',
+      labelClass: 'text-red-600',
+      markerClass: 'bg-red-500',
     });
     if (t.stopLoss != null) {
       levels.push({
@@ -378,7 +402,7 @@ export class TradePlansComponent implements OnInit {
         price: t.stopLoss,
         pct: this.stopLossPct(t),
         labelClass: 'text-red-500',
-        markerClass: 'bg-red-500',
+        markerClass: 'bg-red-700 ring-2 ring-white',
       });
     }
     return levels;
