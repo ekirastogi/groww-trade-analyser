@@ -74,8 +74,11 @@ export class TradePlanService {
     return this.auth.user$.pipe(
       switchMap((user) => {
         if (!user) return of([]);
-        return this.supabase.watchTable(`planned_trades-${tradeDate}`, () =>
-          this.fetchForDate(tradeDate)
+        return this.supabase.watchTable(
+          `planned_trades-${tradeDate}`,
+          () => this.fetchForDate(tradeDate),
+          undefined,
+          'planned_trades'
         );
       })
     );
@@ -101,8 +104,11 @@ export class TradePlanService {
     return this.auth.user$.pipe(
       switchMap((user) => {
         if (!user) return of([]);
-        return this.supabase.watchTable(`planned_trades-${year}-${month}`, () =>
-          this.fetchInRange(start, end)
+        return this.supabase.watchTable(
+          `planned_trades-${year}-${month}`,
+          () => this.fetchInRange(start, end),
+          undefined,
+          'planned_trades'
         );
       })
     );

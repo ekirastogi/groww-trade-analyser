@@ -174,6 +174,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     }
 
     await this.auth.whenReady();
+    this.state.startPeriodicRefresh();
   }
 
   ngOnDestroy(): void {

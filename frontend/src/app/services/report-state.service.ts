@@ -7,6 +7,7 @@ import {
   ReportHistoryEntry,
   TradeType,
 } from '../models/trade.models';
+import { UI_CACHE_TTL_MS } from '../constants/cache.constants';
 import { AnalysisService } from './analysis.service';
 import { ParserService } from './parser.service';
 import { TradeLedgerService } from './trade-ledger.service';
@@ -16,6 +17,11 @@ import { AuthService } from './auth.service';
 const MAX_REPORT_HISTORY = 5;
 const HISTORY_STORAGE_KEY = 'groww-pl-report-history';
 const FIREBASE_REPORT_CACHE_PREFIX = 'kairo-firebase-report';
+
+interface CachedFirebaseReport {
+  savedAt: number;
+  report: Report;
+}
 const DEFAULT_TRADE_TYPES: TradeType[] = ['intraday'];
 
 function firebaseReportCacheKey(uid: string, clientCode: string): string {
@@ -33,6 +39,7 @@ export class ReportStateService {
   private ledger = inject(TradeLedgerService);
   private clientSvc = inject(ClientAccountService);
   private auth = inject(AuthService);
+  private periodicRefreshStarted = false;
 
   report = signal<Report | null>(null);
   reportHistory = signal<ReportHistoryEntry[]>(this.loadHistoryFromStorage());
@@ -76,6 +83,26 @@ export class ReportStateService {
   hasReport = computed(() => !!this.report());
   hasHistory = computed(() => this.reportHistory().length > 0);
   isFirebaseBacked = computed(() => this.dataSource() === 'firebase');
+
+  /** Background refresh so dashboard P&L does not stay stale in session cache. */
+  startPeriodicRefresh(): void {
+    if (this.periodicRefreshStarted || typeof window === 'undefined') return;
+    this.periodicRefreshStarted = true;
+    setInterval(() => void this.refreshFirebaseReportSilently(), UI_CACHE_TTL_MS);
+  }
+
+  private async refreshFirebaseReportSilently(): Promise<void> {
+    const clientCode = this.activeClientCode();
+    if (!clientCode || this.dataSource() !== 'firebase') return;
+    try {
+      const report = await this.ledger.buildReportFromClient(clientCode);
+      if (report && this.isValidReport(report)) {
+        this.applyFirebaseReport(report);
+      }
+    } catch {
+      // Ignore background refresh errors.
+    }
+  }
 
   async loadFromClient(clientCode: string): Promise<void> {
     this.loading.set(true);
@@ -303,7 +330,13 @@ export class ReportStateService {
     try {
       const raw = sessionStorage.getItem(firebaseReportCacheKey(uid, clientCode));
       if (!raw) return null;
-      const report = JSON.parse(raw) as Report;
+      const parsed = JSON.parse(raw) as CachedFirebaseReport | Report;
+      const savedAt = 'savedAt' in parsed && typeof parsed.savedAt === 'number' ? parsed.savedAt : 0;
+      const report = 'report' in parsed ? parsed.report : parsed;
+      if (!savedAt || Date.now() - savedAt > UI_CACHE_TTL_MS) {
+        sessionStorage.removeItem(firebaseReportCacheKey(uid, clientCode));
+        return null;
+      }
       if (!this.isValidReport(report)) {
         sessionStorage.removeItem(firebaseReportCacheKey(uid, clientCode));
         return null;
@@ -317,7 +350,8 @@ export class ReportStateService {
   private saveFirebaseReportToCache(uid: string, clientCode: string, report: Report): void {
     if (typeof sessionStorage === 'undefined') return;
     try {
-      sessionStorage.setItem(firebaseReportCacheKey(uid, clientCode), JSON.stringify(report));
+      const payload: CachedFirebaseReport = { savedAt: Date.now(), report };
+      sessionStorage.setItem(firebaseReportCacheKey(uid, clientCode), JSON.stringify(payload));
     } catch {
       // Quota exceeded or report too large — skip cache for this session.
     }

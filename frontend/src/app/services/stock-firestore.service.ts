@@ -77,7 +77,7 @@ export class StockFirestoreService {
   watchStock(symbol: string): Observable<StockSnapshot | undefined> {
     const sym = symbol.toUpperCase();
     return this.supabase
-      .watchTable(`stocks-${sym}`, () => this.fetchStock(sym))
+      .watchTable(`stocks-${sym}`, () => this.fetchStock(sym), undefined, 'stocks')
       .pipe(map((stock) => stock ?? undefined));
   }
 
@@ -94,7 +94,7 @@ export class StockFirestoreService {
   watchChart(symbol: string): Observable<ChartView | undefined> {
     const sym = symbol.toUpperCase();
     return this.supabase
-      .watchTable(`stock_charts-${sym}`, () => this.fetchChart(sym))
+      .watchTable(`stock_charts-${sym}`, () => this.fetchChart(sym), undefined, 'stock_charts')
       .pipe(map((chart) => chart ?? undefined));
   }
 
@@ -114,7 +114,7 @@ export class StockFirestoreService {
     const upper = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
     if (!upper.length) return of([]);
     return this.supabase
-      .watchTable(`stocks-batch-${upper.join(',')}`, () => this.fetchStocksBySymbols(upper))
+      .watchTable(`stocks-batch-${upper.join(',')}`, () => this.fetchStocksBySymbols(upper), undefined, 'stocks')
       .pipe(map((rows) => rows));
   }
 

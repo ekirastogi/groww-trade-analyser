@@ -27,7 +27,7 @@ export class StockLevelsService {
       switchMap((user) => {
         if (!user) return of(undefined);
         return this.supabase
-          .watchTable(`user_stock_levels-${sym}`, () => this.fetchLevels(sym))
+          .watchTable(`user_stock_levels-${sym}`, () => this.fetchLevels(sym), undefined, 'user_stock_levels')
           .pipe(map((levels) => levels ?? undefined));
       })
     );
