@@ -176,38 +176,122 @@
       </div>
     } @else {
       <div class="space-y-4 px-4 py-4 sm:px-5">
-        <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p class="font-medium">Reset all data will delete:</p>
-          <ul class="mt-2 list-disc space-y-1 pl-5 text-amber-800">
-            <li>All client accounts, trades, uploads, and stock profiles</li>
-            <li>Stock registry, trade plans, and watchlist data</li>
-            <li>Local P&amp;L report cache in this browser</li>
-          </ul>
-          <p class="mt-2 text-amber-800">Your login is kept.</p>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <p class="font-medium text-slate-900">Choose what to reset</p>
+          <p class="mt-1">Only checked items are deleted. Your login is always kept.</p>
         </div>
 
-        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+        <div class="space-y-2">
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">This browser</p>
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-slate-300 text-kairo-500"
+              [checked]="resetLocalCache()"
+              (change)="resetLocalCache.set($any($event.target).checked)"
+            />
+            <span class="text-sm text-slate-700">
+              <span class="font-medium text-slate-900">Local P&amp;L report cache</span>
+              — fixes stale or incorrect dashboard numbers without touching cloud data.
+            </span>
+          </label>
+        </div>
+
+        <div class="space-y-2">
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Cloud data (Supabase)</p>
+
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-red-200 bg-red-50/50 p-3">
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600"
+              [checked]="resetTradeData()"
+              (change)="resetTradeData.set($any($event.target).checked)"
+            />
+            <span class="text-sm text-slate-700">
+              <span class="font-medium text-red-900">Trade &amp; upload data</span>
+              — client accounts, trades, uploads, and stock profiles.
+            </span>
+          </label>
+
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-slate-300 text-kairo-500"
+              [checked]="resetTradePlans()"
+              (change)="resetTradePlans.set($any($event.target).checked)"
+            />
+            <span class="text-sm text-slate-700">
+              <span class="font-medium text-slate-900">Trade plans</span>
+              — planned and journal trades.
+            </span>
+          </label>
+
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-slate-300 text-kairo-500"
+              [checked]="resetWatchlists()"
+              (change)="resetWatchlists.set($any($event.target).checked)"
+            />
+            <span class="text-sm text-slate-700">
+              <span class="font-medium text-slate-900">Watchlists</span>
+              — tier and manual watchlists.
+            </span>
+          </label>
+
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-slate-300 text-kairo-500"
+              [checked]="resetStockRegistry()"
+              (change)="resetStockRegistry.set($any($event.target).checked)"
+            />
+            <span class="text-sm text-slate-700">
+              <span class="font-medium text-slate-900">Stock registry</span>
+              — manually added registry stocks and prices.
+            </span>
+          </label>
+
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-slate-300 text-kairo-500"
+              [checked]="resetStockLevels()"
+              (change)="resetStockLevels.set($any($event.target).checked)"
+            />
+            <span class="text-sm text-slate-700">
+              <span class="font-medium text-slate-900">Chart stock levels</span>
+              — saved entry/exit levels on stock charts.
+            </span>
+          </label>
+        </div>
+
+        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <input
             type="checkbox"
             class="mt-0.5 h-4 w-4 rounded border-slate-300 text-kairo-500"
             [checked]="resetConfirmChecked()"
             (change)="resetConfirmChecked.set($any($event.target).checked)"
           />
-          <span class="text-sm text-slate-700">I understand this permanently deletes my uploaded trade data from Supabase.</span>
+          <span class="text-sm text-amber-900">
+            I understand the checked items will be permanently deleted and cannot be undone.
+          </span>
         </label>
 
-        <div>
-          <label class="mb-2 block text-sm font-medium text-slate-700">Re-ingest after reset (optional)</label>
-          <input
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-kairo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-kairo-700"
-            (change)="onReingestFileSelected($event)"
-          />
-          @if (reingestFile(); as file) {
-            <p class="mt-2 text-xs text-slate-500">Selected: {{ file.name }}</p>
-          }
-        </div>
+        @if (resetTradeData()) {
+          <div>
+            <label class="mb-2 block text-sm font-medium text-slate-700">Re-ingest after clearing trade data (optional)</label>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-kairo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-kairo-700"
+              (change)="onReingestFileSelected($event)"
+            />
+            @if (reingestFile(); as file) {
+              <p class="mt-2 text-xs text-slate-500">Selected: {{ file.name }}</p>
+            }
+          </div>
+        }
 
         @if (resetError()) {
           <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ resetError() }}</div>
@@ -217,8 +301,8 @@
         }
 
         <div class="flex flex-wrap gap-3 pt-1">
-          <button type="button" class="btn-danger" [disabled]="!canConfirmReset()" (click)="confirmResetAllData()">
-            {{ resetBusy() ? 'Resetting…' : 'Reset All Data' }}
+          <button type="button" class="btn-danger" [disabled]="!canConfirmReset()" (click)="confirmResetData()">
+            {{ resetBusy() ? 'Resetting…' : 'Reset selected' }}
           </button>
           <button type="button" class="btn-secondary" (click)="setTab('upload')">Upload P&amp;L</button>
         </div>

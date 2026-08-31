@@ -17,6 +17,10 @@ type RegistryColumnKey =
   | 'rsi'
   | 'updatedAt';
 
+type UniverseColumnKey = 'symbol' | 'name' | 'exchange' | 'source' | 'updatedAt';
+
+type RegistryView = 'registry' | 'universe';
+
 @Component({
   selector: 'app-stock-registry',
   standalone: true,
@@ -30,8 +34,11 @@ export class StockRegistryComponent implements OnInit {
 
   stocks = signal<RegistryStock[]>([]);
   universe = signal<UniverseEntry[]>([]);
+  universeCount = signal(0);
   loading = signal(false);
+  viewMode = signal<RegistryView>('registry');
   tableSort = new TableSortState('symbol', 'asc');
+  universeSort = new TableSortState('symbol', 'asc');
   fmt = formatCurrency;
 
   showAddForm = signal(false);
@@ -53,6 +60,14 @@ export class StockRegistryComponent implements OnInit {
     { key: 'marketCap', label: 'Mkt cap', align: 'right' },
     { key: 'pe', label: 'P/E', align: 'right' },
     { key: 'rsi', label: 'RSI', align: 'right' },
+    { key: 'updatedAt', label: 'Updated', align: 'right' },
+  ];
+
+  readonly universeColumns: { key: UniverseColumnKey; label: string; align?: 'left' | 'right' }[] = [
+    { key: 'symbol', label: 'Symbol' },
+    { key: 'name', label: 'Name' },
+    { key: 'exchange', label: 'Exchange' },
+    { key: 'source', label: 'Source' },
     { key: 'updatedAt', label: 'Updated', align: 'right' },
   ];
 
@@ -92,6 +107,23 @@ export class StockRegistryComponent implements OnInit {
       .slice(0, 30);
   });
 
+  filteredUniverse = computed(() => {
+    this.universeSort.column();
+    this.universeSort.direction();
+
+    const q = this.searchQuery().trim().toLowerCase();
+    let rows = this.universe();
+    if (q) {
+      rows = rows.filter(
+        (s) =>
+          s.symbol.toLowerCase().includes(q) ||
+          (s.name ?? '').toLowerCase().includes(q) ||
+          (s.exchange ?? '').toLowerCase().includes(q)
+      );
+    }
+    return this.universeSort.sort(rows, (entry, col) => this.universeSortValue(entry, col));
+  });
+
   filteredStocks = computed(() => {
     this.tableSort.column();
     this.tableSort.direction();
@@ -108,9 +140,11 @@ export class StockRegistryComponent implements OnInit {
     return this.tableSort.sort(rows, (stock, col) => this.sortValue(stock, col));
   });
 
-  totalPages = computed(() =>
-    Math.max(1, Math.ceil(this.filteredStocks().length / this.pageSize()))
-  );
+  totalPages = computed(() => {
+    const total =
+      this.viewMode() === 'universe' ? this.filteredUniverse().length : this.filteredStocks().length;
+    return Math.max(1, Math.ceil(total / this.pageSize()));
+  });
 
   paginatedStocks = computed(() => {
     const page = Math.min(this.currentPage(), this.totalPages());
@@ -118,9 +152,16 @@ export class StockRegistryComponent implements OnInit {
     return this.filteredStocks().slice(start, start + this.pageSize());
   });
 
+  paginatedUniverse = computed(() => {
+    const page = Math.min(this.currentPage(), this.totalPages());
+    const start = (page - 1) * this.pageSize();
+    return this.filteredUniverse().slice(start, start + this.pageSize());
+  });
+
   pageSummary = computed(() => {
-    const total = this.filteredStocks().length;
-    if (!total) return 'No stocks';
+    const total =
+      this.viewMode() === 'universe' ? this.filteredUniverse().length : this.filteredStocks().length;
+    if (!total) return this.viewMode() === 'universe' ? 'No symbols' : 'No stocks';
     const page = Math.min(this.currentPage(), this.totalPages());
     const start = (page - 1) * this.pageSize() + 1;
     const end = Math.min(page * this.pageSize(), total);
@@ -135,18 +176,26 @@ export class StockRegistryComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [stocks, universe] = await Promise.all([
+      const [stocks, universe, universeCount] = await Promise.all([
         this.registrySvc.listAll(),
         this.universeSvc.listAll(),
+        this.universeSvc.count(),
       ]);
       this.stocks.set(stocks);
       this.universe.set(universe);
+      this.universeCount.set(universeCount);
       this.currentPage.set(1);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  setViewMode(mode: RegistryView): void {
+    this.viewMode.set(mode);
+    this.currentPage.set(1);
+    this.searchQuery.set('');
   }
 
   onSearchChange(value: string): void {
@@ -176,6 +225,47 @@ export class StockRegistryComponent implements OnInit {
   closeAddForm(): void {
     this.showAddForm.set(false);
     this.resetForm();
+  }
+
+  private universeSortValue(entry: UniverseEntry, col: string): string | number {
+    switch (col) {
+      case 'symbol':
+        return entry.symbol;
+      case 'name':
+        return entry.name ?? '';
+      case 'exchange':
+        return entry.exchange ?? '';
+      case 'source':
+        return entry.source;
+      case 'updatedAt':
+        return entry.updatedAt ?? 0;
+      default:
+        return entry.symbol;
+    }
+  }
+
+  formatSource(source: UniverseEntry['source']): string {
+    switch (source) {
+      case 'exchange_seed':
+        return 'NSE/BSE';
+      case 'pnl_upload':
+        return 'P&L upload';
+      case 'seed':
+        return 'Seed';
+      default:
+        return 'Manual';
+    }
+  }
+
+  isInRegistry(symbol: string): boolean {
+    return this.stocks().some((s) => s.symbol === symbol.toUpperCase());
+  }
+
+  addFromUniverse(entry: UniverseEntry): void {
+    this.openAddForm();
+    this.form.symbol = entry.symbol;
+    this.symbolQuery.set(entry.symbol);
+    this.form.name = entry.name ?? entry.symbol;
   }
 
   private sortValue(stock: RegistryStock, col: string): string | number {
@@ -326,8 +416,10 @@ export class StockRegistryComponent implements OnInit {
         throw new Error(job.error ?? 'Universe import failed');
       }
       await this.reload();
+      const count = job.symbolsIngested ?? this.universeCount();
+      this.viewMode.set('universe');
       this.success.set(
-        `Imported ${job.symbolsIngested ?? 0} NSE/BSE symbols. Search by symbol when adding stocks.`
+        `Imported ${count} NSE/BSE symbols into the symbol universe. Open the Imported symbols tab to browse them.`
       );
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Import failed');

@@ -25,6 +25,12 @@ export class SettingsComponent {
   activeTab = signal<SettingsTab>('upload');
 
   resetConfirmChecked = signal(false);
+  resetTradeData = signal(false);
+  resetWatchlists = signal(false);
+  resetStockRegistry = signal(false);
+  resetTradePlans = signal(false);
+  resetStockLevels = signal(false);
+  resetLocalCache = signal(true);
   resetBusy = signal(false);
   resetError = signal<string | null>(null);
   resetSuccess = signal<string | null>(null);
@@ -42,7 +48,19 @@ export class SettingsComponent {
   workerOnline = signal(false);
   listenUntil = signal<number | null>(null);
 
-  canConfirmReset = computed(() => this.resetConfirmChecked() && !this.resetBusy());
+  hasResetSelection = computed(
+    () =>
+      this.resetTradeData() ||
+      this.resetWatchlists() ||
+      this.resetStockRegistry() ||
+      this.resetTradePlans() ||
+      this.resetStockLevels() ||
+      this.resetLocalCache()
+  );
+
+  canConfirmReset = computed(
+    () => this.resetConfirmChecked() && this.hasResetSelection() && !this.resetBusy()
+  );
   canRunBackfill = computed(() => !this.backfillBusy());
   listenActive = computed(() => {
     const until = this.listenUntil();
@@ -169,19 +187,31 @@ export class SettingsComponent {
     }
   }
 
-  async confirmResetAllData(): Promise<void> {
+  async confirmResetData(): Promise<void> {
     if (!this.canConfirmReset()) return;
 
     this.resetBusy.set(true);
     this.resetError.set(null);
     this.resetSuccess.set(null);
 
+    const options = {
+      tradeData: this.resetTradeData(),
+      watchlists: this.resetWatchlists(),
+      stockRegistry: this.resetStockRegistry(),
+      tradePlans: this.resetTradePlans(),
+      stockLevels: this.resetStockLevels(),
+    };
+
     try {
-      const result = await this.ledger.resetAllData();
-      this.state.clear();
+      const hasCloudReset = Object.values(options).some(Boolean);
+      const result = hasCloudReset ? await this.ledger.resetData(options) : null;
+
+      if (this.resetLocalCache() || options.tradeData) {
+        this.state.clear();
+      }
 
       const file = this.reingestFile();
-      if (file) {
+      if (file && options.tradeData) {
         const upload = await this.ledger.uploadReport(file, { forceReingest: true });
         this.state.applyUploadResult(upload);
         this.resetSuccess.set(
@@ -192,15 +222,15 @@ export class SettingsComponent {
         await this.router.navigate(['/dashboard']);
       } else {
         const parts = [
-          result.clientsRemoved ? `${result.clientsRemoved} client account(s)` : null,
-          result.watchlistsRemoved ? `${result.watchlistsRemoved} watchlist(s)` : null,
-          result.registryStocksRemoved ? `${result.registryStocksRemoved} registry stock(s)` : null,
-          result.plannedTradesRemoved ? `${result.plannedTradesRemoved} planned trade(s)` : null,
+          result?.clientsRemoved ? `${result.clientsRemoved} client account(s)` : null,
+          result?.watchlistsRemoved ? `${result.watchlistsRemoved} watchlist(s)` : null,
+          result?.registryStocksRemoved ? `${result.registryStocksRemoved} registry stock(s)` : null,
+          result?.plannedTradesRemoved ? `${result.plannedTradesRemoved} planned trade(s)` : null,
+          result?.levelsRemoved ? `${result.levelsRemoved} stock level(s)` : null,
+          this.resetLocalCache() ? 'local P&L cache' : null,
         ].filter(Boolean);
         this.resetSuccess.set(
-          parts.length
-            ? `Cleared: ${parts.join(', ')}. Upload a P&L file to start fresh.`
-            : 'All trade data cleared. Upload a P&L file to start fresh.'
+          parts.length ? `Cleared: ${parts.join(', ')}.` : 'Nothing was selected to reset.'
         );
         this.resetConfirmChecked.set(false);
         this.reingestFile.set(null);

@@ -40,7 +40,15 @@ export interface UploadOptions {
   forceReingest?: boolean;
 }
 
-export interface ResetAllDataResult {
+export interface ResetDataOptions {
+  tradeData?: boolean;
+  watchlists?: boolean;
+  stockRegistry?: boolean;
+  tradePlans?: boolean;
+  stockLevels?: boolean;
+}
+
+export interface ResetDataResult {
   clientsRemoved: number;
   watchlistsRemoved: number;
   registryStocksRemoved: number;
@@ -344,30 +352,45 @@ export class TradeLedgerService {
     };
   }
 
-  async resetAllData(): Promise<ResetAllDataResult> {
+  async resetData(options: ResetDataOptions): Promise<ResetDataResult> {
     await this.auth.whenReady();
     const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to reset data');
 
-    const clients = await this.clientSvc.listClients();
-    for (const client of clients) {
-      await this.deleteClientData(client.clientCode);
+    const result: ResetDataResult = {
+      clientsRemoved: 0,
+      watchlistsRemoved: 0,
+      registryStocksRemoved: 0,
+      plannedTradesRemoved: 0,
+      levelsRemoved: 0,
+    };
+
+    if (options.tradeData) {
+      const clients = await this.clientSvc.listClients();
+      for (const client of clients) {
+        await this.deleteClientData(client.clientCode);
+      }
+      result.clientsRemoved = clients.length;
+      this.clientSvc.clearSelectedClient();
     }
 
-    const watchlistsRemoved = await this.watchlists.deleteAllWatchlists();
-    const registryStocksRemoved = await this.registry.deleteAll();
-    const plannedTradesRemoved = await this.tradePlans.deleteAll();
-    const levelsRemoved = await this.deleteUserLevels(uid);
+    if (options.watchlists) {
+      result.watchlistsRemoved = await this.watchlists.deleteAllWatchlists();
+    }
 
-    this.clientSvc.clearSelectedClient();
+    if (options.stockRegistry) {
+      result.registryStocksRemoved = await this.registry.deleteAll();
+    }
 
-    return {
-      clientsRemoved: clients.length,
-      watchlistsRemoved,
-      registryStocksRemoved,
-      plannedTradesRemoved,
-      levelsRemoved,
-    };
+    if (options.tradePlans) {
+      result.plannedTradesRemoved = await this.tradePlans.deleteAll();
+    }
+
+    if (options.stockLevels) {
+      result.levelsRemoved = await this.deleteUserLevels(uid);
+    }
+
+    return result;
   }
 
   private async deleteUserLevels(uid: string): Promise<number> {
