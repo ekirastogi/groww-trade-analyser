@@ -75,7 +75,9 @@ export class SettingsComponent {
       await this.workerJobs.requestListenWindow();
       await this.refreshWorkerStatus();
       this.workerSuccess.set(
-        'Listen window opened for 15 minutes. Start the backend worker locally if it is not already running.'
+        (await this.workerJobs.getWorkerOnline())
+          ? 'Local worker detected on localhost:8080. Ingest runs directly (no Firestore needed).'
+          : 'Listen window opened for 15 minutes. Start the backend worker locally if it is not already running.'
       );
     } catch (e) {
       this.workerError.set(e instanceof Error ? e.message : 'Failed to connect worker');

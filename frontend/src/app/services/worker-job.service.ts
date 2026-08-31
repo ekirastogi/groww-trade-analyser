@@ -31,10 +31,12 @@ export interface WorkerStatus {
   service?: string;
 }
 
+const LOCAL_WORKER_URL = 'http://localhost:8080';
 const WORKER_ONLINE_MS = 10 * 60 * 1000;
 const LISTEN_WINDOW_MS = 15 * 60 * 1000;
 const JOB_POLL_MS = 2000;
 const JOB_TIMEOUT_MS = 15 * 60 * 1000;
+const LOCAL_FETCH_TIMEOUT_MS = 2000;
 
 export interface WorkerListenState {
   active: boolean;
@@ -47,18 +49,12 @@ export interface WorkerListenState {
 export class WorkerJobService {
   private firestore = inject(Firestore);
   private auth = inject(AuthService);
+  private localJobs = new Map<string, WorkerJob>();
 
-  /** One-shot check — no continuous polling. */
+  /** Prefer local HTTP health — works when Firestore quota is exhausted. */
   async getWorkerOnline(): Promise<boolean> {
-    try {
-      const ref = doc(this.firestore, 'worker', 'status');
-      const snap = await getDoc(ref);
-      const status = snap.data() as WorkerStatus | undefined;
-      if (!status?.lastSeen) return false;
-      return Date.now() - status.lastSeen < WORKER_ONLINE_MS;
-    } catch {
-      return false;
-    }
+    if (await this.isLocalWorkerReachable()) return true;
+    return this.getFirestoreWorkerOnline();
   }
 
   /** Live worker presence for detail views. */
@@ -73,8 +69,10 @@ export class WorkerJobService {
     );
   }
 
-  /** Opens a short listen window so the local worker polls Firestore on demand. */
+  /** Opens listen window in Firestore, or no-op when local worker is reachable. */
   async requestListenWindow(durationMs = LISTEN_WINDOW_MS): Promise<void> {
+    if (await this.isLocalWorkerReachable()) return;
+
     await this.auth.whenReady();
     const uid = this.auth.uid;
     if (!uid) throw new Error('Sign in to connect the worker');
@@ -89,6 +87,13 @@ export class WorkerJobService {
   }
 
   async getListenState(): Promise<WorkerListenState | null> {
+    if (await this.isLocalWorkerReachable()) {
+      return {
+        active: true,
+        until: Date.now() + LISTEN_WINDOW_MS,
+        updatedAt: Date.now(),
+      };
+    }
     try {
       const snap = await getDoc(doc(this.firestore, 'worker', 'listen'));
       if (!snap.exists()) return null;
@@ -103,17 +108,107 @@ export class WorkerJobService {
   }
 
   async requestHotIngest(): Promise<string> {
+    if (await this.isLocalWorkerReachable()) {
+      return this.runLocalIngest('hot_ingest', '/api/v1/ingest/hot');
+    }
     return this.requestJob('hot_ingest');
   }
 
   async requestSymbolIngest(symbol: string): Promise<string> {
     const sym = symbol.trim().toUpperCase();
     if (!sym) throw new Error('Symbol is required');
+    if (await this.isLocalWorkerReachable()) {
+      return this.runLocalIngest('symbol_ingest', `/api/v1/ingest/symbol/${encodeURIComponent(sym)}`, sym);
+    }
     return this.requestJob('symbol_ingest', sym);
   }
 
   async requestSeedUniverse(): Promise<string> {
+    if (await this.isLocalWorkerReachable()) {
+      return this.runLocalIngest('seed_universe', '/api/v1/ingest/seed-universe');
+    }
     return this.requestJob('seed_universe');
+  }
+
+  async waitForJob(jobId: string, timeoutMs = JOB_TIMEOUT_MS): Promise<WorkerJob> {
+    const local = this.localJobs.get(jobId);
+    if (local) {
+      this.localJobs.delete(jobId);
+      return local;
+    }
+
+    const ref = doc(this.firestore, 'workerJobs', jobId);
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        throw new Error('Worker job not found');
+      }
+      const job = { id: snap.id, ...snap.data() } as WorkerJob;
+      if (job.status === 'completed' || job.status === 'failed') {
+        return job;
+      }
+      await new Promise((r) => setTimeout(r, JOB_POLL_MS));
+    }
+    throw new Error('Timed out waiting for worker to finish ingest');
+  }
+
+  private async isLocalWorkerReachable(): Promise<boolean> {
+    try {
+      const res = await fetch(`${LOCAL_WORKER_URL}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(LOCAL_FETCH_TIMEOUT_MS),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private async getFirestoreWorkerOnline(): Promise<boolean> {
+    try {
+      const ref = doc(this.firestore, 'worker', 'status');
+      const snap = await getDoc(ref);
+      const status = snap.data() as WorkerStatus | undefined;
+      if (!status?.lastSeen) return false;
+      return Date.now() - status.lastSeen < WORKER_ONLINE_MS;
+    } catch {
+      return false;
+    }
+  }
+
+  private async runLocalIngest(
+    type: WorkerJobType,
+    path: string,
+    symbol?: string
+  ): Promise<string> {
+    const res = await fetch(`${LOCAL_WORKER_URL}${path}`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(JOB_TIMEOUT_MS),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      symbolsIngested?: number;
+    };
+    if (!res.ok) {
+      throw new Error(body.error ?? `Local worker request failed (${res.status})`);
+    }
+
+    const jobId = `local-${crypto.randomUUID()}`;
+    const now = Date.now();
+    const job: WorkerJob = {
+      id: jobId,
+      type,
+      status: 'completed',
+      requestedBy: 'local',
+      requestedAt: now,
+      completedAt: now,
+      symbolsIngested: body.symbolsIngested ?? (type === 'symbol_ingest' ? 1 : 0),
+      ...(symbol ? { symbol } : {}),
+    };
+    this.localJobs.set(jobId, job);
+    return jobId;
   }
 
   private async requestJob(type: WorkerJobType, symbol?: string): Promise<string> {
@@ -133,23 +228,5 @@ export class WorkerJobService {
     };
     await setDoc(doc(this.firestore, 'workerJobs', jobId), job);
     return jobId;
-  }
-
-  async waitForJob(jobId: string, timeoutMs = JOB_TIMEOUT_MS): Promise<WorkerJob> {
-    const ref = doc(this.firestore, 'workerJobs', jobId);
-    const deadline = Date.now() + timeoutMs;
-
-    while (Date.now() < deadline) {
-      const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        throw new Error('Worker job not found');
-      }
-      const job = { id: snap.id, ...snap.data() } as WorkerJob;
-      if (job.status === 'completed' || job.status === 'failed') {
-        return job;
-      }
-      await new Promise((r) => setTimeout(r, JOB_POLL_MS));
-    }
-    throw new Error('Timed out waiting for worker to finish ingest');
   }
 }

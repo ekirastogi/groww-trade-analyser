@@ -123,7 +123,8 @@
           <p class="mt-2 text-kairo-800">
             The backend worker no longer polls Firestore continuously. Click <strong>Connect worker</strong>
             to open a 15-minute window — during that time the worker checks for jobs and writes a heartbeat.
-            This saves your Firestore daily quota.
+            When the worker runs locally on <code class="rounded bg-white/70 px-1">localhost:8080</code>, the UI
+            uses HTTP directly and does not need Firestore (helpful when quota is exhausted).
           </p>
         </div>
 

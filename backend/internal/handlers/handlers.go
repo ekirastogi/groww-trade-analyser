@@ -146,6 +146,26 @@ func (h *Handler) IngestSymbol(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) IngestSeedUniverse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.scheduler == nil {
+		writeError(w, http.StatusServiceUnavailable, "ingestion scheduler not available")
+		return
+	}
+	count, err := h.scheduler.SeedUniverseFromExchanges(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":          "ok",
+		"symbolsIngested": count,
+	})
+}
+
 func parseTradeTypes(raw string) []models.TradeType {
 	if raw == "" || raw == "all" {
 		return nil
