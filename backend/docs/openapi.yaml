@@ -218,7 +218,7 @@ components:
           type: boolean
         marketProvider:
           type: string
-          enum: [yahoo, nse, groww]
+          enum: [groww]
         ingestInterval:
           type: string
           example: 5m

@@ -40,6 +40,14 @@
         { "fieldPath": "symbol", "order": "ASCENDING" },
         { "fieldPath": "sellDate", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "plannedTrades",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tradeDate", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -2,7 +2,6 @@ import { Routes } from '@angular/router';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { AnalyticsComponent } from './components/analytics/analytics.component';
 import { ChargesComponent } from './components/charges/charges.component';
-import { WatchlistsComponent } from './components/watchlists/watchlists.component';
 import { StockDetailComponent } from './components/stock-detail/stock-detail.component';
 import { SignalsComponent } from './components/signals/signals.component';
 import { HeatmapComponent } from './components/heatmap/heatmap.component';
@@ -10,6 +9,9 @@ import { SettingsComponent } from './components/settings/settings.component';
 import { StocksComponent } from './components/stocks/stocks.component';
 import { LoginComponent } from './components/login/login.component';
 import { AdminLayoutComponent } from './layout/admin-layout.component';
+import { StockRegistryComponent } from './components/stock-registry/stock-registry.component';
+import { TradePlansComponent } from './components/trade-plans/trade-plans.component';
+import { TradeCalendarComponent } from './components/trade-calendar/trade-calendar.component';
 import { authGuard, loginGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
@@ -45,9 +47,24 @@ export const routes: Routes = [
         data: { title: 'Charges', subtitle: 'Trading fees from your report' },
       },
       {
+        path: 'registry',
+        component: StockRegistryComponent,
+        data: { title: 'Stock registry', subtitle: 'Your tracked stocks with levels and indicators' },
+      },
+      {
+        path: 'trade-plans',
+        component: TradePlansComponent,
+        data: { title: 'Trade plans', subtitle: 'Daily trade recommendations and execution tracking' },
+      },
+      {
+        path: 'calendar',
+        component: TradeCalendarComponent,
+        data: { title: 'Trade calendar', subtitle: 'Estimated vs realized P&L by day' },
+      },
+      {
         path: 'watchlists',
-        component: WatchlistsComponent,
-        data: { title: 'Watchlists', subtitle: 'Profitable and loss-making stocks' },
+        redirectTo: 'registry',
+        pathMatch: 'full',
       },
       {
         path: 'stocks',

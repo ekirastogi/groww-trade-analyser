@@ -248,5 +248,7 @@ export class ReportStateService {
     this.activeClientCode.set(null);
     this.dataSource.set('local');
     this.error.set(null);
+    this.reportHistory.set([]);
+    this.saveHistoryToStorage([]);
   }
 }

@@ -1,0 +1,138 @@
+<div class="space-y-6">
+  <div class="card p-4">
+    <h2 class="mb-4 text-lg font-bold text-slate-900">{{ editingSymbol() ? 'Edit stock' : 'Add stock' }}</h2>
+    @if (error()) {
+      <p class="mb-3 text-sm text-red-600">{{ error() }}</p>
+    }
+    @if (success()) {
+      <p class="mb-3 text-sm text-emerald-700">{{ success() }}</p>
+    }
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <label class="block text-sm">
+        <span class="text-slate-500">Symbol *</span>
+        <input class="input-field mt-1 w-full uppercase" [(ngModel)]="form.symbol" [readonly]="!!editingSymbol()" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">Name</span>
+        <input class="input-field mt-1 w-full" [(ngModel)]="form.name" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">Current price *</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.currentPrice" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">Market cap</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.marketCap" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">P/E</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.pe" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">RSI</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.rsi" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">MACD</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.macd" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">MACD signal</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.macdSignal" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">MACD hist</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.macdHist" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">SMA 20</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.sma20" />
+      </label>
+      <label class="block text-sm">
+        <span class="text-slate-500">SMA 50</span>
+        <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.sma50" />
+      </label>
+    </div>
+    <div class="mt-4 grid gap-3 sm:grid-cols-3">
+      <div>
+        <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Supports</p>
+        <div class="space-y-2">
+          <input class="input-field w-full" type="number" placeholder="S1" [(ngModel)]="form.support1" />
+          <input class="input-field w-full" type="number" placeholder="S2" [(ngModel)]="form.support2" />
+          <input class="input-field w-full" type="number" placeholder="S3" [(ngModel)]="form.support3" />
+        </div>
+      </div>
+      <div>
+        <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Resistances</p>
+        <div class="space-y-2">
+          <input class="input-field w-full" type="number" placeholder="R1" [(ngModel)]="form.resistance1" />
+          <input class="input-field w-full" type="number" placeholder="R2" [(ngModel)]="form.resistance2" />
+          <input class="input-field w-full" type="number" placeholder="R3" [(ngModel)]="form.resistance3" />
+        </div>
+      </div>
+      <div>
+        <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Notes</p>
+        <textarea class="input-field min-h-[7.5rem] w-full" [(ngModel)]="form.notes"></textarea>
+      </div>
+    </div>
+    <div class="mt-4 flex flex-wrap gap-2">
+      <button type="button" class="btn-primary" [disabled]="busy()" (click)="save()">
+        {{ editingSymbol() ? 'Update' : 'Add stock' }}
+      </button>
+      @if (editingSymbol()) {
+        <button type="button" class="btn-secondary" (click)="resetForm()">Cancel edit</button>
+      }
+    </div>
+  </div>
+
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="stock-table min-w-[720px]">
+        <thead>
+          <tr>
+            <th class="w-10 text-center">#</th>
+            <th>
+              <button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive('symbol')" (click)="tableSort.toggle('symbol', $event)">
+                Symbol <span>{{ tableSort.indicator('symbol') }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive('currentPrice')" (click)="tableSort.toggle('currentPrice', $event)">
+                Price <span>{{ tableSort.indicator('currentPrice') }}</span>
+              </button>
+            </th>
+            <th>PE</th>
+            <th>RSI</th>
+            <th>Supports</th>
+            <th>Resistances</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (s of sortedStocks(); track s.symbol; let i = $index) {
+            <tr>
+              <td class="text-center text-slate-400">{{ i + 1 }}</td>
+              <td>
+                <div class="font-semibold">{{ s.symbol }}</div>
+                <div class="text-xs text-slate-400">{{ s.name }}</div>
+              </td>
+              <td class="tabular-nums">{{ fmt(s.currentPrice) }}</td>
+              <td class="tabular-nums">{{ s.pe ?? '—' }}</td>
+              <td class="tabular-nums">{{ s.rsi ?? '—' }}</td>
+              <td class="text-xs text-emerald-700">{{ s.supports.join(', ') || '—' }}</td>
+              <td class="text-xs text-red-600">{{ s.resistances.join(', ') || '—' }}</td>
+              <td class="whitespace-nowrap">
+                <button type="button" class="text-xs text-kairo-600 hover:underline" (click)="edit(s)">Edit</button>
+                <button type="button" class="ml-2 text-xs text-red-500 hover:underline" (click)="remove(s.symbol)">Delete</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="py-8 text-center text-sm text-slate-400">No stocks in your registry yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

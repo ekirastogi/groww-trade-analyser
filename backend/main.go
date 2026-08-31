@@ -43,9 +43,12 @@ func main() {
 
 	providerName := os.Getenv("MARKET_DATA_PROVIDER")
 	if providerName == "" {
-		providerName = "stooq+yahoo"
+		providerName = "groww"
 	}
-	provider := market.NewProvider(providerName)
+	provider, err := market.NewProvider(providerName)
+	if err != nil {
+		log.Fatalf("market provider: %v", err)
+	}
 	logx.Info("Market provider: %s", provider.Name())
 
 	projectID := os.Getenv("FIREBASE_PROJECT_ID")
@@ -69,7 +72,7 @@ func main() {
 	scheduler := ingestion.NewScheduler(provider, db, publisher, symbols)
 	go scheduler.Run(ctx)
 
-	executor := groww.NewExecutor()
+	executor := groww.NewExecutor(provider.(*market.GrowwProvider))
 
 	if publisher != nil {
 		go func() {

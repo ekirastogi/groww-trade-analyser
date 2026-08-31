@@ -1,0 +1,76 @@
+<div class="space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <button type="button" class="btn-secondary px-3 py-1.5" (click)="prevMonth()">←</button>
+      <h2 class="text-lg font-semibold text-slate-900">{{ monthLabel() }}</h2>
+      <button type="button" class="btn-secondary px-3 py-1.5" (click)="nextMonth()">→</button>
+    </div>
+    <a routerLink="/trade-plans" class="text-sm text-kairo-600 hover:underline">Open trade plans →</a>
+  </div>
+
+  <div class="card overflow-hidden">
+    <div class="grid grid-cols-7 border-b border-slate-100 bg-slate-50 text-center text-xs font-medium uppercase tracking-wide text-slate-500">
+      <div class="py-2">Sun</div>
+      <div class="py-2">Mon</div>
+      <div class="py-2">Tue</div>
+      <div class="py-2">Wed</div>
+      <div class="py-2">Thu</div>
+      <div class="py-2">Fri</div>
+      <div class="py-2">Sat</div>
+    </div>
+    @for (week of calendarWeeks(); track $index) {
+      <div class="grid grid-cols-7 border-b border-slate-50 last:border-b-0">
+        @for (cell of week; track $index) {
+          <button
+            type="button"
+            class="min-h-[88px] border-r border-slate-50 p-2 text-left last:border-r-0 hover:bg-slate-50"
+            [class.bg-kairo-50]="cell.date && cell.date === selectedDate()"
+            [class.opacity-40]="!cell.day"
+            [disabled]="!cell.date"
+            (click)="selectDate(cell.date)"
+          >
+            @if (cell.day) {
+              <div class="text-sm font-medium text-slate-700">{{ cell.day }}</div>
+              @if (summaryFor(cell.date); as s) {
+                <div class="mt-1 space-y-0.5 text-[10px] leading-tight">
+                  <div class="text-slate-500">Est {{ fmt(s.estimatedPnL) }}</div>
+                  <div [class]="pnlClass(s.realizedPnL)">Real {{ fmt(s.realizedPnL) }}</div>
+                  <div class="text-slate-400">{{ s.tradeCount }} trades</div>
+                </div>
+              }
+            }
+          </button>
+        }
+      </div>
+    }
+  </div>
+
+  @if (selectedSummary(); as s) {
+    <div class="card p-4">
+      <h3 class="font-semibold text-slate-900">{{ s.tradeDate }}</h3>
+      <div class="mt-3 grid gap-4 sm:grid-cols-4">
+        <div>
+          <div class="text-xs text-slate-500">Estimated P&L</div>
+          <div class="text-lg font-bold tabular-nums" [class]="pnlClass(s.estimatedPnL)">{{ fmt(s.estimatedPnL) }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500">Realized P&L</div>
+          <div class="text-lg font-bold tabular-nums" [class]="pnlClass(s.realizedPnL)">{{ fmt(s.realizedPnL) }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500">Trades</div>
+          <div class="text-lg font-bold">{{ s.tradeCount }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500">Executed / skipped</div>
+          <div class="text-lg font-bold">{{ s.executedCount }} / {{ s.skippedCount }}</div>
+        </div>
+      </div>
+      <a [routerLink]="['/trade-plans']" [queryParams]="{ date: s.tradeDate }" class="mt-4 inline-block text-sm text-kairo-600 hover:underline">
+        View full plan for this day →
+      </a>
+    </div>
+  } @else {
+    <p class="text-center text-sm text-slate-400">Select a date to see day summary.</p>
+  }
+</div>

@@ -8,7 +8,7 @@ Groww P&L report analysis runs **in the browser** (upload `.xlsx`/`.csv` on Dash
 
 ```
 P&L upload ──► universe/{SYMBOL} ──► Go worker (local)
-Stooq/Yahoo ──► SQLite (~/.groww-trader/market.db) ──► Firestore (slim) ◄── Angular
+Groww API ──► SQLite (~/.groww-trader/market.db) ──► Firestore (slim) ◄── Angular
 ```
 
 | Layer | What |
@@ -35,7 +35,8 @@ cd backend
 cp .env.example .env
 # Edit: FIREBASE_PROJECT_ID, GOOGLE_APPLICATION_CREDENTIALS
 
-export MARKET_DATA_PROVIDER=stooq+yahoo
+export MARKET_DATA_PROVIDER=groww
+export GROWW_ACCESS_TOKEN=your-daily-token
 export WATCH_SYMBOLS=RELIANCE,TCS,INFY
 
 go run .
@@ -82,10 +83,8 @@ groww/
 └── start.sh
 ```
 
-## Swapping market data provider
+## Market data
 
-Set `MARKET_DATA_PROVIDER=stooq+yahoo|yahoo|stooq|nse|groww` in backend `.env`. Groww live feed plugs in later via the same `market.Provider` interface.
+All quotes, OHLC, and order execution use the **Groww Trade API** (`MARKET_DATA_PROVIDER=groww`). You need an active Groww API subscription and a daily access token (or API key + secret).
 
-## Groww trading (future)
-
-Set `GROWW_API_TOKEN` and implement `GrowwProvider.PlaceOrder()`. Approved recommendations execute automatically (dry-run until wired).
+Set `GROWW_ENABLE_TRADING=true` to place real orders on approved recommendations (dry-run by default).

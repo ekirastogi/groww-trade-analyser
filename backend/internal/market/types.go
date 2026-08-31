@@ -1,6 +1,11 @@
 package market
 
-import "time"
+import (
+	"context"
+	"time"
+)
+
+type Context = context.Context
 
 type Quote struct {
 	Symbol     string    `json:"symbol"`

@@ -136,9 +136,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
         this.reingestFile.set(null);
         await this.router.navigate(['/dashboard']);
       } else {
+        const parts = [
+          result.clientsRemoved ? `${result.clientsRemoved} client account(s)` : null,
+          result.watchlistsRemoved ? `${result.watchlistsRemoved} watchlist(s)` : null,
+          result.registryStocksRemoved ? `${result.registryStocksRemoved} registry stock(s)` : null,
+          result.plannedTradesRemoved ? `${result.plannedTradesRemoved} planned trade(s)` : null,
+        ].filter(Boolean);
         this.resetSuccess.set(
-          result.clientsRemoved
-            ? `Removed ${result.clientsRemoved} client account(s) from Firebase. Upload a P&L file to start fresh.`
+          parts.length
+            ? `Cleared: ${parts.join(', ')}. Upload a P&L file to start fresh.`
             : 'All trade data cleared. Upload a P&L file to start fresh.'
         );
         this.resetConfirmChecked.set(false);

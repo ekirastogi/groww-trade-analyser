@@ -2,11 +2,11 @@
 
 Local Go backend for Kairo. Two jobs in one process:
 
-1. **Market worker** — Stooq daily OHLC + Yahoo quotes into **SQLite**; indicators, relative-strength signals, volume shockers; slim snapshots to **Firestore**.
+1. **Market worker** — Groww Trade API quotes + OHLC into **SQLite**; indicators, relative-strength signals, volume shockers; slim snapshots to **Firestore**.
 2. **P&L HTTP API** (optional) — local REST to parse Groww exports (in-memory only).
 
 ```
-Stooq/Yahoo ──► SQLite (~/.groww-trader/market.db) ──► Firestore (slim) ◄── Angular
+Groww API ──► SQLite (~/.groww-trader/market.db) ──► Firestore (slim) ◄── Angular
 P&L upload ──► universe/{SYMBOL} ──► worker hydrates on startup
 ```
 
@@ -18,7 +18,7 @@ P&L upload ──► universe/{SYMBOL} ──► worker hydrates on startup
 | SQLite (embedded) | All OHLC, fundamentals, volume shocker history — **not** sent wholesale to Firebase |
 | Firebase Firestore | Slim `stocks/{sym}`, `stocks/{sym}/views/chart`, `recommendations`, `universe`, `volumeShockers` |
 | Service account JSON | Worker writes bypass security rules |
-| Stooq + Yahoo | Stooq: daily OHLC (no key). Yahoo: LTP, PE, market cap |
+| **Groww Trade API** | Live quotes, historical candles, order placement |
 
 ## Data layout
 
@@ -39,22 +39,20 @@ P&L upload ──► universe/{SYMBOL} ──► worker hydrates on startup
 
 | Tier | When | What |
 |---|---|---|
-| Full book | EOD (~4pm IST) | Incremental Stooq OHLC for all `universe` + seed CSV (~200 symbols) |
-| Hot set | Every `INGEST_INTERVAL` | Yahoo quote + slim stock doc for P&L symbols, shockers, open recs |
+| Universe + hot set | EOD (~4pm IST) | Groww daily candles for P&L universe symbols |
+| Hot set | Every `INGEST_INTERVAL` | Groww live quote + slim stock doc for P&L symbols, shockers, open recs |
 | Indices | EOD + hot eval | Nifty, Midcap, sector indices for relative-strength scoring |
 
 ## Relative-strength signals
 
 Pipeline: cap bucket → vs Nifty/Midcap/Smallcap → vs sector index → volume → MACD/RSI/S/R → **INTRADAY** or **BTST**.
 
-Groww live feed plugs in later via `market.Provider` — same scoring, no architecture change.
-
 ## Run
 
 ```bash
 cd backend
 cp .env.example .env
-# export vars, then:
+# Set GROWW_ACCESS_TOKEN (or GROWW_API_KEY + GROWW_API_SECRET)
 go run .
 ```
 
@@ -66,4 +64,11 @@ Default `http://localhost:8080` — see `/docs` for Swagger. Set `HTTP_ADDR=off`
 
 ## Env vars
 
-See [`.env.example`](.env.example). Key: `MARKET_DATA_PROVIDER=stooq+yahoo`, `VOLUME_SHOCKER_TOP_N`, `VOLUME_SHOCKER_HOLD_DAYS`.
+See [`.env.example`](.env.example). Key: `GROWW_ACCESS_TOKEN`, `MARKET_DATA_PROVIDER=groww`, `VOLUME_SHOCKER_TOP_N`, `VOLUME_SHOCKER_HOLD_DAYS`.
+
+## Groww API setup
+
+1. Subscribe to Groww Trading APIs at https://groww.in/trade-api
+2. Generate an **Access Token** (expires daily at 6 AM IST) or API key + secret
+3. Set `GROWW_ACCESS_TOKEN` in `.env`
+4. Optional: `GROWW_ENABLE_TRADING=true` for live order execution

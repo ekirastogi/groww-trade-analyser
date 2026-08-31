@@ -27,7 +27,8 @@ import {
 import { AuthService } from './auth.service';
 import { ClientAccountService } from './client-account.service';
 import { ParserService } from './parser.service';
-import { WatchlistService } from './watchlist.service';
+import { RegistryStockService } from './registry-stock.service';
+import { TradePlanService } from './trade-plan.service';
 import { UniverseService } from './universe.service';
 import {
   buildTradeTypeStats,
@@ -55,6 +56,10 @@ export interface UploadOptions {
 
 export interface ResetAllDataResult {
   clientsRemoved: number;
+  watchlistsRemoved: number;
+  registryStocksRemoved: number;
+  plannedTradesRemoved: number;
+  levelsRemoved: number;
 }
 
 export interface BackfillUniverseOptions {
@@ -76,7 +81,8 @@ export class TradeLedgerService {
   private auth = inject(AuthService);
   private clientSvc = inject(ClientAccountService);
   private parser = inject(ParserService);
-  private watchlists = inject(WatchlistService);
+  private registry = inject(RegistryStockService);
+  private tradePlans = inject(TradePlanService);
   private universe = inject(UniverseService);
 
   async uploadReport(file: File, options: UploadOptions = {}): Promise<UploadResult> {
@@ -253,10 +259,39 @@ export class TradeLedgerService {
     for (const client of clients) {
       await this.deleteClientData(client.clientCode);
     }
-    await this.watchlists.deleteAutoWatchlists();
+
+    const watchlistsRemoved = await this.deleteAllWatchlists(uid);
+    const registryStocksRemoved = await this.registry.deleteAll();
+    const plannedTradesRemoved = await this.tradePlans.deleteAll();
+    const levelsRemoved = await this.deleteUserLevels(uid);
+
     this.clientSvc.clearSelectedClient();
 
-    return { clientsRemoved: clients.length };
+    return {
+      clientsRemoved: clients.length,
+      watchlistsRemoved,
+      registryStocksRemoved,
+      plannedTradesRemoved,
+      levelsRemoved,
+    };
+  }
+
+  private async deleteAllWatchlists(uid: string): Promise<number> {
+    const snap = await getDocs(collection(this.firestore, 'users', uid, 'watchlists'));
+    if (snap.empty) return 0;
+    const batch = writeBatch(this.firestore);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    return snap.size;
+  }
+
+  private async deleteUserLevels(uid: string): Promise<number> {
+    const snap = await getDocs(collection(this.firestore, 'users', uid, 'levels'));
+    if (snap.empty) return 0;
+    const batch = writeBatch(this.firestore);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    return snap.size;
   }
 
   async getAllTrades(clientCode: string): Promise<StoredTrade[]> {
@@ -337,7 +372,6 @@ export class TradeLedgerService {
 
     const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
     await this.writeStockProfiles(clientCode, profiles);
-    await this.watchlists.syncPnlTierWatchlists(profiles);
     await this.universe.syncSymbols(
       profiles.map((p) => ({ symbol: p.symbol, name: p.stockName, isin: p.isin })),
       'pnl_upload'

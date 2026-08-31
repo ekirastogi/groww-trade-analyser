@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/market"
 )
@@ -14,11 +15,11 @@ type Executor struct {
 	enabled  bool
 }
 
-func NewExecutor() *Executor {
-	token := "" // os.Getenv("GROWW_API_TOKEN")
+func NewExecutor(provider *market.GrowwProvider) *Executor {
+	enabled := os.Getenv("GROWW_ENABLE_TRADING") == "true"
 	return &Executor{
-		provider: &market.GrowwProvider{},
-		enabled:  token != "",
+		provider: provider,
+		enabled:  enabled,
 	}
 }
 

@@ -6,6 +6,7 @@ import {
   collectionData,
   deleteDoc,
   doc,
+  getDocs,
   orderBy,
   query,
   setDoc,
@@ -100,15 +101,20 @@ export class WatchlistService {
     await batch.commit();
   }
 
-  async deleteAutoWatchlists(): Promise<void> {
+  async deleteAllWatchlists(): Promise<number> {
     const uid = this.auth.uid;
-    if (!uid) return;
-
+    if (!uid) return 0;
+    const snap = await getDocs(collection(this.firestore, 'users', uid, 'watchlists'));
+    if (snap.empty) return 0;
     const batch = writeBatch(this.firestore);
-    for (const tier of PNL_WATCHLIST_TIERS) {
-      batch.delete(doc(this.firestore, 'users', uid, 'watchlists', tier.id));
-    }
-    await batch.commit().catch(() => undefined);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    return snap.size;
+  }
+
+  /** @deprecated P&L tier watchlists removed — use deleteAllWatchlists */
+  async deleteAutoWatchlists(): Promise<void> {
+    await this.deleteAllWatchlists();
   }
 
   isAutoWatchlist(watchlist: Watchlist): boolean {
