@@ -11,6 +11,8 @@ import { TableSortState } from '../../utils/table-sort.utils';
 import {
   isPastPlanDate,
   isUpcomingPlanDate,
+  isWeekend,
+  normalizePlanViewDate,
   planDateHeading,
   planDateTabLabel,
   todayIso,
@@ -28,7 +30,7 @@ export class TradePlansComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
-  tradeDate = signal(todayIso());
+  tradeDate = signal(normalizePlanViewDate(todayIso()));
   calendarOpen = signal(false);
   executingTrade = signal<PlannedTrade | null>(null);
   execForm = { quantity: '', buyValue: '', sellValue: '' };
@@ -81,7 +83,7 @@ export class TradePlansComponent implements OnInit {
 
   ngOnInit(): void {
     const date = this.route.snapshot.queryParamMap.get('date');
-    if (date) this.setTradeDate(date, false);
+    if (date) this.setTradeDate(normalizePlanViewDate(date), false);
   }
 
   selectTab(iso: string): void {
@@ -90,7 +92,7 @@ export class TradePlansComponent implements OnInit {
   }
 
   onPastDatePick(value: string): void {
-    if (!value || !isPastPlanDate(value)) return;
+    if (!value || isWeekend(value) || !isPastPlanDate(value)) return;
     this.setTradeDate(value);
     this.calendarOpen.set(false);
   }
