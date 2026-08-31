@@ -60,6 +60,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /worker/listen {
+      allow read: if isOwner();
+      allow create, update: if isOwner()
+        && request.resource.data.active == true
+        && request.resource.data.until is int
+        && request.resource.data.requestedBy == request.auth.uid;
+      allow delete: if false;
+    }
+
     match /workerJobs/{jobId} {
       allow read: if isOwner();
       allow create: if isOwner()

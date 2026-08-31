@@ -2,9 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
   doc,
+  docData,
   getDoc,
   setDoc,
 } from '@angular/fire/firestore';
+import { map, Observable } from 'rxjs';
 import { AuthService } from './auth.service';
 
 export type WorkerJobStatus = 'pending' | 'running' | 'completed' | 'failed';
@@ -57,6 +59,18 @@ export class WorkerJobService {
     } catch {
       return false;
     }
+  }
+
+  /** Live worker presence for detail views. */
+  watchWorkerOnline(): Observable<boolean> {
+    const ref = doc(this.firestore, 'worker', 'status');
+    return docData(ref).pipe(
+      map((data) => {
+        const status = data as WorkerStatus | undefined;
+        if (!status?.lastSeen) return false;
+        return Date.now() - status.lastSeen < WORKER_ONLINE_MS;
+      })
+    );
   }
 
   /** Opens a short listen window so the local worker polls Firestore on demand. */

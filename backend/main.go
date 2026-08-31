@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-	"time"
 
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/config"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/firebase"

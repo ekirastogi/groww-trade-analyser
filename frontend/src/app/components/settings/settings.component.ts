@@ -89,7 +89,6 @@ export class SettingsComponent {
     this.workerError.set(null);
     this.workerSuccess.set(null);
     try {
-      await this.workerJobs.requestListenWindow();
       const jobId = await this.workerJobs.requestHotIngest();
       const job = await this.workerJobs.waitForJob(jobId);
       if (job.status === 'completed') {
@@ -110,7 +109,6 @@ export class SettingsComponent {
     this.workerError.set(null);
     this.workerSuccess.set(null);
     try {
-      await this.workerJobs.requestListenWindow();
       const jobId = await this.workerJobs.requestSeedUniverse();
       const job = await this.workerJobs.waitForJob(jobId, 20 * 60 * 1000);
       if (job.status === 'completed') {

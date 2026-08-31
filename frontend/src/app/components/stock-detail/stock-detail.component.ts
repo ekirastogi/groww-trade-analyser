@@ -1,9 +1,9 @@
-import { Component, computed, inject, signal, effect, OnDestroy, OnInit } from '@angular/core';
+import { Component, computed, inject, signal, effect, OnInit } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { switchMap, of, Subscription } from 'rxjs';
+import { switchMap, of } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { StockLevelsService } from '../../services/stock-levels.service';
 import { WorkerJobService } from '../../services/worker-job.service';
