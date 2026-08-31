@@ -6,24 +6,42 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-const yahooQuoteURL = "https://query1.finance.yahoo.com/v7/finance/quote"
-const YahooBatchSize = 50
+const (
+	yahooFinanceReferer = "https://finance.yahoo.com/"
+	YahooBatchSize      = 50
+	yahooCrumbTTL       = time.Hour
+)
+
+var (
+	yahooQuoteURL     = "https://query1.finance.yahoo.com/v7/finance/quote"
+	yahooCrumbURL     = "https://query2.finance.yahoo.com/v1/test/getcrumb"
+	yahooBootstrapURL = "https://fc.yahoo.com"
+)
 
 // YahooProvider fetches delayed NSE/BSE quotes via Yahoo Finance (unofficial API).
 type YahooProvider struct {
-	client *http.Client
+	client  *http.Client
+	mu      sync.Mutex
+	crumb   string
+	crumbAt time.Time
 }
 
 func NewYahooProvider() *YahooProvider {
+	jar, _ := cookiejar.New(nil)
 	return &YahooProvider{
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+			Jar:     jar,
+		},
 	}
 }
 
@@ -59,12 +77,12 @@ type RegistryQuoteInput struct {
 
 // RegistryMarketSnapshot is a delayed quote row from Yahoo Finance.
 type RegistryMarketSnapshot struct {
-	Symbol     string
-	Name       string
-	LTP        float64
-	MarketCap  float64
-	PE         float64
-	Exchange   string
+	Symbol    string
+	Name      string
+	LTP       float64
+	MarketCap float64
+	PE        float64
+	Exchange  string
 }
 
 // FetchRegistryQuotesBatch fetches up to YahooBatchSize quotes in one Yahoo request.
@@ -84,22 +102,43 @@ func (p *YahooProvider) FetchRegistryQuotesBatch(ctx context.Context, entries []
 		backMap[ys] = strings.ToUpper(strings.TrimSpace(e.Symbol))
 	}
 
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := p.ensureAuth(ctx); err != nil {
+			return nil, err
+		}
+		out, err := p.fetchQuotes(ctx, yahooSyms, backMap)
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+		if attempt == 0 && yahooAuthRetryable(err) {
+			p.invalidateAuth()
+			continue
+		}
+		return nil, err
+	}
+	return nil, lastErr
+}
+
+func (p *YahooProvider) fetchQuotes(ctx context.Context, yahooSyms []string, backMap map[string]string) (map[string]*RegistryMarketSnapshot, error) {
 	q := url.Values{}
 	q.Set("symbols", strings.Join(yahooSyms, ","))
+	q.Set("crumb", p.crumbValue())
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, yahooQuoteURL+"?"+q.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", yahooUserAgent())
-	req.Header.Set("Accept", "application/json")
+	p.setBrowserHeaders(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return nil, fmt.Errorf("yahoo quote HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
@@ -108,7 +147,7 @@ func (p *YahooProvider) FetchRegistryQuotesBatch(ctx context.Context, entries []
 			Result []map[string]any `json:"result"`
 		} `json:"quoteResponse"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, fmt.Errorf("yahoo quote decode: %w", err)
 	}
 
@@ -139,6 +178,147 @@ func (p *YahooProvider) FetchRegistryQuotesBatch(ctx context.Context, entries []
 	return out, nil
 }
 
+func (p *YahooProvider) ensureAuth(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.crumb != "" && time.Since(p.crumbAt) < yahooCrumbTTL {
+		return nil
+	}
+	return p.bootstrapLocked(ctx)
+}
+
+func (p *YahooProvider) invalidateAuth() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.crumb = ""
+	p.crumbAt = time.Time{}
+}
+
+func (p *YahooProvider) crumbValue() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.crumb
+}
+
+func (p *YahooProvider) bootstrapLocked(ctx context.Context) error {
+	if err := p.loadCookiesFromEnv(); err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(os.Getenv("YAHOO_COOKIE")) == "" {
+		if err := p.bootstrapCookies(ctx); err != nil {
+			return err
+		}
+	}
+
+	if crumb := strings.TrimSpace(os.Getenv("YAHOO_CRUMB")); crumb != "" {
+		p.crumb = crumb
+		p.crumbAt = time.Now()
+		return nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, yahooCrumbURL, nil)
+	if err != nil {
+		return err
+	}
+	p.setBrowserHeaders(req)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("yahoo crumb HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	crumb := strings.TrimSpace(string(body))
+	if crumb == "" {
+		return fmt.Errorf("yahoo crumb empty")
+	}
+	p.crumb = crumb
+	p.crumbAt = time.Now()
+	return nil
+}
+
+func (p *YahooProvider) bootstrapCookies(ctx context.Context) error {
+	endpoints := []string{yahooBootstrapURL, yahooFinanceReferer}
+	var lastErr error
+	for _, endpoint := range endpoints {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return err
+		}
+		p.setBrowserHeaders(req)
+		resp, err := p.client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode < 400 {
+			return nil
+		}
+		lastErr = fmt.Errorf("yahoo bootstrap HTTP %d from %s", resp.StatusCode, endpoint)
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("yahoo bootstrap failed")
+}
+
+func (p *YahooProvider) loadCookiesFromEnv() error {
+	raw := strings.TrimSpace(os.Getenv("YAHOO_COOKIE"))
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(yahooFinanceReferer)
+	if err != nil {
+		return err
+	}
+	var cookies []*http.Cookie
+	for _, part := range strings.Split(raw, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		cookies = append(cookies, &http.Cookie{
+			Name:  strings.TrimSpace(kv[0]),
+			Value: strings.TrimSpace(kv[1]),
+		})
+	}
+	if len(cookies) == 0 {
+		return fmt.Errorf("YAHOO_COOKIE is set but no cookies parsed")
+	}
+	p.client.Jar.SetCookies(u, cookies)
+	return nil
+}
+
+func (p *YahooProvider) setBrowserHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", yahooUserAgent())
+	req.Header.Set("Accept", "application/json,text/plain,*/*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Referer", yahooFinanceReferer)
+}
+
+func yahooAuthRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "401") ||
+		strings.Contains(msg, "403") ||
+		strings.Contains(msg, "unauthorized") ||
+		strings.Contains(msg, "crumb")
+}
+
 func (p *YahooProvider) GetQuote(ctx context.Context, symbol string) (*Quote, error) {
 	m, err := p.FetchRegistryQuotesBatch(ctx, []RegistryQuoteInput{{Symbol: symbol, Exchange: "NSE"}})
 	if err != nil {
@@ -150,12 +330,12 @@ func (p *YahooProvider) GetQuote(ctx context.Context, symbol string) (*Quote, er
 		return nil, fmt.Errorf("yahoo: no quote for %s", sym)
 	}
 	return &Quote{
-		Symbol:     snap.Symbol,
-		Name:       snap.Name,
-		LTP:        snap.LTP,
-		MarketCap:  snap.MarketCap,
-		Exchange:   snap.Exchange,
-		UpdatedAt:  time.Now(),
+		Symbol:    snap.Symbol,
+		Name:      snap.Name,
+		LTP:       snap.LTP,
+		MarketCap: snap.MarketCap,
+		Exchange:  snap.Exchange,
+		UpdatedAt: time.Now(),
 	}, nil
 }
 
@@ -208,7 +388,7 @@ func yahooUserAgent() string {
 	if ua := strings.TrimSpace(os.Getenv("YAHOO_USER_AGENT")); ua != "" {
 		return ua
 	}
-	return "Mozilla/5.0 (compatible; KairoTrader/1.0)"
+	return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 }
 
 func YahooBatchPause() time.Duration {
