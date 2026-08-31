@@ -50,6 +50,10 @@ func main() {
 		log.Fatalf("market provider: %v", err)
 	}
 	logx.Info("Market provider: %s", provider.Name())
+	if !market.ProviderConfigured(provider) {
+		logx.Warn("Groww credentials missing — quotes/OHLC ingest disabled until GROWW_ACCESS_TOKEN is set")
+		logx.Warn("Firestore jobs (e.g. Import NSE & BSE symbols) will still work")
+	}
 
 	projectID := os.Getenv("FIREBASE_PROJECT_ID")
 	if projectID == "" {

@@ -10,10 +10,17 @@ import (
 func NewProvider(name string) (Provider, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "", "groww":
-		return NewGrowwProvider()
+		return NewGrowwProvider(), nil
 	default:
 		return nil, fmt.Errorf("unknown market provider %q (only groww is supported)", name)
 	}
+}
+
+func ProviderConfigured(p Provider) bool {
+	if gp, ok := p.(*GrowwProvider); ok {
+		return gp.Configured()
+	}
+	return p != nil
 }
 
 // BackoffSleep sleeps with exponential backoff for rate limits.

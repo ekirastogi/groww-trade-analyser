@@ -15,15 +15,15 @@ type GrowwProvider struct {
 	client *GrowwClient
 }
 
-func NewGrowwProvider() (*GrowwProvider, error) {
-	client, err := NewGrowwClient()
-	if err != nil {
-		return nil, err
-	}
-	return &GrowwProvider{client: client}, nil
+func NewGrowwProvider() *GrowwProvider {
+	return &GrowwProvider{client: NewGrowwClient()}
 }
 
 func (p *GrowwProvider) Name() string { return "groww" }
+
+func (p *GrowwProvider) Configured() bool {
+	return p.client != nil && p.client.Configured()
+}
 
 type growwQuotePayload struct {
 	LastPrice       float64 `json:"last_price"`

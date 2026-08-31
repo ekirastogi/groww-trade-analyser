@@ -51,7 +51,16 @@ func NewScheduler(provider market.Provider, db *store.SQLiteStore, pub *firebase
 	}
 }
 
+func (s *Scheduler) marketIngestEnabled() bool {
+	return market.ProviderConfigured(s.provider)
+}
+
 func (s *Scheduler) Run(ctx context.Context) {
+	if !s.marketIngestEnabled() {
+		logx.Warn("Groww API not configured — market ingest idle (set GROWW_ACCESS_TOKEN to enable quotes/OHLC)")
+		logx.Info("Worker still handles Firestore jobs (seed_universe, hot_ingest when configured)")
+		return
+	}
 	s.bootstrap(ctx)
 	logx.Info("Ingestion scheduler started (interval=%s, fullBook=%d symbols)", s.interval, len(s.fullBook))
 	s.tick(ctx)
@@ -608,6 +617,10 @@ func (s *Scheduler) computeVolumeShockers(ctx context.Context, tradeDate string)
 }
 
 func (s *Scheduler) RunHotIngestNow(ctx context.Context) int {
+	if !s.marketIngestEnabled() {
+		logx.Warn("Manual hot ingest skipped — Groww API not configured")
+		return 0
+	}
 	logx.Info("Manual hot ingest requested — refreshing universe and hot set")
 	s.refreshUniverse(ctx)
 	s.refreshHotSet(ctx)
@@ -640,6 +653,9 @@ func (s *Scheduler) RunHotIngestNow(ctx context.Context) int {
 
 // RunSymbolIngestNow fetches OHLC, fundamentals, indicators, and publishes stock + chart for one symbol.
 func (s *Scheduler) RunSymbolIngestNow(ctx context.Context, symbol string) error {
+	if !s.marketIngestEnabled() {
+		return fmt.Errorf("groww API not configured — set GROWW_ACCESS_TOKEN")
+	}
 	symbol = strings.ToUpper(strings.TrimSpace(symbol))
 	if symbol == "" {
 		return fmt.Errorf("symbol required")

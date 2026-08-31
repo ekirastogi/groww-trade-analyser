@@ -6,6 +6,7 @@ import {
   collectionData,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -95,11 +96,14 @@ export class TradePlanService {
 
   summarizeDay(tradeDate: string, trades: PlannedTrade[]): DayTradeSummary {
     let estimatedPnL = 0;
+    let estimatedStopLossPnL = 0;
     let realizedPnL = 0;
     let executedCount = 0;
     let skippedCount = 0;
     for (const t of trades) {
       estimatedPnL += t.estimatedPnL ?? 0;
+      const slPnL = TradePlanService.stopLossPnL(t);
+      if (slPnL != null) estimatedStopLossPnL += slPnL;
       if (t.status === 'executed') {
         executedCount++;
         realizedPnL += t.realizedPnL ?? 0;
@@ -111,6 +115,7 @@ export class TradePlanService {
       tradeDate,
       tradeCount: trades.length,
       estimatedPnL,
+      estimatedStopLossPnL,
       realizedPnL,
       executedCount,
       skippedCount,
@@ -132,9 +137,34 @@ export class TradePlanService {
     return diff * quantity;
   }
 
-  /** Realized P&L from actual buy and sell values. */
-  static realizedPnLFromValues(buyValue: number, sellValue: number): number {
-    return sellValue - buyValue;
+  /** Estimated P&L if stop loss is hit. Returns null when no stop is set. */
+  static stopLossPnL(trade: Pick<PlannedTrade, 'segment' | 'direction' | 'quantity' | 'entryPrice' | 'stopLoss' | 'estimatedStopLossPnL'>): number | null {
+    if (trade.estimatedStopLossPnL != null) return trade.estimatedStopLossPnL;
+    if (!trade.stopLoss) return null;
+    return TradePlanService.estimatePnL(
+      trade.segment,
+      trade.direction,
+      trade.quantity,
+      trade.entryPrice,
+      trade.stopLoss
+    );
+  }
+
+  /** Stop loss level as % from entry (direction-aware). */
+  static stopLossPctVsEntry(
+    entry: number,
+    stopLoss: number | undefined,
+    segment: TradeSegment,
+    direction: TradeDirection
+  ): number | null {
+    if (!entry || !stopLoss) return null;
+    return TradePlanService.exitPctVsEntry(entry, stopLoss, segment, direction);
+  }
+
+  /** Realized P&L from per-share buy and sell prices. */
+  static realizedPnLFromPrices(quantity: number, buyPrice: number, sellPrice: number): number {
+    if (!quantity || !buyPrice || !sellPrice) return 0;
+    return (sellPrice - buyPrice) * quantity;
   }
 
   /** Entry price as % above/below CMP. */
@@ -175,6 +205,15 @@ export class TradePlanService {
       input.entryPrice,
       input.targetPrice
     );
+    const estimatedStopLossPnL = input.stopLoss
+      ? TradePlanService.estimatePnL(
+          segment,
+          direction,
+          input.quantity,
+          input.entryPrice,
+          input.stopLoss
+        )
+      : null;
 
     const ref = await addDoc(collection(this.firestore, 'users', uid, 'plannedTrades'), {
       symbol: input.symbol.toUpperCase(),
@@ -190,10 +229,11 @@ export class TradePlanService {
       source: input.source ?? 'manual',
       status: 'planned' as TradeExecutionStatus,
       estimatedPnL,
+      estimatedStopLossPnL,
       realizedPnL: null,
       executedQuantity: null,
-      executedBuyValue: null,
-      executedSellValue: null,
+      executedBuyPrice: null,
+      executedSellPrice: null,
       notes: input.notes ?? '',
       createdAt: now,
       updatedAt: now,
@@ -213,27 +253,81 @@ export class TradePlanService {
       updatedAt: number;
       realizedPnL?: number | null;
       executedQuantity?: number | null;
-      executedBuyValue?: number | null;
-      executedSellValue?: number | null;
+      executedBuyPrice?: number | null;
+      executedSellPrice?: number | null;
     } = {
       status,
       updatedAt: Date.now(),
     };
     if (status === 'executed' && execution) {
-      patch.realizedPnL = TradePlanService.realizedPnLFromValues(
-        execution.buyValue,
-        execution.sellValue
+      patch.realizedPnL = TradePlanService.realizedPnLFromPrices(
+        execution.quantity,
+        execution.buyPrice,
+        execution.sellPrice
       );
       patch.executedQuantity = execution.quantity;
-      patch.executedBuyValue = execution.buyValue;
-      patch.executedSellValue = execution.sellValue;
+      patch.executedBuyPrice = execution.buyPrice;
+      patch.executedSellPrice = execution.sellPrice;
     } else {
       patch.realizedPnL = null;
       patch.executedQuantity = null;
-      patch.executedBuyValue = null;
-      patch.executedSellValue = null;
+      patch.executedBuyPrice = null;
+      patch.executedSellPrice = null;
     }
     await updateDoc(doc(this.firestore, 'users', uid, 'plannedTrades', id), patch);
+  }
+
+  async getById(id: string): Promise<PlannedTrade | null> {
+    const uid = this.auth.uid;
+    if (!uid) return null;
+    const snap = await getDoc(doc(this.firestore, 'users', uid, 'plannedTrades', id));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as PlannedTrade;
+  }
+
+  async update(id: string, input: CreatePlannedTradeInput): Promise<void> {
+    const uid = this.auth.uid;
+    if (!uid) throw new Error('Sign in to update trades');
+
+    const segment = input.segment;
+    let direction = input.direction;
+    if (segment === 'delivery') {
+      direction = 'long';
+    }
+
+    const estimatedPnL = TradePlanService.estimatePnL(
+      segment,
+      direction,
+      input.quantity,
+      input.entryPrice,
+      input.targetPrice
+    );
+    const estimatedStopLossPnL = input.stopLoss
+      ? TradePlanService.estimatePnL(
+          segment,
+          direction,
+          input.quantity,
+          input.entryPrice,
+          input.stopLoss
+        )
+      : null;
+
+    await updateDoc(doc(this.firestore, 'users', uid, 'plannedTrades', id), {
+      symbol: input.symbol.toUpperCase(),
+      stockName: input.stockName ?? input.symbol.toUpperCase(),
+      tradeDate: input.tradeDate,
+      segment,
+      direction,
+      quantity: input.quantity,
+      cmp: input.cmp ?? null,
+      entryPrice: input.entryPrice,
+      targetPrice: input.targetPrice,
+      stopLoss: input.stopLoss ?? null,
+      notes: input.notes ?? '',
+      estimatedPnL,
+      estimatedStopLossPnL,
+      updatedAt: Date.now(),
+    });
   }
 
   async remove(id: string): Promise<void> {

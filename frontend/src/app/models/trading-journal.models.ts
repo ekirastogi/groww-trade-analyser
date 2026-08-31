@@ -36,10 +36,11 @@ export interface PlannedTrade {
   source: TradePlanSource;
   status: TradeExecutionStatus;
   estimatedPnL: number;
+  estimatedStopLossPnL?: number;
   realizedPnL?: number;
   executedQuantity?: number;
-  executedBuyValue?: number;
-  executedSellValue?: number;
+  executedBuyPrice?: number;
+  executedSellPrice?: number;
   notes?: string;
   createdAt: number;
   updatedAt: number;
@@ -47,14 +48,15 @@ export interface PlannedTrade {
 
 export interface TradeExecutionInput {
   quantity: number;
-  buyValue: number;
-  sellValue: number;
+  buyPrice: number;
+  sellPrice: number;
 }
 
 export interface DayTradeSummary {
   tradeDate: string;
   tradeCount: number;
   estimatedPnL: number;
+  estimatedStopLossPnL: number;
   realizedPnL: number;
   executedCount: number;
   skippedCount: number;

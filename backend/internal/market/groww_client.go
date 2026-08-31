@@ -28,21 +28,24 @@ type GrowwClient struct {
 	totp        string
 }
 
-func NewGrowwClient() (*GrowwClient, error) {
-	c := &GrowwClient{
-		httpClient: &http.Client{Timeout: 45 * time.Second},
+func NewGrowwClient() *GrowwClient {
+	return &GrowwClient{
+		httpClient:  &http.Client{Timeout: 45 * time.Second},
 		accessToken: strings.TrimSpace(os.Getenv("GROWW_ACCESS_TOKEN")),
 		apiKey:      strings.TrimSpace(os.Getenv("GROWW_API_KEY")),
 		apiSecret:   strings.TrimSpace(os.Getenv("GROWW_API_SECRET")),
 		totp:        strings.TrimSpace(os.Getenv("GROWW_TOTP")),
 	}
-	if c.accessToken == "" && c.apiKey == "" {
-		return nil, fmt.Errorf("set GROWW_ACCESS_TOKEN or GROWW_API_KEY (+ GROWW_API_SECRET or GROWW_TOTP)")
-	}
-	return c, nil
+}
+
+func (c *GrowwClient) Configured() bool {
+	return c.accessToken != "" || c.apiKey != ""
 }
 
 func (c *GrowwClient) ensureToken(ctx context.Context) error {
+	if !c.Configured() {
+		return fmt.Errorf("groww: set GROWW_ACCESS_TOKEN or GROWW_API_KEY (+ GROWW_API_SECRET or GROWW_TOTP)")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.accessToken != "" {

@@ -1,117 +1,136 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <a routerLink="/trade-plans" [queryParams]="{ date: tradeDate() }" class="text-sm text-kairo-600 hover:underline">← Back to plan</a>
-    <h2 class="text-lg font-semibold text-slate-900">Add trade plan</h2>
+    <h2 class="text-lg font-semibold text-slate-900">{{ isEditing() ? 'Edit trade plan' : 'Add trade plan' }}</h2>
   </div>
 
-  <div class="segmented-control flex-wrap" role="tablist" aria-label="Trade date">
-    @for (tab of dateTabs(); track tab.iso) {
-      <button
-        type="button"
-        role="tab"
-        class="segment-item"
-        [class.segment-item-active]="tradeDate() === tab.iso"
-        (click)="selectDate(tab.iso)"
-      >
-        {{ tab.label }}
-      </button>
+  @if (loading()) {
+    <p class="text-sm text-slate-500">Loading trade plan…</p>
+  } @else {
+    @if (!isEditing()) {
+      <div class="segmented-control w-fit">
+        <button type="button" class="segment-item" [class.segment-item-active]="activeTab() === 'manual'" (click)="setTab('manual')">Manual</button>
+        <button type="button" class="segment-item" [class.segment-item-active]="activeTab() === 'auto'" (click)="setTab('auto')">Auto</button>
+      </div>
     }
-  </div>
 
-  <div class="segmented-control w-fit">
-    <button type="button" class="segment-item" [class.segment-item-active]="activeTab() === 'manual'" (click)="setTab('manual')">Manual</button>
-    <button type="button" class="segment-item" [class.segment-item-active]="activeTab() === 'auto'" (click)="setTab('auto')">Auto</button>
-  </div>
+    <div class="segmented-control flex-wrap" role="tablist" aria-label="Trade date">
+      @for (tab of dateTabs(); track tab.iso) {
+        <button
+          type="button"
+          role="tab"
+          class="segment-item"
+          [class.segment-item-active]="tradeDate() === tab.iso"
+          (click)="selectDate(tab.iso)"
+        >
+          {{ tab.label }}
+        </button>
+      }
+    </div>
 
-  @if (error()) {
-    <p class="text-sm text-red-600">{{ error() }}</p>
-  }
+    @if (error()) {
+      <p class="text-sm text-red-600">{{ error() }}</p>
+    }
 
-  @if (activeTab() === 'manual') {
-    <div class="card p-4">
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label class="block text-sm sm:col-span-2">
-          <span class="text-slate-500">Stock</span>
-          <input
-            class="input-field mt-1 w-full uppercase"
-            [ngModel]="symbolQuery()"
-            (ngModelChange)="onSymbolQuery($event)"
-            placeholder="Search symbol or name…"
-            list="universe-symbols"
-          />
-          <datalist id="universe-symbols">
-            @for (s of symbolOptions(); track s.symbol) {
-              <option [value]="s.symbol">{{ s.name }}</option>
+    @if (activeTab() === 'manual' || isEditing()) {
+      <div class="card p-4">
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label class="block text-sm sm:col-span-2">
+            <span class="text-slate-500">Stock</span>
+            <input
+              class="input-field mt-1 w-full uppercase"
+              [ngModel]="symbolQuery()"
+              (ngModelChange)="onSymbolQuery($event)"
+              placeholder="Search symbol or name…"
+              list="universe-symbols"
+            />
+            <datalist id="universe-symbols">
+              @for (s of symbolOptions(); track s.symbol) {
+                <option [value]="s.symbol">{{ s.name }}</option>
+              }
+            </datalist>
+            @if (form.name) {
+              <span class="mt-1 block text-xs text-slate-400">{{ form.name }}</span>
             }
-          </datalist>
-          @if (form.name) {
-            <span class="mt-1 block text-xs text-slate-400">{{ form.name }}</span>
-          }
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Segment</span>
-          <select class="input-field mt-1 w-full" [ngModel]="form.segment" (ngModelChange)="onSegmentChange($event)">
-            <option value="intraday">Intraday</option>
-            <option value="delivery">Delivery</option>
-          </select>
-        </label>
-        @if (form.segment === 'intraday') {
+          </label>
           <label class="block text-sm">
-            <span class="text-slate-500">Direction</span>
-            <select class="input-field mt-1 w-full" [(ngModel)]="form.direction">
-              <option value="long">Long</option>
-              <option value="short">Short</option>
+            <span class="text-slate-500">Segment</span>
+            <select class="input-field mt-1 w-full" [ngModel]="form.segment" (ngModelChange)="onSegmentChange($event)">
+              <option value="intraday">Intraday</option>
+              <option value="delivery">Delivery</option>
             </select>
           </label>
-        }
-        <label class="block text-sm">
-          <span class="text-slate-500">Quantity</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.quantity" />
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">CMP (current price) *</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.cmp" />
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Entry price *</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.entryPrice" />
-          @if (entryPctPreview() != null) {
-            <span class="mt-1 block text-xs text-slate-400">vs CMP: {{ fmtPct(entryPctPreview()) }}</span>
+          @if (form.segment === 'intraday') {
+            <label class="block text-sm">
+              <span class="text-slate-500">Direction</span>
+              <select class="input-field mt-1 w-full" [(ngModel)]="form.direction">
+                <option value="long">Long</option>
+                <option value="short">Short</option>
+              </select>
+            </label>
           }
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Target / exit *</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.targetPrice" />
-          @if (exitPctPreview() != null) {
-            <span class="mt-1 block text-xs text-slate-400">vs entry: {{ fmtPct(exitPctPreview()) }}</span>
+          <label class="block text-sm">
+            <span class="text-slate-500">Quantity</span>
+            <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.quantity" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-500">CMP (current price) *</span>
+            <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.cmp" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-500">Entry price *</span>
+            <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.entryPrice" />
+            @if (entryPctPreview() != null) {
+              <span class="mt-1 block text-xs text-slate-400">vs CMP: {{ fmtPct(entryPctPreview()) }}</span>
+            }
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-500">Target / exit *</span>
+            <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.targetPrice" />
+            @if (exitPctPreview() != null) {
+              <span class="mt-1 block text-xs text-slate-400">vs entry: {{ fmtPct(exitPctPreview()) }}</span>
+            }
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-500">Stop loss</span>
+            <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.stopLoss" />
+            @if (stopLossPctPreview() != null) {
+              <span class="mt-1 block text-xs text-slate-400">vs entry: {{ fmtPct(stopLossPctPreview()) }}</span>
+            }
+          </label>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-4 text-sm text-slate-600">
+          <p>
+            If target:
+            <span class="font-bold tabular-nums" [class]="pnlClass(estimatedPreview())">{{ fmt(estimatedPreview()) }}</span>
+          </p>
+          @if (stopLossPreview() != null) {
+            <p>
+              If SL hit:
+              <span class="font-bold tabular-nums text-red-600">{{ fmt(stopLossPreview()!) }}</span>
+            </p>
           }
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Stop loss</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.stopLoss" />
-        </label>
-      </div>
-      <p class="mt-3 text-sm text-slate-600">
-        Estimated P&L:
-        <span class="font-bold tabular-nums" [class]="pnlClass(estimatedPreview())">{{ fmt(estimatedPreview()) }}</span>
-      </p>
-      <div class="mt-4 flex flex-wrap gap-2">
-        <button type="button" class="btn-primary" [disabled]="busy()" (click)="save('manual')">Add to plan</button>
-        <a routerLink="/trade-plans" [queryParams]="{ date: tradeDate() }" class="btn-secondary">Cancel</a>
-      </div>
-    </div>
-  } @else {
-    <div class="card p-4">
-      <p class="mb-3 text-sm text-slate-500">Pick a stock from your registry to pre-fill entry and targets.</p>
-      <div class="flex flex-wrap gap-2">
-        @for (s of registry(); track s.symbol) {
-          <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:border-kairo-300" (click)="pickSymbol(s.symbol)">
-            {{ s.symbol }} · {{ fmt(s.currentPrice) }}
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button type="button" class="btn-primary" [disabled]="busy()" (click)="save('manual')">
+            {{ isEditing() ? (busy() ? 'Saving…' : 'Save changes') : 'Add to plan' }}
           </button>
-        } @empty {
-          <p class="text-sm text-slate-400">Add stocks in Stock registry first, or switch to Manual and search the universe.</p>
-        }
+          <a routerLink="/trade-plans" [queryParams]="{ date: tradeDate() }" class="btn-secondary">Cancel</a>
+        </div>
       </div>
-    </div>
+    } @else {
+      <div class="card p-4">
+        <p class="mb-3 text-sm text-slate-500">Pick a stock from your registry to pre-fill entry and targets.</p>
+        <div class="flex flex-wrap gap-2">
+          @for (s of registry(); track s.symbol) {
+            <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:border-kairo-300" (click)="pickSymbol(s.symbol)">
+              {{ s.symbol }} · {{ fmt(s.currentPrice) }}
+            </button>
+          } @empty {
+            <p class="text-sm text-slate-400">Add stocks in Stock registry first, or switch to Manual and search the universe.</p>
+          }
+        </div>
+      </div>
+    }
   }
 </div>

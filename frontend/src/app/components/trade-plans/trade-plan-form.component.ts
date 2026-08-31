@@ -43,6 +43,9 @@ export class TradePlanFormComponent implements OnInit {
   pnlClass = pnlClass;
   error = signal<string | null>(null);
   busy = signal(false);
+  loading = signal(false);
+  editingId = signal<string | null>(null);
+  isEditing = computed(() => this.editingId() != null);
 
   form = {
     symbol: '',
@@ -69,6 +72,21 @@ export class TradePlanFormComponent implements OnInit {
     return TradePlanService.exitPctVsEntry(entry, target, this.form.segment, this.form.direction);
   });
 
+  stopLossPreview = computed(() => {
+    const qty = parseFloat(this.form.quantity);
+    const entry = parseFloat(this.form.entryPrice);
+    const stop = parseFloat(this.form.stopLoss);
+    if (!qty || !entry || !stop) return null;
+    return TradePlanService.estimatePnL(this.form.segment, this.form.direction, qty, entry, stop);
+  });
+
+  stopLossPctPreview = computed(() => {
+    const entry = parseFloat(this.form.entryPrice);
+    const stop = parseFloat(this.form.stopLoss);
+    if (!entry || !stop) return null;
+    return TradePlanService.stopLossPctVsEntry(entry, stop, this.form.segment, this.form.direction);
+  });
+
   symbolOptions = computed(() => {
     const q = this.symbolQuery().trim().toLowerCase();
     const rows = this.universe();
@@ -91,12 +109,47 @@ export class TradePlanFormComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    const editId = this.route.snapshot.paramMap.get('id');
+    if (editId) {
+      void this.loadForEdit(editId);
+      return;
+    }
     const date = clampToUpcomingPlanDate(this.route.snapshot.queryParamMap.get('date'));
     this.tradeDate.set(date);
     const tab = this.route.snapshot.queryParamMap.get('tab');
     if (tab === 'auto') this.activeTab.set('auto');
     const symbol = this.route.snapshot.queryParamMap.get('symbol');
     if (symbol) this.pickSymbol(symbol);
+  }
+
+  private async loadForEdit(id: string): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const trade = await this.planSvc.getById(id);
+      if (!trade) {
+        this.error.set('Trade plan not found');
+        return;
+      }
+      this.editingId.set(id);
+      this.tradeDate.set(trade.tradeDate);
+      this.activeTab.set('manual');
+      this.form.symbol = trade.symbol;
+      this.form.name = trade.stockName ?? trade.symbol;
+      this.symbolQuery.set(trade.symbol);
+      this.form.segment = trade.segment;
+      this.form.direction = trade.direction;
+      this.form.quantity = String(trade.quantity);
+      this.form.cmp = trade.cmp != null ? String(trade.cmp) : '';
+      this.form.entryPrice = String(trade.entryPrice);
+      this.form.targetPrice = String(trade.targetPrice);
+      this.form.stopLoss = trade.stopLoss != null ? String(trade.stopLoss) : '';
+      this.form.notes = trade.notes ?? '';
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Failed to load trade');
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   setTab(tab: 'manual' | 'auto'): void {
@@ -146,9 +199,10 @@ export class TradePlanFormComponent implements OnInit {
     }
     const stock = this.registry().find((s) => s.symbol === this.form.symbol.toUpperCase());
     const universeEntry = this.universe().find((s) => s.symbol === this.form.symbol.toUpperCase());
+    const editId = this.editingId();
     this.busy.set(true);
     try {
-      await this.planSvc.create({
+      const payload = {
         symbol: this.form.symbol,
         stockName: stock?.name ?? universeEntry?.name ?? this.form.name,
         tradeDate: this.tradeDate(),
@@ -159,12 +213,16 @@ export class TradePlanFormComponent implements OnInit {
         entryPrice: entry,
         targetPrice: target,
         stopLoss: parseFloat(this.form.stopLoss) || undefined,
-        source,
         notes: this.form.notes,
-      });
+      };
+      if (editId) {
+        await this.planSvc.update(editId, payload);
+      } else {
+        await this.planSvc.create({ ...payload, source });
+      }
       await this.router.navigate(['/trade-plans'], { queryParams: { date: this.tradeDate() } });
     } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Failed to add trade');
+      this.error.set(e instanceof Error ? e.message : editId ? 'Failed to update trade' : 'Failed to add trade');
     } finally {
       this.busy.set(false);
     }

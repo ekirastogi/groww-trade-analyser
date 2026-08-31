@@ -1,149 +1,295 @@
-<div class="space-y-6">
-  <div class="flex flex-wrap items-end justify-between gap-3">
-    <div class="min-w-0 flex-1 space-y-3">
-      <div class="segmented-control flex-wrap" role="tablist" aria-label="Upcoming trade dates">
-        @for (tab of upcomingTabs(); track tab.iso) {
-          <button
-            type="button"
-            role="tab"
-            class="segment-item"
-            [class.segment-item-active]="tradeDate() === tab.iso"
-            (click)="selectTab(tab.iso)"
-          >
-            {{ tab.label }}
-          </button>
-        }
+<div class="trade-plans-page mx-auto max-w-6xl space-y-4">
+  <!-- Date strip -->
+  <div class="card p-3">
+    <div class="flex items-center gap-2 overflow-x-auto pb-1">
+      @for (tab of upcomingTabs(); track tab.iso) {
         <button
           type="button"
-          class="segment-item"
-          [class.segment-item-active]="viewingPast()"
-          (click)="toggleCalendar()"
+          class="plan-date-tab"
+          [class.plan-date-tab-active]="tradeDate() === tab.iso"
+          (click)="selectTab(tab.iso)"
         >
-          Past
+          {{ tab.label }}
         </button>
-      </div>
-      @if (calendarOpen() || viewingPast()) {
+      }
+      <button
+        type="button"
+        class="plan-date-tab"
+        [class.plan-date-tab-active]="viewingPast() || calendarOpen()"
+        (click)="toggleCalendar()"
+      >
+        Past
+      </button>
+    </div>
+    @if (calendarOpen() || viewingPast()) {
+      <div class="mt-3 border-t border-slate-100 pt-3">
         <label class="block max-w-xs text-sm">
-          <span class="text-slate-500">Pick a past trading day</span>
+          <span class="text-slate-500">Select a past trading day</span>
           <input
             type="date"
-            class="input-field mt-1 w-full"
+            class="input-field mt-1.5 w-full"
             [ngModel]="viewingPast() ? tradeDate() : ''"
             [max]="pastDateMax()"
             (ngModelChange)="onPastDatePick($event)"
           />
         </label>
-      }
-    </div>
-    <div class="flex flex-wrap items-end gap-3">
-      <div class="grid grid-cols-3 gap-3 text-center text-sm">
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
-          <div class="text-xs text-slate-500">Est. P&L</div>
-          <div class="font-bold tabular-nums" [class]="pnlClass(daySummary().estimatedPnL)">{{ fmt(daySummary().estimatedPnL) }}</div>
-        </div>
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
-          <div class="text-xs text-slate-500">Realized</div>
-          <div class="font-bold tabular-nums" [class]="pnlClass(daySummary().realizedPnL)">{{ fmt(daySummary().realizedPnL) }}</div>
-        </div>
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
-          <div class="text-xs text-slate-500">Trades</div>
-          <div class="font-bold">{{ daySummary().tradeCount }} <span class="text-xs font-normal text-slate-400">({{ daySummary().executedCount }} done)</span></div>
-        </div>
       </div>
-      @if (canAddPlan()) {
-        <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="btn-primary">Add plan</a>
-      }
+    }
+  </div>
+
+  <!-- Day header + KPIs -->
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Trading plan</p>
+      <h2 class="text-lg font-bold text-slate-900">{{ dateHeading() }}</h2>
+      <p class="text-xs text-slate-500">
+        {{ daySummary().tradeCount }} trade{{ daySummary().tradeCount === 1 ? '' : 's' }}
+        · {{ daySummary().executedCount }} executed
+        @if (daySummary().skippedCount) {
+          · {{ daySummary().skippedCount }} skipped
+        }
+      </p>
+    </div>
+    @if (canAddPlan()) {
+      <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="btn-primary shrink-0 text-sm">
+        + Add plan
+      </a>
+    }
+  </div>
+
+  <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="card px-3 py-2.5">
+      <p class="text-[11px] font-medium text-slate-500">Target P&L</p>
+      <p class="text-lg font-bold tabular-nums" [class]="pnlClass(daySummary().estimatedPnL)">
+        {{ fmt(daySummary().estimatedPnL) }}
+      </p>
+    </div>
+    <div class="card px-3 py-2.5">
+      <p class="text-[11px] font-medium text-slate-500">Loss if SL hit</p>
+      <p class="text-lg font-bold tabular-nums text-red-600">
+        {{ fmt(daySummary().estimatedStopLossPnL) }}
+      </p>
+    </div>
+    <div class="card px-3 py-2.5">
+      <p class="text-[11px] font-medium text-slate-500">Realized P&L</p>
+      <p class="text-lg font-bold tabular-nums" [class]="pnlClass(daySummary().realizedPnL)">
+        {{ fmt(daySummary().realizedPnL) }}
+      </p>
+    </div>
+    <div class="card px-3 py-2.5">
+      <p class="text-[11px] font-medium text-slate-500">Open positions</p>
+      <p class="text-lg font-bold tabular-nums text-slate-900">
+        {{ daySummary().tradeCount - daySummary().executedCount - daySummary().skippedCount }}
+      </p>
     </div>
   </div>
 
-  <div class="card overflow-hidden">
-    <h3 class="border-b border-slate-100 px-4 py-3 font-semibold text-slate-900">Plan for {{ dateHeading() }}</h3>
-    <div class="overflow-x-auto">
-      <table class="stock-table min-w-[1100px]">
-        <thead>
-          <tr>
-            <th class="w-10 text-center">#</th>
-            <th>
-              <button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive('symbol')" (click)="tableSort.toggle('symbol', $event)">
-                Stock <span>{{ tableSort.indicator('symbol') }}</span>
-              </button>
-            </th>
-            <th>Type</th>
-            <th>Qty</th>
-            <th>CMP</th>
-            <th>Entry</th>
-            <th>Entry vs CMP</th>
-            <th>Exit</th>
-            <th>Exit vs entry</th>
-            <th>
-              <button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive('estimatedPnL')" (click)="tableSort.toggle('estimatedPnL', $event)">
-                Est. P&L <span>{{ tableSort.indicator('estimatedPnL') }}</span>
-              </button>
-            </th>
-            <th>Status</th>
-            <th>Realized</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (t of sortedTrades(); track t.id; let i = $index) {
-            <tr>
-              <td class="text-center text-slate-400">{{ i + 1 }}</td>
-              <td>
-                <div class="font-semibold">{{ t.symbol }}</div>
-                <div class="text-xs text-slate-400">{{ t.source }}</div>
-              </td>
-              <td class="text-xs">{{ segmentLabel(t) }}</td>
-              <td class="tabular-nums">{{ t.quantity }}</td>
-              <td class="tabular-nums">{{ t.cmp != null ? fmt(t.cmp) : '—' }}</td>
-              <td class="tabular-nums">{{ fmt(t.entryPrice) }}</td>
-              <td class="tabular-nums text-xs" [class]="pnlClass(entryPct(t) ?? 0)">{{ fmtPct(entryPct(t)) }}</td>
-              <td class="tabular-nums">{{ fmt(t.targetPrice) }}</td>
-              <td class="tabular-nums text-xs" [class]="pnlClass(exitPct(t) ?? 0)">{{ fmtPct(exitPct(t)) }}</td>
-              <td class="tabular-nums" [class]="pnlClass(t.estimatedPnL)">{{ fmt(t.estimatedPnL) }}</td>
-              <td>
-                <span class="rounded-full px-2 py-0.5 text-xs font-medium"
-                  [class.bg-amber-100]="t.status === 'planned'"
-                  [class.text-amber-800]="t.status === 'planned'"
-                  [class.bg-emerald-100]="t.status === 'executed'"
-                  [class.text-emerald-800]="t.status === 'executed'"
-                  [class.bg-slate-100]="t.status === 'skipped'"
-                  [class.text-slate-600]="t.status === 'skipped'">
-                  {{ t.status }}
-                </span>
-              </td>
-              <td class="tabular-nums" [class]="pnlClass(t.realizedPnL ?? 0)">
-                {{ t.realizedPnL != null ? fmt(t.realizedPnL) : '—' }}
-              </td>
-              <td class="whitespace-nowrap text-xs">
-                @if (t.status === 'planned') {
-                  <button type="button" class="text-emerald-600 hover:underline" (click)="openExecuteModal(t)">Executed</button>
-                  <button type="button" class="ml-2 text-slate-500 hover:underline" (click)="markSkipped(t)">Skip</button>
-                } @else {
-                  <button type="button" class="text-kairo-600 hover:underline" (click)="resetPlanned(t)">Reset</button>
-                }
-                <button type="button" class="ml-2 text-red-500 hover:underline" (click)="removeTrade(t.id)">Del</button>
-              </td>
-            </tr>
-          } @empty {
-            <tr>
-              <td colspan="13" class="py-8 text-center text-sm text-slate-400">
-                No trades planned for this date.
-                <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="ml-1 text-kairo-600 hover:underline">Add one</a>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
+  <!-- Trade list -->
+  @if (sortedTrades().length) {
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="text-sm font-medium text-slate-600">Positions</p>
+      <div class="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5 text-xs">
+        <button
+          type="button"
+          class="rounded-md px-2.5 py-1.5 font-medium transition"
+          [class.bg-slate-900]="sortKey() === 'symbol'"
+          [class.text-white]="sortKey() === 'symbol'"
+          [class.text-slate-600]="sortKey() !== 'symbol'"
+          (click)="setSort('symbol')"
+        >
+          Symbol
+        </button>
+        <button
+          type="button"
+          class="rounded-md px-2.5 py-1.5 font-medium transition"
+          [class.bg-slate-900]="sortKey() === 'estimatedPnL'"
+          [class.text-white]="sortKey() === 'estimatedPnL'"
+          [class.text-slate-600]="sortKey() !== 'estimatedPnL'"
+          (click)="setSort('estimatedPnL')"
+        >
+          Est. P&L
+        </button>
+        <button
+          type="button"
+          class="rounded-md px-2.5 py-1.5 font-medium transition"
+          [class.bg-slate-900]="sortKey() === 'realizedPnL'"
+          [class.text-white]="sortKey() === 'realizedPnL'"
+          [class.text-slate-600]="sortKey() !== 'realizedPnL'"
+          (click)="setSort('realizedPnL')"
+        >
+          Realized
+        </button>
+      </div>
     </div>
-  </div>
+
+    <div class="card divide-y divide-slate-100 overflow-hidden">
+      @for (t of sortedTrades(); track t.id) {
+        <article class="trade-item group">
+          <div class="flex">
+            <div class="w-1 shrink-0" [class]="accentClass(t)"></div>
+            <div class="flex min-w-0 flex-1 flex-col gap-3 p-3 lg:flex-row lg:items-center lg:gap-4">
+              <!-- Symbol block -->
+              <div class="flex shrink-0 items-start justify-between gap-3 lg:w-44 lg:flex-col lg:justify-start">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-base font-bold text-slate-900">{{ t.symbol }}</h3>
+                    <span class="rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset" [class]="statusBadgeClass(t)">
+                      {{ statusLabel(t) }}
+                    </span>
+                  </div>
+                  <p class="mt-0.5 text-xs text-slate-500">{{ segmentDetail(t) }}</p>
+                  <p class="text-xs font-medium tabular-nums text-slate-600">{{ t.quantity | number }} qty</p>
+                </div>
+                <!-- P&L on mobile -->
+                <div class="text-right lg:hidden">
+                  @if (t.status === 'executed') {
+                    <p class="text-[10px] font-semibold uppercase text-slate-400">Realized</p>
+                    <p class="text-sm font-bold tabular-nums" [class]="pnlClass(displayPnL(t))">{{ fmt(displayPnL(t)) }}</p>
+                  } @else {
+                    <p class="text-sm font-bold tabular-nums" [class]="pnlClass(t.estimatedPnL)">{{ fmt(t.estimatedPnL) }}</p>
+                    @if (stopLossPnL(t); as slPnL) {
+                      <p class="text-xs font-semibold tabular-nums text-red-600">{{ fmt(slPnL) }}</p>
+                    }
+                  }
+                </div>
+              </div>
+
+              <!-- Price ribbon + levels -->
+              <div class="min-w-0 flex-1">
+                <!-- Trade flow: entry → exit (direction-aware) -->
+                <div class="mb-2 flex items-center justify-center gap-3 rounded-lg bg-slate-50 px-3 py-1.5">
+                  <div class="text-center">
+                    <p class="text-[9px] font-semibold uppercase tracking-wide text-kairo-600">Entry</p>
+                    <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.entryPrice) }}</p>
+                    @if (entryPct(t) != null) {
+                      <p class="text-[10px] tabular-nums" [class]="pnlClass(entryPct(t) ?? 0)">{{ fmtPct(entryPct(t)) }}</p>
+                    }
+                  </div>
+                  <span class="text-base font-bold" [class]="flowArrowClass(t)" aria-hidden="true">{{ flowArrow(t) }}</span>
+                  <div class="text-center">
+                    <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">{{ exitLabel(t) }}</p>
+                    <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.targetPrice) }}</p>
+                    @if (exitPct(t) != null) {
+                      <p class="text-[10px] tabular-nums" [class]="pnlClass(exitPct(t) ?? 0)">{{ fmtPct(exitPct(t)) }}</p>
+                    }
+                  </div>
+                </div>
+
+                <div class="price-ribbon mx-1">
+                  @for (level of priceLevels(t); track level.key) {
+                    <span class="price-marker" [class]="level.markerClass" [style.left.%]="markerLeft(level.price, t)"></span>
+                  }
+                </div>
+                <div class="mt-2 flex justify-between gap-1">
+                  @for (level of priceLevels(t); track level.key) {
+                    <div class="min-w-0 flex-1 text-center">
+                      <p class="text-[9px] font-semibold uppercase tracking-wide" [class]="level.labelClass">{{ level.label }}</p>
+                      <p class="text-xs font-semibold tabular-nums text-slate-900">{{ fmt(level.price) }}</p>
+                      @if (level.pct != null) {
+                        <p class="text-[10px] tabular-nums" [class]="level.key === 'sl' ? 'text-red-600' : pnlClass(level.pct)">
+                          {{ fmtPct(level.pct) }}
+                        </p>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <!-- P&L desktop -->
+              <div class="hidden shrink-0 text-right lg:block lg:w-28">
+                @if (t.status === 'executed') {
+                  <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Realized</p>
+                  <p class="text-base font-bold tabular-nums" [class]="pnlClass(displayPnL(t))">{{ fmt(displayPnL(t)) }}</p>
+                  @if (t.executedBuyPrice || t.executedSellPrice) {
+                    <p class="mt-0.5 text-[10px] text-slate-500">
+                      B {{ fmt(t.executedBuyPrice ?? 0) }}<br />S {{ fmt(t.executedSellPrice ?? 0) }}
+                    </p>
+                  }
+                } @else {
+                  <p class="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">{{ exitLabel(t) }}</p>
+                  <p class="text-base font-bold tabular-nums" [class]="pnlClass(t.estimatedPnL)">{{ fmt(t.estimatedPnL) }}</p>
+                  @if (stopLossPnL(t); as slPnL) {
+                    <p class="mt-1 text-[10px] font-semibold uppercase tracking-wide text-red-500">SL risk</p>
+                    <p class="text-sm font-bold tabular-nums text-red-600">{{ fmt(slPnL) }}</p>
+                  }
+                }
+              </div>
+
+              <!-- Actions -->
+              <div class="relative flex shrink-0 items-center gap-1.5 lg:w-28 lg:justify-end">
+                @if (t.status === 'planned') {
+                  <button type="button" class="btn-primary !px-3 !py-1.5 text-xs" (click)="openExecuteModal(t)">
+                    Execute
+                  </button>
+                } @else {
+                  <button type="button" class="btn-secondary !px-3 !py-1.5 text-xs" (click)="resetPlanned(t)">
+                    Reopen
+                  </button>
+                }
+                <button
+                  type="button"
+                  class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                  [class.bg-slate-50]="menuOpenId() === t.id"
+                  (click)="toggleMenu(t.id, $event)"
+                  aria-label="More actions"
+                >
+                  ⋯
+                </button>
+                @if (menuOpenId() === t.id) {
+                  <div class="action-menu" (click)="$event.stopPropagation()">
+                    <a
+                      [routerLink]="['/trade-plans', t.id, 'edit']"
+                      class="action-menu-item"
+                      (click)="closeMenu()"
+                    >
+                      Edit plan
+                    </a>
+                    @if (t.status === 'planned') {
+                      <button type="button" class="action-menu-item" (click)="markSkipped(t); closeMenu()">
+                        Skip
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      class="action-menu-item text-red-600 hover:bg-red-50"
+                      (click)="removeTrade(t.id); closeMenu()"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  } @else {
+    <div class="card px-6 py-10 text-center">
+      <p class="text-base font-medium text-slate-700">No trades planned for this session</p>
+      <p class="mt-1 text-sm text-slate-500">Add your first setup for {{ dateHeading() }}.</p>
+      @if (canAddPlan()) {
+        <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="btn-primary mt-4 inline-flex">
+          + Add trade plan
+        </a>
+      }
+    </div>
+  }
 </div>
 
 @if (executingTrade(); as trade) {
   <div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
     <div class="card w-full max-w-md p-5">
-      <h3 class="text-lg font-semibold text-slate-900">Record execution — {{ trade.symbol }}</h3>
-      <p class="mt-1 text-sm text-slate-500">Enter actual trade values. P&L is calculated as sell value − buy value.</p>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Record execution</p>
+          <h3 class="text-lg font-bold text-slate-900">{{ trade.symbol }}</h3>
+          <p class="text-sm text-slate-500">{{ segmentDetail(trade) }} · planned {{ trade.quantity | number }} qty</p>
+        </div>
+        <button type="button" class="text-slate-400 hover:text-slate-600" (click)="closeExecuteModal()" aria-label="Close">✕</button>
+      </div>
+
+      <p class="mt-4 text-sm text-slate-600">Enter per-share fill prices. P&L = (sell price − buy price) × quantity.</p>
 
       <div class="mt-4 grid gap-3">
         <label class="block text-sm">
@@ -151,28 +297,30 @@
           <input class="input-field mt-1 w-full" type="number" [(ngModel)]="execForm.quantity" />
         </label>
         <label class="block text-sm">
-          <span class="text-slate-500">Buy value (₹)</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="execForm.buyValue" />
+          <span class="text-slate-500">Buy price (₹ per share)</span>
+          <input class="input-field mt-1 w-full" type="number" step="0.01" [(ngModel)]="execForm.buyPrice" />
         </label>
         <label class="block text-sm">
-          <span class="text-slate-500">Sell value (₹)</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="execForm.sellValue" />
+          <span class="text-slate-500">Sell price (₹ per share)</span>
+          <input class="input-field mt-1 w-full" type="number" step="0.01" [(ngModel)]="execForm.sellPrice" />
         </label>
       </div>
 
       @if (execPreviewPnL() != null) {
-        <p class="mt-3 text-sm text-slate-600">
-          Realized P&L:
-          <span class="font-bold tabular-nums" [class]="pnlClass(execPreviewPnL()!)">{{ fmt(execPreviewPnL()!) }}</span>
-        </p>
+        <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p class="text-xs font-medium text-slate-500">Realized P&L</p>
+          <p class="text-2xl font-bold tabular-nums" [class]="pnlClass(execPreviewPnL()!)">
+            {{ fmt(execPreviewPnL()!) }}
+          </p>
+        </div>
       }
 
       @if (execError()) {
-        <p class="mt-2 text-sm text-red-600">{{ execError() }}</p>
+        <p class="mt-3 text-sm text-red-600">{{ execError() }}</p>
       }
 
-      <div class="mt-4 flex flex-wrap gap-2">
-        <button type="button" class="btn-primary" [disabled]="execBusy()" (click)="confirmExecuted()">
+      <div class="mt-5 flex flex-wrap gap-2">
+        <button type="button" class="btn-primary flex-1" [disabled]="execBusy()" (click)="confirmExecuted()">
           {{ execBusy() ? 'Saving…' : 'Save execution' }}
         </button>
         <button type="button" class="btn-secondary" [disabled]="execBusy()" (click)="closeExecuteModal()">Cancel</button>

@@ -59,6 +59,11 @@ export const routes: Routes = [
         data: { title: 'Add trade plan', subtitle: 'Plan a new trade for the selected date' },
       },
       {
+        path: 'trade-plans/:id/edit',
+        component: TradePlanFormComponent,
+        data: { title: 'Edit trade plan', subtitle: 'Update an existing trade plan' },
+      },
+      {
         path: 'trade-plans',
         component: TradePlansComponent,
         data: { title: 'Trade plans', subtitle: 'Daily trade recommendations and execution tracking' },
