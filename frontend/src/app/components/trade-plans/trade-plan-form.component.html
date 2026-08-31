@@ -4,10 +4,19 @@
     <h2 class="text-lg font-semibold text-slate-900">Add trade plan</h2>
   </div>
 
-  <label class="block max-w-xs text-sm">
-    <span class="text-slate-500">Trade date</span>
-    <input type="date" class="input-field mt-1 w-full" [ngModel]="tradeDate()" (ngModelChange)="tradeDate.set($event)" />
-  </label>
+  <div class="segmented-control flex-wrap" role="tablist" aria-label="Trade date">
+    @for (tab of dateTabs(); track tab.iso) {
+      <button
+        type="button"
+        role="tab"
+        class="segment-item"
+        [class.segment-item-active]="tradeDate() === tab.iso"
+        (click)="selectDate(tab.iso)"
+      >
+        {{ tab.label }}
+      </button>
+    }
+  </div>
 
   <div class="segmented-control w-fit">
     <button type="button" class="segment-item" [class.segment-item-active]="activeTab() === 'manual'" (click)="setTab('manual')">Manual</button>
@@ -60,12 +69,22 @@
           <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.quantity" />
         </label>
         <label class="block text-sm">
-          <span class="text-slate-500">Entry price</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.entryPrice" />
+          <span class="text-slate-500">CMP (current price) *</span>
+          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.cmp" />
         </label>
         <label class="block text-sm">
-          <span class="text-slate-500">Target / exit</span>
+          <span class="text-slate-500">Entry price *</span>
+          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.entryPrice" />
+          @if (entryPctPreview() != null) {
+            <span class="mt-1 block text-xs text-slate-400">vs CMP: {{ fmtPct(entryPctPreview()) }}</span>
+          }
+        </label>
+        <label class="block text-sm">
+          <span class="text-slate-500">Target / exit *</span>
           <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.targetPrice" />
+          @if (exitPctPreview() != null) {
+            <span class="mt-1 block text-xs text-slate-400">vs entry: {{ fmtPct(exitPctPreview()) }}</span>
+          }
         </label>
         <label class="block text-sm">
           <span class="text-slate-500">Stop loss</span>

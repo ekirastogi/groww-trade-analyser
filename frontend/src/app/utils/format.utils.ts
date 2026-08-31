@@ -10,6 +10,12 @@ export function formatPct(value: number): string {
   return (value * 100).toFixed(2) + '%';
 }
 
+export function formatPctSigned(value: number | null | undefined, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(digits)}%`;
+}
+
 export function pnlClass(value: number): string {
   if (value > 0) return 'text-emerald-600';
   if (value < 0) return 'text-red-600';

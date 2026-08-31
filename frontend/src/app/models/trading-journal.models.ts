@@ -29,6 +29,7 @@ export interface PlannedTrade {
   segment: TradeSegment;
   direction: TradeDirection;
   quantity: number;
+  cmp?: number;
   entryPrice: number;
   targetPrice: number;
   stopLoss?: number;
@@ -36,9 +37,18 @@ export interface PlannedTrade {
   status: TradeExecutionStatus;
   estimatedPnL: number;
   realizedPnL?: number;
+  executedQuantity?: number;
+  executedBuyValue?: number;
+  executedSellValue?: number;
   notes?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface TradeExecutionInput {
+  quantity: number;
+  buyValue: number;
+  sellValue: number;
 }
 
 export interface DayTradeSummary {

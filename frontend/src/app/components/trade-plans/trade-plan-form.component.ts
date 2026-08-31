@@ -7,12 +7,13 @@ import { RegistryStockService } from '../../services/registry-stock.service';
 import { TradePlanService } from '../../services/trade-plan.service';
 import { UniverseService } from '../../services/universe.service';
 import { TradeDirection, TradeSegment } from '../../models/trading-journal.models';
-import { formatCurrency, pnlClass } from '../../utils/format.utils';
-
-function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+import { formatCurrency, formatPctSigned, pnlClass } from '../../utils/format.utils';
+import {
+  clampToUpcomingPlanDate,
+  planDateTabLabel,
+  todayIso,
+  upcomingPlanDates,
+} from '../../utils/trade-plan-date.utils';
 
 @Component({
   selector: 'app-trade-plan-form',
@@ -31,10 +32,14 @@ export class TradePlanFormComponent implements OnInit {
   universe = toSignal(this.universeSvc.watchAll(), { initialValue: [] });
 
   tradeDate = signal(todayIso());
+  dateTabs = computed(() =>
+    upcomingPlanDates().map((iso) => ({ iso, label: planDateTabLabel(iso) }))
+  );
   activeTab = signal<'manual' | 'auto'>('manual');
   symbolQuery = signal('');
 
   fmt = formatCurrency;
+  fmtPct = formatPctSigned;
   pnlClass = pnlClass;
   error = signal<string | null>(null);
   busy = signal(false);
@@ -45,11 +50,24 @@ export class TradePlanFormComponent implements OnInit {
     segment: 'intraday' as TradeSegment,
     direction: 'long' as TradeDirection,
     quantity: '',
+    cmp: '',
     entryPrice: '',
     targetPrice: '',
     stopLoss: '',
     notes: '',
   };
+
+  entryPctPreview = computed(() => {
+    const cmp = parseFloat(this.form.cmp);
+    const entry = parseFloat(this.form.entryPrice);
+    return TradePlanService.pctVsCmp(entry, cmp);
+  });
+
+  exitPctPreview = computed(() => {
+    const entry = parseFloat(this.form.entryPrice);
+    const target = parseFloat(this.form.targetPrice);
+    return TradePlanService.exitPctVsEntry(entry, target, this.form.segment, this.form.direction);
+  });
 
   symbolOptions = computed(() => {
     const q = this.symbolQuery().trim().toLowerCase();
@@ -73,8 +91,8 @@ export class TradePlanFormComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    const date = this.route.snapshot.queryParamMap.get('date');
-    if (date) this.tradeDate.set(date);
+    const date = clampToUpcomingPlanDate(this.route.snapshot.queryParamMap.get('date'));
+    this.tradeDate.set(date);
     const tab = this.route.snapshot.queryParamMap.get('tab');
     if (tab === 'auto') this.activeTab.set('auto');
     const symbol = this.route.snapshot.queryParamMap.get('symbol');
@@ -83,6 +101,10 @@ export class TradePlanFormComponent implements OnInit {
 
   setTab(tab: 'manual' | 'auto'): void {
     this.activeTab.set(tab);
+  }
+
+  selectDate(iso: string): void {
+    this.tradeDate.set(iso);
   }
 
   onSegmentChange(segment: TradeSegment): void {
@@ -104,6 +126,7 @@ export class TradePlanFormComponent implements OnInit {
     this.symbolQuery.set(this.form.symbol);
     const reg = this.registry().find((s) => s.symbol === this.form.symbol);
     if (reg) {
+      this.form.cmp = String(reg.currentPrice);
       this.form.entryPrice = String(reg.currentPrice);
       if (reg.resistances[0]) this.form.targetPrice = String(reg.resistances[0]);
       if (reg.supports[0]) this.form.stopLoss = String(reg.supports[0]);
@@ -114,10 +137,11 @@ export class TradePlanFormComponent implements OnInit {
   async save(source: 'manual' | 'auto' = 'manual'): Promise<void> {
     this.error.set(null);
     const qty = parseFloat(this.form.quantity);
+    const cmp = parseFloat(this.form.cmp);
     const entry = parseFloat(this.form.entryPrice);
     const target = parseFloat(this.form.targetPrice);
-    if (!this.form.symbol || !qty || !entry || !target) {
-      this.error.set('Symbol, quantity, entry, and target are required');
+    if (!this.form.symbol || !qty || !cmp || !entry || !target) {
+      this.error.set('Symbol, quantity, CMP, entry, and target are required');
       return;
     }
     const stock = this.registry().find((s) => s.symbol === this.form.symbol.toUpperCase());
@@ -131,6 +155,7 @@ export class TradePlanFormComponent implements OnInit {
         segment: this.form.segment,
         direction: this.form.direction,
         quantity: qty,
+        cmp,
         entryPrice: entry,
         targetPrice: target,
         stopLoss: parseFloat(this.form.stopLoss) || undefined,

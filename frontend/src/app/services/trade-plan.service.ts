@@ -18,6 +18,7 @@ import {
   DayTradeSummary,
   PlannedTrade,
   TradeDirection,
+  TradeExecutionInput,
   TradeExecutionStatus,
   TradePlanSource,
   TradeSegment,
@@ -31,6 +32,7 @@ export interface CreatePlannedTradeInput {
   segment: TradeSegment;
   direction: TradeDirection;
   quantity: number;
+  cmp?: number;
   entryPrice: number;
   targetPrice: number;
   stopLoss?: number;
@@ -130,6 +132,31 @@ export class TradePlanService {
     return diff * quantity;
   }
 
+  /** Realized P&L from actual buy and sell values. */
+  static realizedPnLFromValues(buyValue: number, sellValue: number): number {
+    return sellValue - buyValue;
+  }
+
+  /** Entry price as % above/below CMP. */
+  static pctVsCmp(entry: number, cmp?: number): number | null {
+    if (!cmp || !entry) return null;
+    return ((entry - cmp) / cmp) * 100;
+  }
+
+  /** Planned exit move as % from entry (direction-aware). */
+  static exitPctVsEntry(
+    entry: number,
+    exit: number,
+    segment: TradeSegment,
+    direction: TradeDirection
+  ): number | null {
+    if (!entry || !exit) return null;
+    if (segment === 'intraday' && direction === 'short') {
+      return ((entry - exit) / entry) * 100;
+    }
+    return ((exit - entry) / entry) * 100;
+  }
+
   async create(input: CreatePlannedTradeInput): Promise<string> {
     const uid = this.auth.uid;
     if (!uid) throw new Error('Sign in to add trades');
@@ -156,6 +183,7 @@ export class TradePlanService {
       segment,
       direction,
       quantity: input.quantity,
+      cmp: input.cmp ?? null,
       entryPrice: input.entryPrice,
       targetPrice: input.targetPrice,
       stopLoss: input.stopLoss ?? null,
@@ -163,6 +191,9 @@ export class TradePlanService {
       status: 'planned' as TradeExecutionStatus,
       estimatedPnL,
       realizedPnL: null,
+      executedQuantity: null,
+      executedBuyValue: null,
+      executedSellValue: null,
       notes: input.notes ?? '',
       createdAt: now,
       updatedAt: now,
@@ -173,7 +204,7 @@ export class TradePlanService {
   async updateExecution(
     id: string,
     status: TradeExecutionStatus,
-    realizedPnL?: number
+    execution?: TradeExecutionInput
   ): Promise<void> {
     const uid = this.auth.uid;
     if (!uid) throw new Error('Sign in to update trades');
@@ -181,14 +212,26 @@ export class TradePlanService {
       status: TradeExecutionStatus;
       updatedAt: number;
       realizedPnL?: number | null;
+      executedQuantity?: number | null;
+      executedBuyValue?: number | null;
+      executedSellValue?: number | null;
     } = {
       status,
       updatedAt: Date.now(),
     };
-    if (status === 'executed') {
-      patch.realizedPnL = realizedPnL ?? 0;
+    if (status === 'executed' && execution) {
+      patch.realizedPnL = TradePlanService.realizedPnLFromValues(
+        execution.buyValue,
+        execution.sellValue
+      );
+      patch.executedQuantity = execution.quantity;
+      patch.executedBuyValue = execution.buyValue;
+      patch.executedSellValue = execution.sellValue;
     } else {
       patch.realizedPnL = null;
+      patch.executedQuantity = null;
+      patch.executedBuyValue = null;
+      patch.executedSellValue = null;
     }
     await updateDoc(doc(this.firestore, 'users', uid, 'plannedTrades', id), patch);
   }
