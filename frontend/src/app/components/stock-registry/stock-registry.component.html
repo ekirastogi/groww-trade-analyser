@@ -15,6 +15,9 @@
     </div>
     <div class="flex flex-wrap gap-2">
       <button type="button" class="btn-primary" (click)="openAddForm()">Add stock</button>
+      <button type="button" class="btn-secondary" [disabled]="busy() || loading()" (click)="syncFromUniverse()">
+        {{ busy() ? 'Syncing…' : 'Sync from universe' }}
+      </button>
       <button type="button" class="btn-secondary" [disabled]="seedBusy() || loading()" (click)="reload()">
         {{ loading() ? 'Loading…' : 'Refresh' }}
       </button>

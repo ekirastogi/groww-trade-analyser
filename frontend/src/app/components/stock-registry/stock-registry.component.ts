@@ -136,35 +136,48 @@ export class StockRegistryComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      let [stocks, universe, stockCount, universeCount] = await Promise.all([
+      const [stocks, universe, stockCount] = await Promise.all([
         this.registrySvc.listAll(),
         this.universeSvc.listAll(),
         this.registrySvc.count(),
-        this.universeSvc.count(),
       ]);
 
-      if (universeCount > stockCount) {
-        const sync = await this.registrySvc.syncFromUniverse();
-        if (sync.added > 0) {
-          stocks = await this.registrySvc.listAll();
-          stockCount = await this.registrySvc.count();
-        }
-      }
-
       const deduped = await this.registrySvc.dedupeByIsin();
-      if (deduped > 0) {
-        stocks = await this.registrySvc.listAll();
-        stockCount = await this.registrySvc.count();
-      }
+      const finalStocks = deduped > 0 ? await this.registrySvc.listAll() : stocks;
+      const finalCount = deduped > 0 ? await this.registrySvc.count() : stockCount;
 
-      this.stocks.set(stocks);
-      this.stockCount.set(stockCount);
+      this.stocks.set(finalStocks);
+      this.stockCount.set(finalCount);
       this.universe.set(universe);
       this.currentPage.set(1);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  async syncFromUniverse(): Promise<void> {
+    this.error.set(null);
+    this.success.set(null);
+    this.busy.set(true);
+    try {
+      const sync = await this.registrySvc.syncFromUniverse();
+      const deduped = await this.registrySvc.dedupeByIsin();
+      await this.reload();
+      const parts = [
+        sync.added > 0 ? `Added ${sync.added} symbol(s)` : null,
+        deduped > 0 ? `removed ${deduped} duplicate(s)` : null,
+      ].filter(Boolean);
+      this.success.set(
+        parts.length
+          ? `Synced from universe: ${parts.join(', ')}.`
+          : 'Registry is already up to date with the imported universe.'
+      );
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Sync failed');
+    } finally {
+      this.busy.set(false);
     }
   }
 
