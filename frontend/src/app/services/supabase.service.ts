@@ -64,7 +64,10 @@ export function snakeToCamel(key: string): string {
 }
 
 export function camelToSnake(key: string): string {
-  return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  // Keep PnL as one word (reportRealisedPnL → report_realised_pnl, not report_realised_pn_l).
+  return key
+    .replace(/PnL/g, 'Pnl')
+    .replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 
 /** Convert object keys from camelCase to snake_case (shallow). */
