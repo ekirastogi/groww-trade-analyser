@@ -1,0 +1,25 @@
+---
+description: Use scripts/ship.sh for commit, push, and deploy
+alwaysApply: true
+---
+
+# Ship script (commit / push / deploy)
+
+Never run `git commit`, `git push`, or `npm run deploy` as separate agent steps when the user asks to commit, push, and/or deploy.
+
+Instead, run **one** command from the repo root:
+
+```bash
+./scripts/ship.sh "concise commit message"
+```
+
+## Flags
+
+- `./scripts/ship.sh --deploy-only` — deploy only, no commit/push
+- `./scripts/ship.sh --no-deploy "message"` — commit and push only
+
+## Agent behavior
+
+- After code changes, if the user wants shipping: run `./scripts/ship.sh` once with a good commit message.
+- Do not re-run `git status`, `git diff`, and `git log` before shipping unless diagnosing a failure.
+- Do not narrate each git/deploy sub-step; summarize the ship result briefly.

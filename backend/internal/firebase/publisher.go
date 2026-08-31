@@ -64,34 +64,41 @@ func approvalPollInterval() time.Duration {
 	return iv
 }
 
-// PollApprovals queries pending approvals on an interval instead of a snapshot listener.
+// PollApprovalsOnce checks pending approvals in a single query.
+func (p *Publisher) PollApprovalsOnce(ctx context.Context, seen map[string]bool, handler ApprovalHandler) error {
+	iter := p.client.Collection("recommendations").
+		Where("approvalStatus", "==", "approved").
+		Where("status", "==", "pending_approval").
+		Documents(ctx)
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		id := doc.Ref.ID
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if err := handler(ctx, id, doc.Data()); err != nil {
+			log.Printf("approval handler error for %s: %v", id, err)
+		}
+	}
+	return nil
+}
+
+// PollApprovals queries pending approvals on an interval (always-on mode).
 func (p *Publisher) PollApprovals(ctx context.Context, handler ApprovalHandler) error {
 	interval := approvalPollInterval()
-	log.Printf("Polling for trade approvals every %s (no snapshot listener)", interval)
+	log.Printf("Polling for trade approvals every %s", interval)
 	seen := make(map[string]bool)
 
 	poll := func() {
-		iter := p.client.Collection("recommendations").
-			Where("approvalStatus", "==", "approved").
-			Where("status", "==", "pending_approval").
-			Documents(ctx)
-		for {
-			doc, err := iter.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				log.Printf("approval poll error: %v", err)
-				return
-			}
-			id := doc.Ref.ID
-			if seen[id] {
-				continue
-			}
-			seen[id] = true
-			if err := handler(ctx, id, doc.Data()); err != nil {
-				log.Printf("approval handler error for %s: %v", id, err)
-			}
+		if err := p.PollApprovalsOnce(ctx, seen, handler); err != nil {
+			log.Printf("approval poll error: %v", err)
 		}
 	}
 

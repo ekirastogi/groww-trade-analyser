@@ -6,7 +6,6 @@ import {
   setDoc,
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
-import { Observable, interval, startWith, switchMap, from, map, catchError, of } from 'rxjs';
 
 export type WorkerJobStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type WorkerJobType = 'hot_ingest' | 'symbol_ingest' | 'seed_universe';
@@ -31,30 +30,23 @@ export interface WorkerStatus {
 }
 
 const WORKER_ONLINE_MS = 10 * 60 * 1000;
-const WORKER_POLL_MS = 60 * 1000;
+const LISTEN_WINDOW_MS = 15 * 60 * 1000;
 const JOB_POLL_MS = 2000;
 const JOB_TIMEOUT_MS = 15 * 60 * 1000;
+
+export interface WorkerListenState {
+  active: boolean;
+  until: number;
+  requestedBy?: string;
+  updatedAt?: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class WorkerJobService {
   private firestore = inject(Firestore);
   private auth = inject(AuthService);
 
-  /** Polls worker/status instead of a snapshot listener (1 read per interval). */
-  watchWorkerOnline(pollMs = WORKER_POLL_MS): Observable<boolean> {
-    const ref = doc(this.firestore, 'worker', 'status');
-    return interval(pollMs).pipe(
-      startWith(0),
-      switchMap(() => from(getDoc(ref))),
-      map((snap) => {
-        const status = snap.data() as WorkerStatus | undefined;
-        if (!status?.lastSeen) return false;
-        return Date.now() - status.lastSeen < WORKER_ONLINE_MS;
-      }),
-      catchError(() => of(false))
-    );
-  }
-
+  /** One-shot check — no continuous polling. */
   async getWorkerOnline(): Promise<boolean> {
     try {
       const ref = doc(this.firestore, 'worker', 'status');
@@ -65,6 +57,35 @@ export class WorkerJobService {
     } catch {
       return false;
     }
+  }
+
+  /** Opens a short listen window so the local worker polls Firestore on demand. */
+  async requestListenWindow(durationMs = LISTEN_WINDOW_MS): Promise<void> {
+    await this.auth.whenReady();
+    const uid = this.auth.uid;
+    if (!uid) throw new Error('Sign in to connect the worker');
+
+    const now = Date.now();
+    await setDoc(doc(this.firestore, 'worker', 'listen'), {
+      active: true,
+      until: now + durationMs,
+      requestedBy: uid,
+      updatedAt: now,
+    });
+  }
+
+  async getListenState(): Promise<WorkerListenState | null> {
+    try {
+      const snap = await getDoc(doc(this.firestore, 'worker', 'listen'));
+      if (!snap.exists()) return null;
+      return snap.data() as WorkerListenState;
+    } catch {
+      return null;
+    }
+  }
+
+  isListenActive(state: WorkerListenState | null | undefined): boolean {
+    return !!state?.active && (state.until ?? 0) > Date.now();
   }
 
   async requestHotIngest(): Promise<string> {
@@ -85,6 +106,8 @@ export class WorkerJobService {
     await this.auth.whenReady();
     const uid = this.auth.uid;
     if (!uid) throw new Error('Sign in to request market data ingest');
+
+    await this.requestListenWindow();
 
     const jobId = crypto.randomUUID();
     const job: Omit<WorkerJob, 'id'> = {

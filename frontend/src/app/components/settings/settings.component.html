@@ -43,6 +43,14 @@
         <button
           type="button"
           class="tab-btn"
+          [class.tab-btn-active]="activeTab() === 'worker'"
+          (click)="setTab('worker')"
+        >
+          Worker
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
           [class.tab-btn-active]="activeTab() === 'reset'"
           (click)="setTab('reset')"
         >
@@ -92,15 +100,7 @@
         </label>
 
         <p class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Worker status (via Firestore):
-          @if (workerOnline()) {
-            <span class="font-medium text-emerald-600">Online</span>
-            — your local worker is connected and will process ingest jobs.
-          } @else {
-            <span class="font-medium text-amber-600">Offline</span>
-            — run <code class="rounded bg-white px-1">go run .</code> in <code class="rounded bg-white px-1">backend/</code> on your machine.
-            Universe sync still works; ingest runs when the worker starts.
-          }
+          After sync, use the <strong>Worker</strong> tab to connect your local backend and run ingest on demand.
         </p>
 
         @if (backfillError()) {
@@ -113,6 +113,63 @@
         <div class="flex flex-wrap gap-3 pt-1">
           <button type="button" class="btn-primary" [disabled]="!canRunBackfill()" (click)="runBackfill()">
             {{ backfillBusy() ? 'Backfilling…' : 'Backfill universe' }}
+          </button>
+        </div>
+      </div>
+    } @else if (activeTab() === 'worker') {
+      <div class="space-y-4 px-4 py-4 sm:px-5">
+        <div class="rounded-xl border border-kairo-200 bg-kairo-50 px-4 py-3 text-sm text-kairo-900">
+          <p class="font-medium">On-demand local worker</p>
+          <p class="mt-2 text-kairo-800">
+            The backend worker no longer polls Firestore continuously. Click <strong>Connect worker</strong>
+            to open a 15-minute window — during that time the worker checks for jobs and writes a heartbeat.
+            This saves your Firestore daily quota.
+          </p>
+        </div>
+
+        <ol class="list-decimal space-y-1 pl-5 text-sm text-slate-600">
+          <li>Run <code class="rounded bg-slate-100 px-1">cd backend && go run .</code> on your machine.</li>
+          <li>Click <strong>Connect worker</strong> below.</li>
+          <li>Run hot ingest or import NSE/BSE symbols.</li>
+        </ol>
+
+        <p class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Listen window:
+          @if (listenActive()) {
+            <span class="font-medium text-emerald-600">Active</span>
+            until {{ listenUntil() | date: 'shortTime' }}.
+          } @else {
+            <span class="font-medium text-amber-600">Inactive</span>
+            — connect before requesting jobs.
+          }
+          <br />
+          Worker status:
+          @if (workerOnline()) {
+            <span class="font-medium text-emerald-600">Online</span>
+          } @else {
+            <span class="font-medium text-amber-600">Offline</span>
+          }
+        </p>
+
+        @if (workerError()) {
+          <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ workerError() }}</div>
+        }
+        @if (workerSuccess()) {
+          <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ workerSuccess() }}</div>
+        }
+
+        <div class="flex flex-wrap gap-3 pt-1">
+          <button type="button" class="btn-primary" [disabled]="workerBusy()" (click)="connectWorker()">
+            {{ workerBusy() ? 'Working…' : 'Connect worker (15 min)' }}
+          </button>
+          <button type="button" class="btn-secondary" [disabled]="workerBusy()" (click)="runHotIngest()">
+            Hot ingest
+          </button>
+          <button type="button" class="btn-secondary" [disabled]="workerBusy()" (click)="importUniverse()">
+            Import NSE &amp; BSE symbols
+          </button>
+          <button type="button" class="btn-secondary" [disabled]="workerBusy()" (click)="refreshWorkerStatus()">
+            Refresh status
           </button>
         </div>
       </div>
@@ -169,11 +226,11 @@
   </section>
 </div>
 
-@if (resetBusy() || backfillBusy()) {
+@if (resetBusy() || backfillBusy() || workerBusy()) {
   <div class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-sm">
     <div class="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-kairo-400"></div>
     <span class="mt-4 text-sm font-medium text-white">
-      {{ resetBusy() ? 'Resetting data…' : 'Backfilling universe…' }}
+      {{ resetBusy() ? 'Resetting data…' : backfillBusy() ? 'Backfilling universe…' : 'Working…' }}
     </span>
   </div>
 }

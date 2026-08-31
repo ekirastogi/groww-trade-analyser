@@ -62,42 +62,49 @@ func (p *Publisher) MarkJobFailed(ctx context.Context, jobID, errMsg string) err
 	return err
 }
 
-// PollWorkerJobs queries pending jobs on an interval instead of a snapshot listener.
+// PollPendingJobsOnce processes pending jobs found in a single query.
+func (p *Publisher) PollPendingJobsOnce(ctx context.Context, seen map[string]bool, handler JobHandler) error {
+	iter := p.client.Collection("workerJobs").
+		Where("status", "==", "pending").
+		Documents(ctx)
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		jobID := doc.Ref.ID
+		if seen[jobID] {
+			continue
+		}
+		data := doc.Data()
+		jobType, _ := data["type"].(string)
+		if jobType != "hot_ingest" && jobType != "symbol_ingest" && jobType != "seed_universe" {
+			continue
+		}
+		seen[jobID] = true
+		logx.Info("Worker job received: id=%s type=%s", jobID, jobType)
+		if err := handler(ctx, jobID, data); err != nil {
+			logx.Error("Worker job %s failed: %v", jobID, err)
+			_ = p.MarkJobFailed(ctx, jobID, err.Error())
+		} else {
+			logx.Info("Worker job %s completed", jobID)
+		}
+	}
+	return nil
+}
+
+// PollWorkerJobs queries pending jobs on an interval (always-on mode).
 func (p *Publisher) PollWorkerJobs(ctx context.Context, handler JobHandler) error {
 	interval := jobPollInterval()
-	logx.Info("Polling for worker jobs every %s (no snapshot listener)", interval)
+	logx.Info("Polling for worker jobs every %s", interval)
 	seen := make(map[string]bool)
 
 	poll := func() {
-		iter := p.client.Collection("workerJobs").
-			Where("status", "==", "pending").
-			Documents(ctx)
-		for {
-			doc, err := iter.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				logx.Warn("Worker job poll error: %v", err)
-				return
-			}
-			jobID := doc.Ref.ID
-			if seen[jobID] {
-				continue
-			}
-			data := doc.Data()
-			jobType, _ := data["type"].(string)
-			if jobType != "hot_ingest" && jobType != "symbol_ingest" && jobType != "seed_universe" {
-				continue
-			}
-			seen[jobID] = true
-			logx.Info("Worker job received: id=%s type=%s", jobID, jobType)
-			if err := handler(ctx, jobID, data); err != nil {
-				logx.Error("Worker job %s failed: %v", jobID, err)
-				_ = p.MarkJobFailed(ctx, jobID, err.Error())
-			} else {
-				logx.Info("Worker job %s completed", jobID)
-			}
+		if err := p.PollPendingJobsOnce(ctx, seen, handler); err != nil {
+			logx.Warn("Worker job poll error: %v", err)
 		}
 	}
 
