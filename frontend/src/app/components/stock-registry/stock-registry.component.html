@@ -7,12 +7,12 @@
   }
 
   <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-    <p class="text-sm text-slate-500">
-      {{ stocks().length }} tracked in registry
-      @if (universeCount()) {
-        · {{ universeCount() }} imported symbols
-      }
-    </p>
+    <div>
+      <p class="text-sm font-medium text-slate-900">{{ stockCount() }} stocks in your registry</p>
+      <p class="mt-0.5 text-xs text-slate-500">
+        Your personal stock book — imported NSE/BSE symbols plus any you add manually. Enrich each row with price, indicators, and levels.
+      </p>
+    </div>
     <div class="flex flex-wrap gap-2">
       <button type="button" class="btn-primary" (click)="openAddForm()">Add stock</button>
       <button type="button" class="btn-secondary" [disabled]="seedBusy() || loading()" (click)="reload()">
@@ -36,6 +36,9 @@
       @if (success()) {
         <p class="mb-3 text-sm text-emerald-700">{{ success() }}</p>
       }
+      <p class="mb-4 text-sm text-slate-500">
+        Symbol is required. Price and indicators are optional — add them now or later when you fetch data from Groww.
+      </p>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label class="block text-sm">
           <span class="text-slate-500">Symbol *</span>
@@ -58,8 +61,8 @@
           <input class="input-field mt-1 w-full" [(ngModel)]="form.name" />
         </label>
         <label class="block text-sm">
-          <span class="text-slate-500">Current price *</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.currentPrice" />
+          <span class="text-slate-500">Current price</span>
+          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.currentPrice" placeholder="Optional" />
         </label>
         <label class="block text-sm">
           <span class="text-slate-500">Market cap</span>
@@ -126,43 +129,8 @@
   }
 
   <div class="card overflow-hidden">
-    <div class="border-b border-slate-100">
-      <div class="flex min-w-max px-2">
-        <button
-          type="button"
-          class="tab-btn"
-          [class.tab-btn-active]="viewMode() === 'registry'"
-          (click)="setViewMode('registry')"
-        >
-          My registry
-        </button>
-        <button
-          type="button"
-          class="tab-btn"
-          [class.tab-btn-active]="viewMode() === 'universe'"
-          (click)="setViewMode('universe')"
-        >
-          Imported symbols
-          @if (universeCount()) {
-            <span class="ml-1 text-xs text-slate-400">({{ universeCount() }})</span>
-          }
-        </button>
-      </div>
-    </div>
-
     <div class="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-      <div>
-        <h2 class="text-sm font-semibold text-slate-900">
-          {{ viewMode() === 'registry' ? 'Tracked stocks' : 'NSE & BSE symbol universe' }}
-        </h2>
-        <p class="mt-0.5 text-xs text-slate-500">
-          @if (viewMode() === 'registry') {
-            Stocks you track with price, levels, and notes. Import NSE/BSE does not add them here automatically.
-          } @else {
-            Symbols fetched from Import NSE &amp; BSE or your P&amp;L uploads. Add any symbol to your registry to track it.
-          }
-        </p>
-      </div>
+      <h2 class="text-sm font-semibold text-slate-900">Stock registry</h2>
       <input
         type="search"
         class="input-field w-full max-w-sm"
@@ -173,128 +141,68 @@
     </div>
 
     @if (loading()) {
-      <div class="px-4 py-12 text-center text-sm text-slate-500 sm:px-5">Loading…</div>
-    } @else if (viewMode() === 'registry') {
-      @if (!stocks().length) {
-        <div class="px-4 py-12 text-center sm:px-5">
-          <p class="text-sm font-medium text-slate-700">No stocks in your registry yet</p>
-          <p class="mx-auto mt-2 max-w-md text-sm text-slate-500">
-            Import NSE &amp; BSE fills the symbol universe for search. Use
-            <strong>Imported symbols</strong> to browse them, then add the ones you want to track.
-          </p>
-          <div class="mt-4 flex flex-wrap justify-center gap-2">
-            @if (universeCount()) {
-              <button type="button" class="btn-secondary" (click)="setViewMode('universe')">Browse imported symbols</button>
-            }
-            <button type="button" class="btn-primary" (click)="openAddForm()">Add stock manually</button>
-          </div>
+      <div class="px-4 py-12 text-center text-sm text-slate-500 sm:px-5">Loading registry…</div>
+    } @else if (!stocks().length) {
+      <div class="px-4 py-12 text-center sm:px-5">
+        <p class="text-sm font-medium text-slate-700">No stocks in your registry yet</p>
+        <p class="mx-auto mt-2 max-w-md text-sm text-slate-500">
+          Click <strong>Import NSE &amp; BSE</strong> to load listed symbols, or <strong>Add stock</strong> for unlisted names you track manually.
+        </p>
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
+          <button type="button" class="btn-secondary" [disabled]="seedBusy()" (click)="importExchangeUniverse()">
+            {{ seedBusy() ? 'Importing…' : 'Import NSE & BSE' }}
+          </button>
+          <button type="button" class="btn-primary" (click)="openAddForm()">Add stock manually</button>
         </div>
-      } @else if (!filteredStocks().length) {
-        <div class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">No stocks match your search.</div>
-      } @else {
-        <div class="overflow-x-auto">
-          <table class="stock-table min-w-[900px]">
-            <thead>
-              <tr>
-                <th class="w-10 text-center">#</th>
-                @for (col of columns; track col.key) {
-                  <th [class]="col.align === 'right' ? 'text-right' : 'text-left'">
-                    <button
-                      type="button"
-                      class="sort-btn"
-                      [class.sort-btn-active]="tableSort.isActive(col.key)"
-                      (click)="tableSort.toggle(col.key, $event)"
-                    >
-                      {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
-                    </button>
-                  </th>
-                }
-                <th>Supports</th>
-                <th>Resistances</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (s of paginatedStocks(); track s.symbol; let i = $index) {
-                <tr>
-                  <td class="text-center text-slate-400">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
-                  <td class="font-semibold text-kairo-700">{{ s.symbol }}</td>
-                  <td class="max-w-[12rem] truncate text-slate-700">{{ s.name || '—' }}</td>
-                  <td class="text-right tabular-nums">{{ fmt(s.currentPrice) }}</td>
-                  <td class="text-right tabular-nums text-slate-600">{{ s.marketCap ?? '—' }}</td>
-                  <td class="text-right tabular-nums">{{ s.pe ?? '—' }}</td>
-                  <td class="text-right tabular-nums">{{ s.rsi ?? '—' }}</td>
-                  <td class="text-right text-xs text-slate-500">{{ formatUpdated(s.updatedAt) }}</td>
-                  <td class="text-xs text-emerald-700">{{ s.supports.join(', ') || '—' }}</td>
-                  <td class="text-xs text-red-600">{{ s.resistances.join(', ') || '—' }}</td>
-                  <td class="whitespace-nowrap">
-                    <button type="button" class="text-xs text-kairo-600 hover:underline" (click)="edit(s)">Edit</button>
-                    <button type="button" class="ml-2 text-xs text-red-500 hover:underline" (click)="remove(s.symbol)">Delete</button>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
+      </div>
+    } @else if (!filteredStocks().length) {
+      <div class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">No stocks match your search.</div>
     } @else {
-      @if (!universeCount()) {
-        <div class="px-4 py-12 text-center sm:px-5">
-          <p class="text-sm font-medium text-slate-700">No imported symbols yet</p>
-          <p class="mx-auto mt-2 max-w-md text-sm text-slate-500">
-            Click <strong>Import NSE &amp; BSE</strong> above (with the local worker running) to load exchange symbols here.
-          </p>
-        </div>
-      } @else if (!filteredUniverse().length) {
-        <div class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">No symbols match your search.</div>
-      } @else {
-        <div class="overflow-x-auto">
-          <table class="stock-table min-w-[720px]">
-            <thead>
-              <tr>
-                <th class="w-10 text-center">#</th>
-                @for (col of universeColumns; track col.key) {
-                  <th [class]="col.align === 'right' ? 'text-right' : 'text-left'">
-                    <button
-                      type="button"
-                      class="sort-btn"
-                      [class.sort-btn-active]="universeSort.isActive(col.key)"
-                      (click)="universeSort.toggle(col.key, $event)"
-                    >
-                      {{ col.label }} <span>{{ universeSort.indicator(col.key) }}</span>
-                    </button>
-                  </th>
-                }
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (entry of paginatedUniverse(); track entry.symbol; let i = $index) {
-                <tr>
-                  <td class="text-center text-slate-400">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
-                  <td class="font-semibold text-kairo-700">{{ entry.symbol }}</td>
-                  <td class="max-w-[16rem] truncate text-slate-700">{{ entry.name || '—' }}</td>
-                  <td class="text-slate-600">{{ entry.exchange || '—' }}</td>
-                  <td class="text-xs text-slate-500">{{ formatSource(entry.source) }}</td>
-                  <td class="text-right text-xs text-slate-500">{{ formatUpdated(entry.updatedAt) }}</td>
-                  <td class="whitespace-nowrap">
-                    @if (isInRegistry(entry.symbol)) {
-                      <span class="text-xs text-emerald-600">In registry</span>
-                    } @else {
-                      <button type="button" class="text-xs text-kairo-600 hover:underline" (click)="addFromUniverse(entry)">
-                        Add to registry
-                      </button>
-                    }
-                  </td>
-                </tr>
+      <div class="overflow-x-auto">
+        <table class="stock-table min-w-[900px]">
+          <thead>
+            <tr>
+              <th class="w-10 text-center">#</th>
+              @for (col of columns; track col.key) {
+                <th [class]="col.align === 'right' ? 'text-right' : 'text-left'">
+                  <button
+                    type="button"
+                    class="sort-btn"
+                    [class.sort-btn-active]="tableSort.isActive(col.key)"
+                    (click)="tableSort.toggle(col.key, $event)"
+                  >
+                    {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
+                  </button>
+                </th>
               }
-            </tbody>
-          </table>
-        </div>
-      }
-    }
+              <th>Supports</th>
+              <th>Resistances</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (s of paginatedStocks(); track s.symbol; let i = $index) {
+              <tr>
+                <td class="text-center text-slate-400">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
+                <td class="font-semibold text-kairo-700">{{ s.symbol }}</td>
+                <td class="max-w-[12rem] truncate text-slate-700">{{ s.name || '—' }}</td>
+                <td class="text-right tabular-nums">{{ formatPrice(s.currentPrice) }}</td>
+                <td class="text-right tabular-nums text-slate-600">{{ s.marketCap ?? '—' }}</td>
+                <td class="text-right tabular-nums">{{ s.pe ?? '—' }}</td>
+                <td class="text-right tabular-nums">{{ s.rsi ?? '—' }}</td>
+                <td class="text-right text-xs text-slate-500">{{ formatUpdated(s.updatedAt) }}</td>
+                <td class="text-xs text-emerald-700">{{ s.supports.join(', ') || '—' }}</td>
+                <td class="text-xs text-red-600">{{ s.resistances.join(', ') || '—' }}</td>
+                <td class="whitespace-nowrap">
+                  <button type="button" class="text-xs text-kairo-600 hover:underline" (click)="edit(s)">Edit</button>
+                  <button type="button" class="ml-2 text-xs text-red-500 hover:underline" (click)="remove(s.symbol)">Delete</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
 
-    @if (!loading() && ((viewMode() === 'registry' && filteredStocks().length) || (viewMode() === 'universe' && filteredUniverse().length))) {
       <div class="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <p class="text-sm text-slate-500">{{ pageSummary() }}</p>
         <div class="flex flex-wrap items-center gap-2">

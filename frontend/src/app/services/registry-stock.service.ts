@@ -3,11 +3,15 @@ import { Observable, of, switchMap } from 'rxjs';
 import { RegistryStock } from '../models/trading-journal.models';
 import { AuthService } from './auth.service';
 import { objectToSnake, rowsToCamel, SupabaseService } from './supabase.service';
+import { UniverseService } from './universe.service';
+
+const UPSERT_BATCH_LIMIT = 400;
 
 @Injectable({ providedIn: 'root' })
 export class RegistryStockService {
   private supabase = inject(SupabaseService);
   private auth = inject(AuthService);
+  private universe = inject(UniverseService);
 
   watchAll(): Observable<RegistryStock[]> {
     return this.auth.user$.pipe(
@@ -22,13 +26,73 @@ export class RegistryStockService {
     await this.auth.whenReady();
     const uid = await this.auth.getDataUserId();
     if (!uid) return [];
-    const { data, error } = await this.supabase.client
+
+    const pageSize = 1000;
+    const all: RegistryStock[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.supabase.client
+        .from('registry_stocks')
+        .select('*')
+        .eq('user_id', uid)
+        .order('symbol', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data?.length) break;
+      all.push(...rowsToCamel<RegistryStock>(data));
+      if (data.length < pageSize) break;
+    }
+    return all;
+  }
+
+  async count(): Promise<number> {
+    await this.auth.whenReady();
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return 0;
+    const { count, error } = await this.supabase.client
       .from('registry_stocks')
-      .select('*')
-      .eq('user_id', uid)
-      .order('symbol', { ascending: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', uid);
     if (error) throw error;
-    return rowsToCamel<RegistryStock>(data ?? []);
+    return count ?? 0;
+  }
+
+  /** Add universe symbols to registry without overwriting existing rows. */
+  async syncFromUniverse(): Promise<{ added: number; total: number }> {
+    await this.auth.whenReady();
+    const uid = await this.auth.getDataUserId();
+    if (!uid) throw new Error('Sign in to sync registry');
+
+    const [entries, existing] = await Promise.all([this.universe.listAll(), this.listAll()]);
+    const existingSymbols = new Set(existing.map((stock) => stock.symbol));
+    const now = Date.now();
+    const rows: Record<string, unknown>[] = [];
+
+    for (const entry of entries) {
+      const symbol = entry.symbol.toUpperCase();
+      if (!symbol || existingSymbols.has(symbol)) continue;
+      rows.push(
+        objectToSnake({
+          userId: uid,
+          symbol,
+          name: entry.name?.trim() || symbol,
+          currentPrice: 0,
+          supports: [],
+          resistances: [],
+          notes: '',
+          updatedAt: now,
+        })
+      );
+    }
+
+    for (let i = 0; i < rows.length; i += UPSERT_BATCH_LIMIT) {
+      const chunk = rows.slice(i, i + UPSERT_BATCH_LIMIT);
+      const { error } = await this.supabase.client
+        .from('registry_stocks')
+        .upsert(chunk, { onConflict: 'user_id,symbol', ignoreDuplicates: true });
+      if (error) throw error;
+    }
+
+    return { added: rows.length, total: existing.length + rows.length };
   }
 
   async save(stock: Omit<RegistryStock, 'updatedAt'>): Promise<void> {
@@ -41,7 +105,7 @@ export class RegistryStockService {
       userId: uid,
       symbol,
       name: stock.name.trim() || symbol,
-      currentPrice: stock.currentPrice,
+      currentPrice: stock.currentPrice ?? 0,
       marketCap: stock.marketCap,
       pe: stock.pe,
       rsi: stock.rsi,

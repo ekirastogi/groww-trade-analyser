@@ -17,10 +17,6 @@ type RegistryColumnKey =
   | 'rsi'
   | 'updatedAt';
 
-type UniverseColumnKey = 'symbol' | 'name' | 'exchange' | 'source' | 'updatedAt';
-
-type RegistryView = 'registry' | 'universe';
-
 @Component({
   selector: 'app-stock-registry',
   standalone: true,
@@ -33,12 +29,10 @@ export class StockRegistryComponent implements OnInit {
   private workerJobs = inject(WorkerJobService);
 
   stocks = signal<RegistryStock[]>([]);
+  stockCount = signal(0);
   universe = signal<UniverseEntry[]>([]);
-  universeCount = signal(0);
   loading = signal(false);
-  viewMode = signal<RegistryView>('registry');
   tableSort = new TableSortState('symbol', 'asc');
-  universeSort = new TableSortState('symbol', 'asc');
   fmt = formatCurrency;
 
   showAddForm = signal(false);
@@ -60,14 +54,6 @@ export class StockRegistryComponent implements OnInit {
     { key: 'marketCap', label: 'Mkt cap', align: 'right' },
     { key: 'pe', label: 'P/E', align: 'right' },
     { key: 'rsi', label: 'RSI', align: 'right' },
-    { key: 'updatedAt', label: 'Updated', align: 'right' },
-  ];
-
-  readonly universeColumns: { key: UniverseColumnKey; label: string; align?: 'left' | 'right' }[] = [
-    { key: 'symbol', label: 'Symbol' },
-    { key: 'name', label: 'Name' },
-    { key: 'exchange', label: 'Exchange' },
-    { key: 'source', label: 'Source' },
     { key: 'updatedAt', label: 'Updated', align: 'right' },
   ];
 
@@ -107,23 +93,6 @@ export class StockRegistryComponent implements OnInit {
       .slice(0, 30);
   });
 
-  filteredUniverse = computed(() => {
-    this.universeSort.column();
-    this.universeSort.direction();
-
-    const q = this.searchQuery().trim().toLowerCase();
-    let rows = this.universe();
-    if (q) {
-      rows = rows.filter(
-        (s) =>
-          s.symbol.toLowerCase().includes(q) ||
-          (s.name ?? '').toLowerCase().includes(q) ||
-          (s.exchange ?? '').toLowerCase().includes(q)
-      );
-    }
-    return this.universeSort.sort(rows, (entry, col) => this.universeSortValue(entry, col));
-  });
-
   filteredStocks = computed(() => {
     this.tableSort.column();
     this.tableSort.direction();
@@ -140,11 +109,9 @@ export class StockRegistryComponent implements OnInit {
     return this.tableSort.sort(rows, (stock, col) => this.sortValue(stock, col));
   });
 
-  totalPages = computed(() => {
-    const total =
-      this.viewMode() === 'universe' ? this.filteredUniverse().length : this.filteredStocks().length;
-    return Math.max(1, Math.ceil(total / this.pageSize()));
-  });
+  totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.filteredStocks().length / this.pageSize()))
+  );
 
   paginatedStocks = computed(() => {
     const page = Math.min(this.currentPage(), this.totalPages());
@@ -152,16 +119,9 @@ export class StockRegistryComponent implements OnInit {
     return this.filteredStocks().slice(start, start + this.pageSize());
   });
 
-  paginatedUniverse = computed(() => {
-    const page = Math.min(this.currentPage(), this.totalPages());
-    const start = (page - 1) * this.pageSize();
-    return this.filteredUniverse().slice(start, start + this.pageSize());
-  });
-
   pageSummary = computed(() => {
-    const total =
-      this.viewMode() === 'universe' ? this.filteredUniverse().length : this.filteredStocks().length;
-    if (!total) return this.viewMode() === 'universe' ? 'No symbols' : 'No stocks';
+    const total = this.filteredStocks().length;
+    if (!total) return 'No stocks';
     const page = Math.min(this.currentPage(), this.totalPages());
     const start = (page - 1) * this.pageSize() + 1;
     const end = Math.min(page * this.pageSize(), total);
@@ -176,26 +136,30 @@ export class StockRegistryComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [stocks, universe, universeCount] = await Promise.all([
+      let [stocks, universe, stockCount, universeCount] = await Promise.all([
         this.registrySvc.listAll(),
         this.universeSvc.listAll(),
+        this.registrySvc.count(),
         this.universeSvc.count(),
       ]);
+
+      if (universeCount > stockCount) {
+        const sync = await this.registrySvc.syncFromUniverse();
+        if (sync.added > 0) {
+          stocks = await this.registrySvc.listAll();
+          stockCount = await this.registrySvc.count();
+        }
+      }
+
       this.stocks.set(stocks);
+      this.stockCount.set(stockCount);
       this.universe.set(universe);
-      this.universeCount.set(universeCount);
       this.currentPage.set(1);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
     } finally {
       this.loading.set(false);
     }
-  }
-
-  setViewMode(mode: RegistryView): void {
-    this.viewMode.set(mode);
-    this.currentPage.set(1);
-    this.searchQuery.set('');
   }
 
   onSearchChange(value: string): void {
@@ -227,45 +191,9 @@ export class StockRegistryComponent implements OnInit {
     this.resetForm();
   }
 
-  private universeSortValue(entry: UniverseEntry, col: string): string | number {
-    switch (col) {
-      case 'symbol':
-        return entry.symbol;
-      case 'name':
-        return entry.name ?? '';
-      case 'exchange':
-        return entry.exchange ?? '';
-      case 'source':
-        return entry.source;
-      case 'updatedAt':
-        return entry.updatedAt ?? 0;
-      default:
-        return entry.symbol;
-    }
-  }
-
-  formatSource(source: UniverseEntry['source']): string {
-    switch (source) {
-      case 'exchange_seed':
-        return 'NSE/BSE';
-      case 'pnl_upload':
-        return 'P&L upload';
-      case 'seed':
-        return 'Seed';
-      default:
-        return 'Manual';
-    }
-  }
-
-  isInRegistry(symbol: string): boolean {
-    return this.stocks().some((s) => s.symbol === symbol.toUpperCase());
-  }
-
-  addFromUniverse(entry: UniverseEntry): void {
-    this.openAddForm();
-    this.form.symbol = entry.symbol;
-    this.symbolQuery.set(entry.symbol);
-    this.form.name = entry.name ?? entry.symbol;
+  formatPrice(price: number | undefined): string {
+    if (price == null || price === 0) return '—';
+    return this.fmt(price);
   }
 
   private sortValue(stock: RegistryStock, col: string): string | number {
@@ -275,7 +203,7 @@ export class StockRegistryComponent implements OnInit {
       case 'name':
         return stock.name;
       case 'currentPrice':
-        return stock.currentPrice;
+        return stock.currentPrice ?? 0;
       case 'marketCap':
         return stock.marketCap ?? 0;
       case 'pe':
@@ -325,7 +253,8 @@ export class StockRegistryComponent implements OnInit {
     this.form.symbol = stock.symbol;
     this.symbolQuery.set(stock.symbol);
     this.form.name = stock.name;
-    this.form.currentPrice = String(stock.currentPrice ?? '');
+    this.form.currentPrice =
+      stock.currentPrice != null && stock.currentPrice > 0 ? String(stock.currentPrice) : '';
     this.form.marketCap = stock.marketCap != null ? String(stock.marketCap) : '';
     this.form.pe = stock.pe != null ? String(stock.pe) : '';
     this.form.rsi = stock.rsi != null ? String(stock.rsi) : '';
@@ -353,9 +282,8 @@ export class StockRegistryComponent implements OnInit {
   async save(): Promise<void> {
     this.error.set(null);
     this.success.set(null);
-    const price = this.num(this.form.currentPrice);
-    if (!this.form.symbol.trim() || price == null) {
-      this.error.set('Symbol and current price are required');
+    if (!this.form.symbol.trim()) {
+      this.error.set('Symbol is required');
       return;
     }
     this.busy.set(true);
@@ -370,7 +298,7 @@ export class StockRegistryComponent implements OnInit {
       await this.registrySvc.save({
         symbol: this.form.symbol,
         name: this.form.name,
-        currentPrice: price,
+        currentPrice: this.num(this.form.currentPrice) ?? 0,
         marketCap: this.num(this.form.marketCap),
         pe: this.num(this.form.pe),
         rsi: this.num(this.form.rsi),
@@ -415,11 +343,13 @@ export class StockRegistryComponent implements OnInit {
       if (job.status === 'failed') {
         throw new Error(job.error ?? 'Universe import failed');
       }
+
+      const sync = await this.registrySvc.syncFromUniverse();
       await this.reload();
-      const count = job.symbolsIngested ?? this.universeCount();
-      this.viewMode.set('universe');
+
+      const imported = job.symbolsIngested ?? sync.added;
       this.success.set(
-        `Imported ${count} NSE/BSE symbols into the symbol universe. Open the Imported symbols tab to browse them.`
+        `Imported ${imported} NSE/BSE symbols into your registry. Edit any stock to add price, indicators, and notes.`
       );
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Import failed');
