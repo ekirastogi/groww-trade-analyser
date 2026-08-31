@@ -31,27 +31,151 @@ import {
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
+import {
+  aggregateByWeekday,
+  aggregateByDayOfMonth,
+  avgNetPerTrade,
+  heatClass,
+  pickExtremeBucket,
+  pickExtremePeriod,
+  sortedStocks,
+} from '../../utils/analytics-insights.utils';
+
+type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'costs';
+type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
 
 @Component({
   selector: 'app-analytics',
   standalone: true,
   imports: [CommonModule, RouterLink, FilterPanelComponent, ChartCardComponent, ReportHistoryComponent],
   templateUrl: './analytics.component.html',
+  styles: `
+    .analytics-hero {
+      @apply relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-5 text-white shadow-lg sm:p-6;
+    }
+    .analytics-kpi {
+      @apply rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 backdrop-blur-sm;
+    }
+    .analytics-kpi-label {
+      @apply text-[10px] font-semibold uppercase tracking-wider text-slate-400;
+    }
+    .analytics-kpi-value {
+      @apply mt-1 text-lg font-bold tabular-nums sm:text-xl;
+    }
+    .analytics-tab {
+      @apply shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800;
+    }
+    .analytics-tab-active {
+      @apply bg-slate-900 text-white shadow-sm hover:bg-slate-900 hover:text-white;
+    }
+    .insight-card {
+      @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm;
+    }
+    .insight-card-best {
+      @apply border-emerald-200 bg-emerald-50/40;
+    }
+    .insight-card-worst {
+      @apply border-red-200 bg-red-50/40;
+    }
+    .heat-cell {
+      @apply flex min-h-[2.75rem] flex-col items-center justify-center rounded-lg border border-slate-200/80 px-1 py-1.5 text-center transition;
+    }
+    .heat-neutral { @apply bg-slate-50 text-slate-400; }
+    .heat-pos-soft { @apply bg-emerald-50 text-emerald-700; }
+    .heat-pos-mid { @apply bg-emerald-100 text-emerald-800; }
+    .heat-pos-strong { @apply bg-emerald-200 text-emerald-900; }
+    .heat-neg-soft { @apply bg-red-50 text-red-700; }
+    .heat-neg-mid { @apply bg-red-100 text-red-800; }
+    .heat-neg-strong { @apply bg-red-200 text-red-900; }
+    .stock-table th {
+      @apply px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500;
+    }
+    .stock-table td {
+      @apply px-3 py-2.5 text-sm tabular-nums;
+    }
+    .stock-table tbody tr {
+      @apply border-t border-slate-100 transition hover:bg-slate-50/80;
+    }
+  `,
 })
 export class AnalyticsComponent implements OnInit {
   readonly state = inject(ReportStateService);
   readonly formatCurrency = formatCurrency;
   readonly pnlClass = pnlClass;
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
+  readonly tabs: { id: AnalyticsTab; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'daily', label: 'Daily' },
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'monthly', label: 'Monthly' },
+    { id: 'stocks', label: 'Stocks' },
+    { id: 'costs', label: 'Costs' },
+  ];
+  readonly heatClass = heatClass;
+  readonly avgNetPerTrade = avgNetPerTrade;
 
   private chartVersion = signal(0);
   winRateShowDots = signal(false);
+  activeTab = signal<AnalyticsTab>('overview');
+  stockSort = signal<StockSortKey>('netPnL');
 
   analysis = computed(() => this.state.analysis());
+  chargeRatio = computed(() => this.analysis()?.summary.chargeRatio ?? 0);
 
   async ngOnInit(): Promise<void> {
     await this.state.ensureLoadedFromFirebase();
   }
+
+  setTab(tab: AnalyticsTab): void {
+    this.activeTab.set(tab);
+    this.chartVersion.update((v) => v + 1);
+  }
+
+  setStockSort(key: StockSortKey): void {
+    this.stockSort.set(key);
+  }
+
+  weekdayBuckets = computed(() =>
+    aggregateByWeekday(this.analysis()?.filteredTrades ?? [], this.chargeRatio())
+  );
+
+  dayOfMonthBuckets = computed(() =>
+    aggregateByDayOfMonth(this.analysis()?.filteredTrades ?? [], this.chargeRatio())
+  );
+
+  bestWeekday = computed(() => pickExtremeBucket(this.weekdayBuckets(), 'best', 2));
+  worstWeekday = computed(() => pickExtremeBucket(this.weekdayBuckets(), 'worst', 2));
+  bestDayOfMonth = computed(() => pickExtremeBucket(this.dayOfMonthBuckets(), 'best', 2));
+  worstDayOfMonth = computed(() => pickExtremeBucket(this.dayOfMonthBuckets(), 'worst', 2));
+  bestWeek = computed(() => pickExtremePeriod(this.analysis()?.weekly ?? [], 'best'));
+  worstWeek = computed(() => pickExtremePeriod(this.analysis()?.weekly ?? [], 'worst'));
+  bestMonth = computed(() => pickExtremePeriod(this.analysis()?.monthly ?? [], 'best'));
+  worstMonth = computed(() => pickExtremePeriod(this.analysis()?.monthly ?? [], 'worst'));
+
+  stockRows = computed(() => sortedStocks(this.analysis()?.stocks ?? [], this.stockSort()));
+
+  weekdayMaxAbs = computed(() =>
+    Math.max(...this.weekdayBuckets().map((b) => Math.abs(b.netPnL)), 1)
+  );
+
+  dayOfMonthMaxAbs = computed(() =>
+    Math.max(
+      ...this.dayOfMonthBuckets().filter((b) => b.tradeCount).map((b) => Math.abs(b.netPnL)),
+      1
+    )
+  );
+
+  sortedDaily = computed(() =>
+    [...(this.analysis()?.daily ?? [])].sort((a, b) => a.period.localeCompare(b.period))
+  );
+
+  topDailyWins = computed(() =>
+    [...(this.analysis()?.daily ?? [])].sort((a, b) => b.netPnL - a.netPnL).slice(0, 5)
+  );
+
+  topDailyLosses = computed(() =>
+    [...(this.analysis()?.daily ?? [])].sort((a, b) => a.netPnL - b.netPnL).slice(0, 5)
+  );
 
   bestWorstDays = computed(() => {
     const daily = this.analysis()?.daily ?? [];
@@ -220,6 +344,59 @@ export class AnalyticsComponent implements OnInit {
         datasets: [buildPnLBarDataset('Net P&L', monthly.map((d) => d.netPnL))],
       },
       options: barChartOptions(''),
+    });
+  });
+
+  weeklyChartConfig = computed(() => {
+    this.chartVersion();
+    const weekly = this.analysis()?.weekly ?? [];
+    if (!weekly.length) return null;
+    const mobile = isMobileChart();
+    return withDecimation({
+      type: 'bar',
+      data: {
+        labels: weekly.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
+        datasets: [buildPnLBarDataset('Net P&L', weekly.map((d) => d.netPnL))],
+      },
+      options: barChartOptions(''),
+    });
+  });
+
+  weekdayChartConfig = computed(() => {
+    this.chartVersion();
+    const buckets = this.weekdayBuckets().filter((b) => b.tradeCount > 0);
+    if (!buckets.length) return null;
+    return withDecimation({
+      type: 'bar',
+      data: {
+        labels: buckets.map((b) => b.label),
+        datasets: [buildPnLBarDataset('Net P&L', buckets.map((b) => b.netPnL))],
+      },
+      options: barChartOptions(''),
+    });
+  });
+
+  dayOfMonthChartConfig = computed(() => {
+    this.chartVersion();
+    const buckets = this.dayOfMonthBuckets().filter((b) => b.tradeCount > 0);
+    if (!buckets.length) return null;
+    const mobile = isMobileChart();
+    return withDecimation({
+      type: 'bar',
+      data: {
+        labels: buckets.map((b) => b.label),
+        datasets: [buildPnLBarDataset('Net P&L', buckets.map((b) => b.netPnL))],
+      },
+      options: {
+        ...barChartOptions(''),
+        scales: {
+          ...barChartOptions('').scales,
+          x: {
+            ...barChartOptions('').scales?.['x'],
+            ticks: { maxTicksLimit: mobile ? 10 : 16 },
+          },
+        },
+      },
     });
   });
 

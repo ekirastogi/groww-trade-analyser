@@ -56,8 +56,9 @@ export class TradeTypeFilterComponent {
   compact = input(false);
 
   availableTypes = computed(() => {
-    const types = this.state.report()?.tradeTypes ?? ['all'];
-    return types.filter((t) => t !== 'all' && t !== 'same_day' && t !== 'fno');
+    const types = this.state.report()?.tradeTypes ?? ['all', 'intraday', 'delivery', 'mtf'];
+    const filtered = types.filter((t) => t !== 'all' && t !== 'same_day' && t !== 'fno');
+    return filtered.length ? filtered : (['intraday', 'delivery', 'mtf'] as TradeType[]);
   });
 
   isSelected(type: TradeType): boolean {

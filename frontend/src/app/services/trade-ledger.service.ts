@@ -66,7 +66,8 @@ export interface BackfillUniverseResult {
   profilesRebuilt: number;
 }
 
-const UPSERT_BATCH_LIMIT = 400;
+const DEFAULT_REPORT_TRADE_TYPES: TradeType[] = ['all', 'intraday', 'delivery', 'mtf'];
+const ALL_REPORT_TRADE_TYPES: TradeType[] = ['all', 'intraday', 'delivery', 'same_day', 'mtf', 'fno'];
 
 function profileFromRow(row: Record<string, unknown>, clientCode: string, clientName: string): StockProfile {
   const camel = rowToCamel<Record<string, unknown>>(row);
@@ -732,9 +733,9 @@ export class TradeLedgerService {
         min: dates[0] ?? '',
         max: dates[dates.length - 1] ?? '',
       },
-      tradeTypes: ['all', 'intraday', 'delivery', 'same_day', 'mtf', 'fno'].filter((t) =>
-        typeSet.has(t as TradeType)
-      ) as TradeType[],
+      tradeTypes: plainTrades.length
+        ? (ALL_REPORT_TRADE_TYPES.filter((t) => typeSet.has(t)) as TradeType[])
+        : DEFAULT_REPORT_TRADE_TYPES,
       totalTradeCount,
       tradesLoaded: meta?.tradesLoaded ?? plainTrades.length > 0,
     };

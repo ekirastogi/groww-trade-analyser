@@ -25,7 +25,10 @@ export class FilterPanelComponent {
   topStocksCount = signal(10);
   filtersExpanded = signal(false);
 
-  availableTradeTypes = () => this.state.report()?.tradeTypes ?? ['all'];
+  availableTradeTypes = () => {
+    const types = this.state.report()?.tradeTypes ?? ['all', 'intraday', 'delivery', 'mtf'];
+    return types.length > 1 ? types : ['all', 'intraday', 'delivery', 'mtf'];
+  };
 
   constructor() {
     effect(() => {

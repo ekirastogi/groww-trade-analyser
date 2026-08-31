@@ -1,8 +1,8 @@
 @if (!state.hasReport()) {
   <div class="card p-8 text-center sm:p-12">
     <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">📊</div>
-    <h3 class="text-lg font-semibold text-slate-900">No report loaded</h3>
-    <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L report on the dashboard or pick a recent upload below.</p>
+    <h3 class="text-lg font-semibold text-slate-900">No trading data yet</h3>
+    <p class="mt-2 text-sm text-slate-500">Upload your P&amp;L report to unlock performance analytics.</p>
     <a routerLink="/" class="btn-primary mt-6 inline-flex">Go to Dashboard</a>
   </div>
   @if (state.hasHistory()) {
@@ -14,264 +14,341 @@
   }
 } @else {
   @if (analysis(); as data) {
-    <div class="mb-4 flex justify-end sm:mb-5">
-      <a routerLink="/" class="btn-secondary hidden sm:inline-flex">← Dashboard</a>
-    </div>
+    <div class="analytics-page space-y-5">
+      <app-filter-panel class="block" [collapsible]="true" [showChartFilters]="true" (filtersChanged)="onFiltersChanged()" />
 
-    <app-filter-panel
-      class="mb-4 block sm:mb-6"
-      [collapsible]="true"
-      [showChartFilters]="true"
-      (filtersChanged)="onFiltersChanged()"
-    />
+      <!-- Hero KPI strip -->
+      <div class="analytics-hero">
+        <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">Trading performance</p>
+            <p class="mt-1 text-3xl font-bold tabular-nums sm:text-4xl" [class]="pnlClass(data.summary.netPnL)">
+              {{ formatCurrency(data.summary.netPnL) }}
+            </p>
+            <p class="mt-1 text-sm text-slate-400">Net P&amp;L after charges</p>
+          </div>
+          <div class="text-right text-sm text-slate-400">
+            <p>{{ data.summary.tradeCount | number }} trades</p>
+            <p>{{ data.summary.winRate | number:'1.1-1' }}% win rate</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+          <div class="analytics-kpi">
+            <p class="analytics-kpi-label">Realised P&amp;L</p>
+            <p class="analytics-kpi-value" [class]="pnlClass(data.summary.realisedPnL)">{{ formatCurrency(data.summary.realisedPnL) }}</p>
+          </div>
+          <div class="analytics-kpi">
+            <p class="analytics-kpi-label">Charges</p>
+            <p class="analytics-kpi-value text-red-300">{{ formatCurrency(data.summary.allocatedCharges) }}</p>
+          </div>
+          <div class="analytics-kpi">
+            <p class="analytics-kpi-label">Avg win</p>
+            <p class="analytics-kpi-value text-emerald-300">{{ formatCurrency(avgPnLPerOutcome().avgWinPerTrade) }}</p>
+          </div>
+          <div class="analytics-kpi">
+            <p class="analytics-kpi-label">Avg loss</p>
+            <p class="analytics-kpi-value text-red-300">{{ formatCurrency(avgPnLPerOutcome().avgLossPerTrade) }}</p>
+          </div>
+          <div class="analytics-kpi hidden sm:block">
+            <p class="analytics-kpi-label">Best day</p>
+            <p class="analytics-kpi-value text-emerald-300">{{ bestWorstDays().best ? formatCurrency(bestWorstDays().best!.netPnL) : '—' }}</p>
+          </div>
+          <div class="analytics-kpi hidden sm:block">
+            <p class="analytics-kpi-label">Worst day</p>
+            <p class="analytics-kpi-value text-red-300">{{ bestWorstDays().worst ? formatCurrency(bestWorstDays().worst!.netPnL) : '—' }}</p>
+          </div>
+        </div>
+      </div>
 
-    <div class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-      @for (stat of [
-        { label: 'Realised P&L', value: formatCurrency(data.summary.realisedPnL), cls: pnlClass(data.summary.realisedPnL) },
-        { label: 'Net P&L', value: formatCurrency(data.summary.netPnL), cls: pnlClass(data.summary.netPnL) },
-        { label: 'Win Rate', value: (data.summary.winRate | number:'1.1-1') + '%', cls: 'text-slate-900' },
-        { label: 'Trades', value: (data.summary.tradeCount | number), cls: 'text-slate-900' }
-      ]; track stat.label) {
-        <div class="card border-l-4 border-l-kairo-500 p-4">
-          <div class="text-xs font-medium text-slate-500">{{ stat.label }}</div>
-          <div class="mt-1 text-base font-bold sm:text-lg" [class]="stat.cls">{{ stat.value }}</div>
-        </div>
-      }
-    </div>
-
-    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Advanced Analysis</div>
-    <div class="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <div class="card border-l-4 border-l-emerald-500 p-4">
-        <div class="text-xs font-medium text-slate-500">Best Trading Day</div>
-        <div class="mt-1 text-sm font-bold text-slate-900">
-          {{ bestWorstDays().best?.label || '—' }}
-        </div>
-        <div class="mt-0.5 text-xs" [class]="bestWorstDays().best ? pnlClass(bestWorstDays().best!.netPnL) : 'text-slate-400'">
-          {{ bestWorstDays().best ? formatCurrency(bestWorstDays().best!.netPnL) : 'No data' }}
-        </div>
-      </div>
-      <div class="card border-l-4 border-l-red-500 p-4">
-        <div class="text-xs font-medium text-slate-500">Worst Trading Day</div>
-        <div class="mt-1 text-sm font-bold text-slate-900">
-          {{ bestWorstDays().worst?.label || '—' }}
-        </div>
-        <div class="mt-0.5 text-xs" [class]="bestWorstDays().worst ? pnlClass(bestWorstDays().worst!.netPnL) : 'text-slate-400'">
-          {{ bestWorstDays().worst ? formatCurrency(bestWorstDays().worst!.netPnL) : 'No data' }}
-        </div>
-      </div>
-      <div class="card border-l-4 border-l-emerald-500 p-4">
-        <div class="text-xs font-medium text-slate-500">Best Trade</div>
-        <div class="mt-1 truncate text-sm font-bold text-slate-900">
-          {{ bestWorstTrades().best?.stockName || '—' }}
-        </div>
-        <div class="mt-0.5 text-xs" [class]="bestWorstTrades().best ? pnlClass(bestWorstTrades().best!.realisedPnL) : 'text-slate-400'">
-          {{ bestWorstTrades().best ? formatCurrency(bestWorstTrades().best!.realisedPnL) : 'No data' }}
-        </div>
-      </div>
-      <div class="card border-l-4 border-l-red-500 p-4">
-        <div class="text-xs font-medium text-slate-500">Worst Trade</div>
-        <div class="mt-1 truncate text-sm font-bold text-slate-900">
-          {{ bestWorstTrades().worst?.stockName || '—' }}
-        </div>
-        <div class="mt-0.5 text-xs" [class]="bestWorstTrades().worst ? pnlClass(bestWorstTrades().worst!.realisedPnL) : 'text-slate-400'">
-          {{ bestWorstTrades().worst ? formatCurrency(bestWorstTrades().worst!.realisedPnL) : 'No data' }}
-        </div>
-      </div>
-      <div class="card p-4">
-        <div class="text-xs font-medium text-slate-500">Avg Win per Trade</div>
-        <div class="mt-1 text-base font-bold text-emerald-600">
-          {{ formatCurrency(avgPnLPerOutcome().avgWinPerTrade) }}
-        </div>
-        <div class="mt-0.5 text-xs text-slate-400">{{ avgPnLPerOutcome().winTrades }} winning trades</div>
-      </div>
-      <div class="card p-4">
-        <div class="text-xs font-medium text-slate-500">Avg Loss per Trade</div>
-        <div class="mt-1 text-base font-bold text-red-600">
-          {{ formatCurrency(avgPnLPerOutcome().avgLossPerTrade) }}
-        </div>
-        <div class="mt-0.5 text-xs text-slate-400">{{ avgPnLPerOutcome().lossTrades }} losing trades</div>
-      </div>
-      <div class="card p-4">
-        <div class="text-xs font-medium text-slate-500">Stock-Day Win Rate</div>
-        <div class="mt-1 text-base font-bold text-slate-900">
-          {{ stockDayWinLossSummary().winRate | number:'1.1-1' }}%
-        </div>
-        <div class="mt-0.5 text-xs text-slate-400">
-          {{ stockDayWinLossSummary().winningStockDays }}W / {{ stockDayWinLossSummary().losingStockDays }}L / {{ stockDayWinLossSummary().flatStockDays }} flat
-        </div>
-      </div>
-      <div class="card p-4">
-        <div class="text-xs font-medium text-slate-500">Best / Worst Stock-Day</div>
-        <div class="mt-1 truncate text-xs text-slate-600">
-          Best: {{ stockDayWinLossSummary().best?.stock || '—' }} ({{ stockDayWinLossSummary().best?.date || '—' }})
-        </div>
-        <div class="text-xs text-emerald-600">
-          {{ stockDayWinLossSummary().best ? formatCurrency(stockDayWinLossSummary().best!.netPnL) : 'No data' }}
-        </div>
-        <div class="mt-1 truncate text-xs text-slate-600">
-          Worst: {{ stockDayWinLossSummary().worst?.stock || '—' }} ({{ stockDayWinLossSummary().worst?.date || '—' }})
-        </div>
-        <div class="text-xs text-red-600">
-          {{ stockDayWinLossSummary().worst ? formatCurrency(stockDayWinLossSummary().worst!.netPnL) : 'No data' }}
-        </div>
-      </div>
-    </div>
-
-    <!-- Performance -->
-    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Performance</div>
-    <div class="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-12">
-      <div class="xl:col-span-12">
-        <app-chart-card
-          [config]="dailyChartConfig()"
-          [title]="chartPeriodLabel() + ' P&L'"
-          subtitle="Realised P&L bars with net P&L trend line"
-          size="lg"
-        />
-      </div>
-      <div class="md:col-span-1 xl:col-span-6">
-        <app-chart-card
-          [config]="cumulativeChartConfig()"
-          title="Cumulative Net P&L"
-          [subtitle]="'Running total by ' + chartPeriodLabel().toLowerCase() + ' period'"
-        />
-      </div>
-      <div class="md:col-span-1 xl:col-span-6">
-        <app-chart-card
-          [config]="dailyNetPnLChartConfig()"
-          title="Daily Net P&L"
-          subtitle="Day-by-day net profit and loss"
-        />
-      </div>
-      <div class="md:col-span-1 xl:col-span-6">
-        <app-chart-card
-          [config]="monthlyChartConfig()"
-          title="Monthly Net P&L"
-          subtitle="Monthly performance overview"
-        />
-      </div>
-      <div class="md:col-span-1 xl:col-span-6">
-        <app-chart-card
-          [config]="pnlVsChargesChartConfig()"
-          title="P&L vs Charges"
-          [subtitle]="'Realised P&L and charges by ' + chartPeriodLabel().toLowerCase() + ' period'"
-        />
-      </div>
-    </div>
-
-    <!-- Activity -->
-    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Activity</div>
-    <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-      <app-chart-card
-        [config]="tradeVolumeChartConfig()"
-        title="Trade Volume"
-        [subtitle]="'Number of trades per ' + chartPeriodLabel().toLowerCase() + ' period'"
-      />
-      <div class="flex flex-col gap-0">
-        <div class="flex items-center justify-between">
-          <span></span>
+      <!-- Tab navigation -->
+      <div class="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1">
+        @for (tab of tabs; track tab.id) {
           <button
             type="button"
-            class="chip mb-1 text-xs"
-            [class.chip-active]="winRateShowDots()"
-            [class.chip-inactive]="!winRateShowDots()"
-            (click)="winRateShowDots.set(!winRateShowDots())"
+            class="analytics-tab"
+            [class.analytics-tab-active]="activeTab() === tab.id"
+            (click)="setTab(tab.id)"
           >
-            <svg class="mr-1 inline h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg>
-            {{ winRateShowDots() ? 'Hide dots' : 'Show dots' }}
+            {{ tab.label }}
           </button>
+        }
+      </div>
+
+      <!-- OVERVIEW -->
+      @if (activeTab() === 'overview') {
+        <div class="grid gap-4 xl:grid-cols-12">
+          <div class="xl:col-span-8">
+            <app-chart-card
+              [config]="cumulativeChartConfig()"
+              title="Equity curve"
+              subtitle="Cumulative net P&amp;L over your trading history"
+              size="lg"
+            />
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2 xl:col-span-4 xl:grid-cols-1">
+            <div class="insight-card insight-card-best">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Best weekday</p>
+              <p class="mt-1 text-lg font-bold text-slate-900">{{ bestWeekday()?.label || '—' }}</p>
+              <p class="text-sm font-semibold text-emerald-600">{{ bestWeekday() ? formatCurrency(bestWeekday()!.netPnL) : 'Not enough data' }}</p>
+            </div>
+            <div class="insight-card insight-card-worst">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-red-700">Worst weekday</p>
+              <p class="mt-1 text-lg font-bold text-slate-900">{{ worstWeekday()?.label || '—' }}</p>
+              <p class="text-sm font-semibold text-red-600">{{ worstWeekday() ? formatCurrency(worstWeekday()!.netPnL) : 'Not enough data' }}</p>
+            </div>
+            <div class="insight-card insight-card-best">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Best calendar day</p>
+              <p class="mt-1 text-lg font-bold text-slate-900">{{ bestDayOfMonth() ? 'Day ' + bestDayOfMonth()!.label : '—' }}</p>
+              <p class="text-sm font-semibold text-emerald-600">{{ bestDayOfMonth() ? formatCurrency(bestDayOfMonth()!.netPnL) : 'Not enough data' }}</p>
+            </div>
+            <div class="insight-card insight-card-worst">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-red-700">Worst calendar day</p>
+              <p class="mt-1 text-lg font-bold text-slate-900">{{ worstDayOfMonth() ? 'Day ' + worstDayOfMonth()!.label : '—' }}</p>
+              <p class="text-sm font-semibold text-red-600">{{ worstDayOfMonth() ? formatCurrency(worstDayOfMonth()!.netPnL) : 'Not enough data' }}</p>
+            </div>
+          </div>
         </div>
-        <app-chart-card
-          [config]="winRateTrendChartConfig()"
-          title="Win Rate Trend"
-          subtitle="Bars = Net P&L (left axis) · Line = Win Rate % (right axis)"
-        />
-      </div>
-    </div>
 
-    <!-- Stocks -->
-    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Stocks</div>
-    <div class="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-12">
-      <div class="xl:col-span-7">
-        <app-chart-card
-          [config]="topStocksChartConfig()"
-          title="Top Performers"
-          subtitle="Highest net P&L stocks"
-          size="lg"
-        />
-      </div>
-      <div class="xl:col-span-5">
-        <app-chart-card
-          [config]="bottomStocksChartConfig()"
-          title="Bottom Performers"
-          subtitle="Lowest net P&L stocks"
-          size="lg"
-        />
-      </div>
-    </div>
+        <div class="grid gap-4 lg:grid-cols-2">
+          <app-chart-card [config]="weekdayChartConfig()" title="P&amp;L by weekday" subtitle="Which days of the week work best for you" />
+          <app-chart-card [config]="pnlDistributionChartConfig()" title="Trade outcome distribution" subtitle="How your trades cluster by profit and loss size" />
+        </div>
 
-    <!-- Breakdown -->
-    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown</div>
-    <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-      <app-chart-card
-        [config]="tradeTypeChartConfig()"
-        title="Trade Types"
-        subtitle="Distribution of trades by type"
-      />
-      <app-chart-card
-        [config]="chargesChartConfig()"
-        title="Charges Breakdown"
-        subtitle="Share of total trading charges"
-      />
-    </div>
-
-    <!-- Insights -->
-    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Insights</div>
-    <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-      <app-chart-card
-        [config]="tradesVsPnLChartConfig()"
-        title="Trades vs Net P&L"
-        subtitle="Each dot = one stock · does volume correlate with profit?"
-        size="lg"
-      />
-      @if (holdingVsPnLChartConfig()) {
-        <app-chart-card
-          [config]="holdingVsPnLChartConfig()"
-          title="Holding Period vs P&L"
-          subtitle="Each dot = one delivery trade · does holding longer pay off?"
-          size="lg"
-        />
+        <div class="grid gap-4 lg:grid-cols-2">
+          <app-chart-card [config]="topStocksChartConfig()" title="Top stocks" subtitle="Highest net P&amp;L contributors" />
+          <app-chart-card [config]="bottomStocksChartConfig()" title="Bottom stocks" subtitle="Biggest net P&amp;L drag" />
+        </div>
       }
-      <app-chart-card
-        [config]="winLossByStockChartConfig()"
-        title="Win / Loss by Stock"
-        subtitle="Top 12 stocks by trade count — winning vs losing trades"
-        size="lg"
-      />
-      <app-chart-card
-        [config]="winLossByDateChartConfig()"
-        title="Win / Loss by Date"
-        subtitle="Daily count of winning vs losing trades"
-        size="lg"
-      />
-      <app-chart-card
-        [config]="winLossByStockDayDateChartConfig()"
-        title="Win / Loss by Stock per Date"
-        subtitle="Daily count of winning vs losing stock-day outcomes"
-        size="lg"
-      />
-      <app-chart-card
-        [config]="pnlEfficiencyChartConfig()"
-        title="P&L per Trade (Efficiency)"
-        subtitle="Net P&L ÷ number of trades — top 12 by absolute value"
-        size="lg"
-      />
-    </div>
-    <div class="grid grid-cols-1 gap-4">
-      <app-chart-card
-        [config]="pnlDistributionChartConfig()"
-        title="P&L Distribution"
-        subtitle="How many trades fell in each profit / loss bucket"
-      />
+
+      <!-- DAILY -->
+      @if (activeTab() === 'daily') {
+        <div class="grid gap-4">
+          <app-chart-card
+            [config]="dailyNetPnLChartConfig()"
+            title="Daily net P&amp;L"
+            subtitle="Day-by-day profit and loss with cumulative curve"
+            size="lg"
+          />
+          <app-chart-card
+            [config]="winLossByDateChartConfig()"
+            title="Winning vs losing trades per day"
+            subtitle="Daily trade outcome count"
+          />
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="card overflow-hidden">
+            <div class="border-b border-slate-100 px-4 py-3">
+              <h3 class="text-sm font-semibold text-slate-900">Best trading days</h3>
+              <p class="text-xs text-slate-500">Top 5 days by net P&amp;L</p>
+            </div>
+            <div class="divide-y divide-slate-100">
+              @for (day of topDailyWins(); track day.period) {
+                <div class="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p class="font-medium text-slate-900">{{ day.label }}</p>
+                    <p class="text-xs text-slate-500">{{ day.tradeCount }} trades · {{ day.winRate | number:'1.0-0' }}% win</p>
+                  </div>
+                  <p class="font-bold tabular-nums text-emerald-600">{{ formatCurrency(day.netPnL) }}</p>
+                </div>
+              } @empty {
+                <p class="px-4 py-6 text-center text-sm text-slate-400">No daily data</p>
+              }
+            </div>
+          </div>
+
+          <div class="card overflow-hidden">
+            <div class="border-b border-slate-100 px-4 py-3">
+              <h3 class="text-sm font-semibold text-slate-900">Worst trading days</h3>
+              <p class="text-xs text-slate-500">Bottom 5 days by net P&amp;L</p>
+            </div>
+            <div class="divide-y divide-slate-100">
+              @for (day of topDailyLosses(); track day.period) {
+                <div class="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p class="font-medium text-slate-900">{{ day.label }}</p>
+                    <p class="text-xs text-slate-500">{{ day.tradeCount }} trades · {{ day.winRate | number:'1.0-0' }}% win</p>
+                  </div>
+                  <p class="font-bold tabular-nums text-red-600">{{ formatCurrency(day.netPnL) }}</p>
+                </div>
+              } @empty {
+                <p class="px-4 py-6 text-center text-sm text-slate-400">No daily data</p>
+              }
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- WEEKLY -->
+      @if (activeTab() === 'weekly') {
+        <div class="grid gap-4 lg:grid-cols-2">
+          <app-chart-card [config]="weeklyChartConfig()" title="Weekly net P&amp;L" subtitle="Performance by trading week" size="lg" />
+          <app-chart-card [config]="weekdayChartConfig()" title="Weekday pattern" subtitle="Aggregate P&amp;L by day of week (Mon–Sun)" size="lg" />
+        </div>
+
+        <div class="card p-4">
+          <h3 class="text-sm font-semibold text-slate-900">Weekday heatmap</h3>
+          <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L and trade count for each weekday</p>
+          <div class="mt-4 grid grid-cols-7 gap-2">
+            @for (bucket of weekdayBuckets(); track bucket.key) {
+              <div class="heat-cell" [class]="heatClass(bucket.netPnL, weekdayMaxAbs())">
+                <span class="text-[10px] font-bold uppercase">{{ bucket.label }}</span>
+                <span class="mt-0.5 text-xs font-semibold tabular-nums">{{ bucket.tradeCount ? formatCurrency(bucket.netPnL) : '—' }}</span>
+                <span class="text-[10px] text-slate-500">{{ bucket.tradeCount }}t</span>
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="insight-card insight-card-best">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Best week</p>
+            <p class="mt-1 font-bold text-slate-900">{{ bestWeek()?.label || '—' }}</p>
+            <p class="text-sm font-semibold text-emerald-600">{{ bestWeek() ? formatCurrency(bestWeek()!.netPnL) : '—' }}</p>
+          </div>
+          <div class="insight-card insight-card-worst">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-red-700">Worst week</p>
+            <p class="mt-1 font-bold text-slate-900">{{ worstWeek()?.label || '—' }}</p>
+            <p class="text-sm font-semibold text-red-600">{{ worstWeek() ? formatCurrency(worstWeek()!.netPnL) : '—' }}</p>
+          </div>
+        </div>
+      }
+
+      <!-- MONTHLY -->
+      @if (activeTab() === 'monthly') {
+        <div class="grid gap-4">
+          <app-chart-card [config]="monthlyChartConfig()" title="Monthly net P&amp;L" subtitle="Month-by-month performance" size="lg" />
+          <app-chart-card [config]="dayOfMonthChartConfig()" title="Day-of-month pattern" subtitle="Which dates in the month tend to be profitable" />
+        </div>
+
+        <div class="card p-4">
+          <h3 class="text-sm font-semibold text-slate-900">Calendar day heatmap</h3>
+          <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L aggregated by date of month (1–31)</p>
+          <div class="mt-4 grid grid-cols-7 gap-1.5 sm:grid-cols-10 lg:grid-cols-11">
+            @for (bucket of dayOfMonthBuckets(); track bucket.key) {
+              <div
+                class="heat-cell min-h-[3rem]"
+                [class]="bucket.tradeCount ? heatClass(bucket.netPnL, dayOfMonthMaxAbs()) : 'heat-neutral opacity-40'"
+                [title]="bucket.tradeCount ? bucket.label + ': ' + formatCurrency(bucket.netPnL) : 'No trades'"
+              >
+                <span class="text-[10px] font-bold">{{ bucket.label }}</span>
+                @if (bucket.tradeCount) {
+                  <span class="mt-0.5 text-[9px] font-semibold tabular-nums leading-tight">{{ formatCurrency(bucket.netPnL) }}</span>
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="insight-card insight-card-best">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Best month</p>
+            <p class="mt-1 font-bold text-slate-900">{{ bestMonth()?.label || '—' }}</p>
+            <p class="text-sm font-semibold text-emerald-600">{{ bestMonth() ? formatCurrency(bestMonth()!.netPnL) : '—' }}</p>
+          </div>
+          <div class="insight-card insight-card-worst">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-red-700">Worst month</p>
+            <p class="mt-1 font-bold text-slate-900">{{ worstMonth()?.label || '—' }}</p>
+            <p class="text-sm font-semibold text-red-600">{{ worstMonth() ? formatCurrency(worstMonth()!.netPnL) : '—' }}</p>
+          </div>
+          <div class="insight-card">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Best date of month</p>
+            <p class="mt-1 font-bold text-slate-900">{{ bestDayOfMonth() ? 'Day ' + bestDayOfMonth()!.label : '—' }}</p>
+            <p class="text-sm font-semibold text-emerald-600">{{ bestDayOfMonth() ? formatCurrency(bestDayOfMonth()!.netPnL) : '—' }}</p>
+          </div>
+          <div class="insight-card">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Worst date of month</p>
+            <p class="mt-1 font-bold text-slate-900">{{ worstDayOfMonth() ? 'Day ' + worstDayOfMonth()!.label : '—' }}</p>
+            <p class="text-sm font-semibold text-red-600">{{ worstDayOfMonth() ? formatCurrency(worstDayOfMonth()!.netPnL) : '—' }}</p>
+          </div>
+        </div>
+      }
+
+      <!-- STOCKS -->
+      @if (activeTab() === 'stocks') {
+        <div class="grid gap-4 lg:grid-cols-2">
+          <app-chart-card [config]="topStocksChartConfig()" title="Top performers" subtitle="Stocks with highest net P&amp;L" />
+          <app-chart-card [config]="winLossByStockChartConfig()" title="Win / loss mix" subtitle="Winning vs losing trades by stock" />
+        </div>
+
+        <div class="card overflow-hidden">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Stock-level analysis</h3>
+              <p class="text-xs text-slate-500">{{ stockRows().length }} stocks in filtered view</p>
+            </div>
+            <div class="flex flex-wrap gap-1">
+              @for (sort of [
+                { key: 'netPnL', label: 'Net P&L' },
+                { key: 'realisedPnL', label: 'P&L' },
+                { key: 'tradeCount', label: 'Trades' },
+                { key: 'winRate', label: 'Win %' }
+              ]; track sort.key) {
+                <button
+                  type="button"
+                  class="rounded-lg px-2.5 py-1 text-xs font-medium transition"
+                  [class.bg-slate-900]="stockSort() === sort.key"
+                  [class.text-white]="stockSort() === sort.key"
+                  [class.text-slate-600]="stockSort() !== sort.key"
+                  [class.hover:bg-slate-100]="stockSort() !== sort.key"
+                  (click)="setStockSort($any(sort.key))"
+                >
+                  {{ sort.label }}
+                </button>
+              }
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="stock-table w-full min-w-[640px]">
+              <thead>
+                <tr class="bg-slate-50 text-left">
+                  <th class="w-10 text-center">#</th>
+                  <th>Stock</th>
+                  <th class="text-right">Trades</th>
+                  <th class="text-right">P&amp;L</th>
+                  <th class="text-right">Charges</th>
+                  <th class="text-right">Net P&amp;L</th>
+                  <th class="text-right">Win %</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (stock of stockRows(); track stock.isin || stock.stockName; let i = $index) {
+                  <tr>
+                    <td class="text-center text-slate-400">{{ i + 1 }}</td>
+                    <td>
+                      <p class="font-semibold text-slate-900">{{ stock.stockName }}</p>
+                      <p class="text-xs text-slate-400">{{ stock.isin || '—' }}</p>
+                    </td>
+                    <td class="text-right">{{ stock.tradeCount }}</td>
+                    <td class="text-right" [class]="pnlClass(stock.realisedPnL)">{{ formatCurrency(stock.realisedPnL) }}</td>
+                    <td class="text-right text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</td>
+                    <td class="text-right font-semibold" [class]="pnlClass(stock.netPnL)">{{ formatCurrency(stock.netPnL) }}</td>
+                    <td class="text-right text-slate-600">{{ stock.winRate != null ? (stock.winRate | number:'1.0-0') + '%' : '—' }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="7" class="py-8 text-center text-sm text-slate-400">No stock data for current filters</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <app-chart-card [config]="pnlEfficiencyChartConfig()" title="P&amp;L per trade" subtitle="Efficiency — net P&amp;L divided by number of trades" />
+      }
+
+      <!-- COSTS -->
+      @if (activeTab() === 'costs') {
+        <div class="grid gap-4 lg:grid-cols-2">
+          <app-chart-card [config]="chargesChartConfig()" title="Charges breakdown" subtitle="Where your trading costs go" />
+          <app-chart-card [config]="pnlVsChargesChartConfig()" title="P&amp;L vs charges" [subtitle]="'By ' + chartPeriodLabel().toLowerCase() + ' period'" />
+        </div>
+        <div class="grid gap-4 lg:grid-cols-2">
+          <app-chart-card [config]="tradeTypeChartConfig()" title="Trade type mix" subtitle="Intraday vs delivery vs other segments" />
+          <app-chart-card [config]="tradeVolumeChartConfig()" title="Activity volume" [subtitle]="'Trades per ' + chartPeriodLabel().toLowerCase() + ' period'" />
+        </div>
+      }
     </div>
   }
 }
