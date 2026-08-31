@@ -66,6 +66,7 @@ export interface BackfillUniverseResult {
   profilesRebuilt: number;
 }
 
+const UPSERT_BATCH_LIMIT = 400;
 const DEFAULT_REPORT_TRADE_TYPES: TradeType[] = ['all', 'intraday', 'delivery', 'mtf'];
 const ALL_REPORT_TRADE_TYPES: TradeType[] = ['all', 'intraday', 'delivery', 'same_day', 'mtf', 'fno'];
 
