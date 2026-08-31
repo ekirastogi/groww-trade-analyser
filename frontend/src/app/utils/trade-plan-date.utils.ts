@@ -76,7 +76,7 @@ export function planDateTabLabel(iso: string): string {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
-  });
+  }).replace(',', '');
 }
 
 export function planDateHeading(iso: string): string {

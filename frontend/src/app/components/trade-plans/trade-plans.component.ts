@@ -37,7 +37,7 @@ interface PriceLevel {
   templateUrl: './trade-plans.component.html',
   styles: `
     .plan-date-tab {
-      @apply shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800;
+      @apply shrink-0 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800;
     }
     .plan-date-tab-active {
       @apply bg-slate-900 text-white shadow-sm hover:bg-slate-900 hover:text-white;
