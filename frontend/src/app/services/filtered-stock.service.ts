@@ -1,77 +1,92 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { ReportStateService } from './report-state.service';
 import { TradeLedgerService } from './trade-ledger.service';
-import { AnalysisOptions, StockSummary } from '../models/trade.models';
-
-function isUnfiltered(
-  report: NonNullable<ReturnType<ReportStateService['report']>>,
-  opts: AnalysisOptions
-): boolean {
-  const allTypes = !opts.tradeTypes?.length || opts.tradeTypes.includes('all');
-  const start = opts.startDate || report.dateRange.min;
-  const end = opts.endDate || report.dateRange.max;
-  const hasRange = !!(report.dateRange.min && report.dateRange.max);
-  const rangeOk = !hasRange || (start === report.dateRange.min && end === report.dateRange.max);
-  return allTypes && rangeOk;
-}
+import { StockSummary } from '../models/trade.models';
+import {
+  filterProfilesToSummaries,
+  isFullReportDateRange,
+  profilesHaveTypeBreakdown,
+} from '../utils/filter-stock-profiles.utils';
 
 @Injectable({ providedIn: 'root' })
 export class FilteredStockService {
   private state = inject(ReportStateService);
   private ledger = inject(TradeLedgerService);
 
-  private summaries = signal<StockSummary[]>([]);
+  private dateFiltered = signal<StockSummary[]>([]);
   loading = signal(false);
+  private loadSeq = 0;
 
-  /** Stocks after applying current global filters (trade type + date range). */
-  stocks = computed(() => {
+  /**
+   * Filtered stock list.
+   * Type filters use persisted per-type aggregates on stock profiles (no trade re-fetch).
+   * Date narrowing falls back to a one-time trade query.
+   */
+  stocks = computed((): StockSummary[] => {
     const report = this.state.report();
     const opts = this.state.analysisOptions();
-    if (!report) return [] as StockSummary[];
-    if (isUnfiltered(report, opts)) return report.stockSummary ?? [];
-    return this.summaries();
-  });
+    if (!report) return [];
 
-  private loadSeq = 0;
+    const profiles = report.stockProfiles ?? [];
+    const canUseProfiles =
+      profiles.length > 0 &&
+      profilesHaveTypeBreakdown(profiles) &&
+      isFullReportDateRange(report.dateRange, opts);
+
+    if (canUseProfiles) {
+      return filterProfilesToSummaries(profiles, opts);
+    }
+
+    if (!isFullReportDateRange(report.dateRange, opts)) {
+      return this.dateFiltered();
+    }
+
+    return report.stockSummary ?? [];
+  });
 
   constructor() {
     effect(() => {
       const report = this.state.report();
       const opts = this.state.analysisOptions();
       if (!report) {
-        this.summaries.set([]);
+        this.dateFiltered.set([]);
         return;
       }
-      if (isUnfiltered(report, opts)) {
-        this.summaries.set(report.stockSummary ?? []);
+
+      const profiles = report.stockProfiles ?? [];
+      const needsTradeQuery =
+        !isFullReportDateRange(report.dateRange, opts) ||
+        (profiles.length > 0 && !profilesHaveTypeBreakdown(profiles));
+
+      if (!needsTradeQuery) {
+        this.dateFiltered.set([]);
         this.loading.set(false);
         return;
       }
-      void this.reload(report.summary.clientCode, report, opts);
+
+      void this.reloadFromTrades(report.summary.clientCode, report.dateRange, opts);
     });
   }
 
-  private async reload(
+  private async reloadFromTrades(
     clientCode: string,
-    report: NonNullable<ReturnType<ReportStateService['report']>>,
-    opts: AnalysisOptions
+    dateRange: { min: string; max: string },
+    opts: ReturnType<ReportStateService['analysisOptions']>
   ): Promise<void> {
     const seq = ++this.loadSeq;
     this.loading.set(true);
     try {
       const stocks = await this.ledger.getFilteredStockSummaries(clientCode, {
-        startDate: opts.startDate || report.dateRange.min,
-        endDate: opts.endDate || report.dateRange.max,
+        startDate: opts.startDate || dateRange.min,
+        endDate: opts.endDate || dateRange.max,
         tradeTypes: opts.tradeTypes,
       });
       if (seq === this.loadSeq) {
-        this.summaries.set(
-          stocks.length ? stocks : isUnfiltered(report, opts) ? (report.stockSummary ?? []) : []
-        );
+        this.dateFiltered.set(stocks);
       }
     } catch {
       if (seq === this.loadSeq) {
-        this.summaries.set([]);
+        this.dateFiltered.set([]);
       }
     } finally {
       if (seq === this.loadSeq) {

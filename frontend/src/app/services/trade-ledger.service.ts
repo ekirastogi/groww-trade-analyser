@@ -25,6 +25,7 @@ import {
   normalizeSymbol,
 } from '../utils/upload-merge.utils';
 import { expandTradeTypes, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
+import { profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
 import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
 
 export interface UploadResult {
@@ -77,6 +78,11 @@ function profileFromRow(row: Record<string, unknown>, clientCode: string, client
   const camel = rowToCamel<Record<string, unknown>>(row);
   const buyValue = numField(camel, 'buyValue');
   const netPnL = numField(camel, 'netPnL', 'netPnl');
+  const rawByType = camel['byTradeType'];
+  const byTradeType =
+    rawByType && typeof rawByType === 'object' && !Array.isArray(rawByType)
+      ? (rawByType as StockProfile['byTradeType'])
+      : {};
   return {
     symbol: String(camel['symbol'] ?? ''),
     stockName: String(camel['stockName'] ?? ''),
@@ -98,7 +104,7 @@ function profileFromRow(row: Record<string, unknown>, clientCode: string, client
     netPnLPct: buyValue ? (netPnL / buyValue) * 100 : 0,
     avgHoldingDays: 0,
     dateRange: { first: '', last: '' },
-    byTradeType: {},
+    byTradeType,
     uploadIds: [],
     updatedAt: Date.now(),
   };
@@ -149,6 +155,7 @@ function profileToRow(profile: StockProfile, userId: string): Record<string, unk
     winningTrades: profile.winningTrades,
     losingTrades: profile.losingTrades,
     winRate: profile.winRate,
+    byTradeType: profile.byTradeType,
   });
 }
 
@@ -551,7 +558,26 @@ export class TradeLedgerService {
     const client = clients.find((c) => c.clientCode === clientCode);
     const clientName = client?.clientName ?? clientCode;
     const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
-    return profiles.map((profile) => this.profileToStockSummary(profile));
+    return profiles.map((profile) => profileToStockSummary(profile));
+  }
+
+  /** Rebuild and persist stock profiles (including per-type breakdown) from all trades. */
+  async rebuildStockProfiles(clientCode: string): Promise<StockProfile[]> {
+    const clients = await this.clientSvc.listClients();
+    const client = clients.find((c) => c.clientCode === clientCode);
+    const clientName = client?.clientName ?? clientCode;
+    const trades = await this.getAllTrades(clientCode);
+    if (!trades.length) return [];
+
+    const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
+    await this.writeStockProfiles(clientCode, profiles);
+    await this.writeAnalyticsDaily(clientCode, buildDailyAnalyticsFromTrades(trades));
+    return profiles;
+  }
+
+  async ensureStockProfilesWithBreakdown(clientCode: string, profiles: StockProfile[]): Promise<StockProfile[]> {
+    if (profiles.length && profilesHaveTypeBreakdown(profiles)) return profiles;
+    return this.rebuildStockProfiles(clientCode);
   }
 
   mergeTradesIntoReport(report: Report, trades: StoredTrade[]): Report {
@@ -583,10 +609,14 @@ export class TradeLedgerService {
     const clients = await this.clientSvc.listClients();
     const client = clients.find((c) => c.clientCode === clientCode);
     const clientName = client?.clientName ?? clientCode;
-    const stockProfiles = await this.getStockProfiles(clientCode);
+    let stockProfiles = await this.getStockProfiles(clientCode);
     const totalTradeCount = await this.countTrades(clientCode);
 
     if (!stockProfiles.length && totalTradeCount === 0) return null;
+
+    if (totalTradeCount > 0) {
+      stockProfiles = await this.ensureStockProfilesWithBreakdown(clientCode, stockProfiles);
+    }
 
     const { data: lastUploadRow } = await this.supabase.client
       .from('uploads')
@@ -730,7 +760,7 @@ export class TradeLedgerService {
     const profiles =
       stockProfiles ??
       (trades.length ? this.buildStockProfilesFromTrades(trades, clientCode, clientName) : []);
-    const stockSummary = profiles.map((profile) => this.profileToStockSummary(profile));
+    const stockSummary = profiles.map((profile) => profileToStockSummary(profile));
     const plainTrades: Trade[] = trades.map(
       ({
         stockName,
@@ -796,6 +826,7 @@ export class TradeLedgerService {
       },
       trades: plainTrades,
       stockSummary,
+      stockProfiles: profiles,
       dateRange: {
         min: dates[0] ?? '',
         max: dates[dates.length - 1] ?? '',
@@ -947,27 +978,6 @@ export class TradeLedgerService {
       byTradeType,
       uploadIds: [...uploadIds],
       updatedAt: Date.now(),
-    };
-  }
-
-  private profileToStockSummary(profile: StockProfile): StockSummary {
-    return {
-      stockName: profile.stockName,
-      isin: profile.isin,
-      symbol: profile.symbol,
-      quantity: profile.tradeCount,
-      avgBuyPrice: profile.tradeCount ? profile.totalBuyValue / profile.tradeCount : 0,
-      buyValue: profile.totalBuyValue,
-      avgSellPrice: profile.tradeCount ? profile.totalSellValue / profile.tradeCount : 0,
-      sellValue: profile.totalSellValue,
-      realisedPnL: profile.realisedPnL,
-      realisedPnLPct: profile.totalBuyValue ? profile.realisedPnL / profile.totalBuyValue : 0,
-      tradeCount: profile.tradeCount,
-      allocatedCharges: profile.allocatedCharges,
-      netPnL: profile.netPnL,
-      winRate: profile.winRate,
-      winningTrades: profile.winningTrades,
-      losingTrades: profile.losingTrades,
     };
   }
 
