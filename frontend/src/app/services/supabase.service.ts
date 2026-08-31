@@ -60,7 +60,9 @@ export function rowsToCamel<T>(rows: Record<string, unknown>[]): T[] {
 }
 
 export function snakeToCamel(key: string): string {
-  return key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+  const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+  // Match app models: realised_pnl → realisedPnL (not realisedPnl).
+  return camel.replace(/PnlPct/g, 'PnLPct').replace(/Pnl/g, 'PnL');
 }
 
 export function camelToSnake(key: string): string {
