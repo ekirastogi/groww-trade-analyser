@@ -51,10 +51,7 @@ interface PriceLevel {
       @apply absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white;
     }
     .action-menu {
-      @apply absolute right-0 top-full z-30 mt-1 min-w-[9rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg;
-    }
-    .action-menu-up {
-      @apply bottom-full top-auto mb-1 mt-0;
+      @apply fixed z-50 min-w-[9rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg;
     }
     .action-menu-item {
       @apply flex w-full items-center px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50;
@@ -74,6 +71,7 @@ export class TradePlansComponent implements OnInit {
   execError = signal<string | null>(null);
   execBusy = signal(false);
   menuOpenId = signal<string | null>(null);
+  menuPosition = signal<{ top: number; right: number; openUp: boolean } | null>(null);
 
   upcomingTabs = computed(() =>
     upcomingPlanDates().map((iso) => ({ iso, label: planDateTabLabel(iso) }))
@@ -122,6 +120,12 @@ export class TradePlansComponent implements OnInit {
       }
     });
     return rows;
+  });
+
+  menuTrade = computed(() => {
+    const id = this.menuOpenId();
+    if (!id) return null;
+    return this.trades().find((t) => t.id === id) ?? null;
   });
 
   ngOnInit(): void {
@@ -325,7 +329,9 @@ export class TradePlansComponent implements OnInit {
   }
 
   flowArrow(t: PlannedTrade): string {
-    return this.isShort(t) ? '←' : '→';
+    if (t.targetPrice === t.entryPrice) return '→';
+    if (this.isShort(t)) return t.targetPrice < t.entryPrice ? '↓' : '↑';
+    return t.targetPrice > t.entryPrice ? '↑' : '↓';
   }
 
   flowArrowClass(t: PlannedTrade): string {
@@ -336,6 +342,7 @@ export class TradePlansComponent implements OnInit {
     return profitable ? 'text-emerald-600' : 'text-red-600';
   }
 
+  /** Fixed display order: CMP → Entry → Exit → SL (trade sequence, not price sort). */
   priceLevels(t: PlannedTrade): PriceLevel[] {
     const levels: PriceLevel[] = [];
     if (t.cmp != null) {
@@ -374,16 +381,30 @@ export class TradePlansComponent implements OnInit {
         markerClass: 'bg-red-500',
       });
     }
-    return levels.sort((a, b) => a.price - b.price);
+    return levels;
   }
 
   toggleMenu(id: string, event: Event): void {
     event.stopPropagation();
-    this.menuOpenId.update((current) => (current === id ? null : id));
+    if (this.menuOpenId() === id) {
+      this.closeMenu();
+      return;
+    }
+    const btn = event.currentTarget as HTMLElement;
+    const rect = btn.getBoundingClientRect();
+    const menuHeight = 120;
+    const openUp = rect.bottom + menuHeight > window.innerHeight - 16;
+    this.menuPosition.set({
+      top: openUp ? rect.top - menuHeight - 4 : rect.bottom + 4,
+      right: Math.max(8, window.innerWidth - rect.right),
+      openUp,
+    });
+    this.menuOpenId.set(id);
   }
 
   closeMenu(): void {
     this.menuOpenId.set(null);
+    this.menuPosition.set(null);
   }
 
   @HostListener('document:click')
