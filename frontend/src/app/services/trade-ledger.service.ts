@@ -15,7 +15,7 @@ import { RegistryStockService } from './registry-stock.service';
 import { TradePlanService } from './trade-plan.service';
 import { UniverseService } from './universe.service';
 import { WatchlistService } from './watchlist.service';
-import { objectToSnake, rowToCamel, rowsToCamel, SupabaseService } from './supabase.service';
+import { objectToSnake, numField, rowToCamel, SupabaseService } from './supabase.service';
 import {
   buildTradeTypeStats,
   computeChargeRatio,
@@ -63,8 +63,8 @@ const UPSERT_BATCH_LIMIT = 400;
 
 function profileFromRow(row: Record<string, unknown>, clientCode: string, clientName: string): StockProfile {
   const camel = rowToCamel<Record<string, unknown>>(row);
-  const buyValue = Number(camel['buyValue'] ?? 0);
-  const netPnL = Number(camel['netPnl'] ?? 0);
+  const buyValue = numField(camel, 'buyValue');
+  const netPnL = numField(camel, 'netPnL', 'netPnl');
   return {
     symbol: String(camel['symbol'] ?? ''),
     stockName: String(camel['stockName'] ?? ''),
@@ -77,11 +77,11 @@ function profileFromRow(row: Record<string, unknown>, clientCode: string, client
     breakEvenTrades: 0,
     winRate: Number(camel['winRate'] ?? 0),
     totalBuyValue: buyValue,
-    totalSellValue: Number(camel['sellValue'] ?? 0),
+    totalSellValue: numField(camel, 'sellValue'),
     grossProfit: 0,
     grossLoss: 0,
-    realisedPnL: Number(camel['realisedPnl'] ?? 0),
-    allocatedCharges: Number(camel['allocatedCharges'] ?? 0),
+    realisedPnL: numField(camel, 'realisedPnL', 'realisedPnl'),
+    allocatedCharges: numField(camel, 'allocatedCharges'),
     netPnL,
     netPnLPct: buyValue ? (netPnL / buyValue) * 100 : 0,
     avgHoldingDays: 0,
@@ -89,6 +89,34 @@ function profileFromRow(row: Record<string, unknown>, clientCode: string, client
     byTradeType: {},
     uploadIds: [],
     updatedAt: Date.now(),
+  };
+}
+
+function tradeFromRow(row: Record<string, unknown>): StoredTrade {
+  const camel = rowToCamel<Record<string, unknown>>(row);
+  return {
+    dedupeKey: String(camel['dedupeKey'] ?? camel['id'] ?? ''),
+    fingerprint: camel['fingerprint'] as string | undefined,
+    uploadId: String(camel['uploadId'] ?? ''),
+    clientCode: String(camel['clientCode'] ?? ''),
+    clientName: String(camel['clientName'] ?? ''),
+    symbol: String(camel['symbol'] ?? ''),
+    stockName: String(camel['stockName'] ?? ''),
+    isin: String(camel['isin'] ?? ''),
+    quantity: Number(camel['quantity'] ?? 0),
+    buyDate: String(camel['buyDate'] ?? ''),
+    buyPrice: numField(camel, 'buyPrice'),
+    buyValue: numField(camel, 'buyValue'),
+    sellDate: String(camel['sellDate'] ?? ''),
+    sellPrice: numField(camel, 'sellPrice'),
+    sellValue: numField(camel, 'sellValue'),
+    realisedPnL: numField(camel, 'realisedPnL', 'realisedPnl'),
+    remark: String(camel['remark'] ?? ''),
+    tradeType: (camel['tradeType'] as TradeType) ?? 'delivery',
+    holdingDays: Number(camel['holdingDays'] ?? 0),
+    allocatedCharges: numField(camel, 'allocatedCharges'),
+    netPnL: numField(camel, 'netPnL', 'netPnl'),
+    createdAt: Number(camel['createdAt'] ?? 0),
   };
 }
 
@@ -258,7 +286,7 @@ export class TradeLedgerService {
     if (uploadError) throw uploadError;
 
     const syncedReport = await this.syncDerivedData(clientCode, clientName, {
-      trades: options.forceReingest ? pendingWrites : undefined,
+      trades: pendingWrites,
       uploadMeta: uploadRecord,
     });
 
@@ -364,7 +392,7 @@ export class TradeLedgerService {
       .eq('client_code', clientCode)
       .order('sell_date', { ascending: false });
     if (error) throw error;
-    return rowsToCamel<StoredTrade>(data ?? []);
+    return (data ?? []).map((row) => tradeFromRow(row));
   }
 
   async buildReportFromClient(clientCode: string): Promise<Report | null> {
@@ -461,6 +489,7 @@ export class TradeLedgerService {
 
     const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
     await this.writeStockProfiles(clientCode, profiles);
+    await this.watchlists.syncPnlTierWatchlists(profiles);
     await this.universe.syncSymbols(
       profiles.map((p) => ({ symbol: p.symbol, name: p.stockName, isin: p.isin })),
       'pnl_upload'

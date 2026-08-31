@@ -65,6 +65,15 @@ export function snakeToCamel(key: string): string {
   return camel.replace(/PnlPct/g, 'PnLPct').replace(/Pnl/g, 'PnL');
 }
 
+/** Read numeric field with legacy Pnl/PnL key fallbacks after rowToCamel. */
+export function numField(row: Record<string, unknown>, ...keys: string[]): number {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && value !== '') return Number(value);
+  }
+  return 0;
+}
+
 export function camelToSnake(key: string): string {
   // Keep PnL as one word (reportRealisedPnL → report_realised_pnl, not report_realised_pn_l).
   return key

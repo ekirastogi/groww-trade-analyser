@@ -10,7 +10,7 @@ import {
   TradeSegment,
 } from '../models/trading-journal.models';
 import { AuthService } from './auth.service';
-import { objectToSnake, rowToCamel, SupabaseService } from './supabase.service';
+import { objectToSnake, numField, rowToCamel, SupabaseService } from './supabase.service';
 
 export interface CreatePlannedTradeInput {
   symbol: string;
@@ -53,9 +53,9 @@ function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
     stopLoss: camel['stopLoss'] as number | undefined,
     source: payload.source ?? 'manual',
     status: (camel['status'] as TradeExecutionStatus) ?? 'planned',
-    estimatedPnL: Number(camel['estimatedPnl'] ?? 0),
+    estimatedPnL: numField(camel, 'estimatedPnL', 'estimatedPnl'),
     estimatedStopLossPnL: payload.estimatedStopLossPnL ?? undefined,
-    realizedPnL: camel['realizedPnl'] as number | undefined,
+    realizedPnL: (camel['realizedPnL'] ?? camel['realizedPnl']) as number | undefined,
     executedQuantity: payload.executedQuantity ?? undefined,
     executedBuyPrice: payload.executedBuyPrice ?? undefined,
     executedSellPrice: payload.executedSellPrice ?? undefined,

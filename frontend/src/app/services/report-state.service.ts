@@ -100,7 +100,11 @@ export class ReportStateService {
   }
 
   async ensureLoadedFromFirebase(forceRefresh = false): Promise<void> {
-    if (!forceRefresh && this.report() && this.dataSource() === 'firebase') return;
+    if (!forceRefresh && this.report() && this.dataSource() === 'firebase') {
+      const current = this.report();
+      if (current && this.isValidReport(current)) return;
+      this.report.set(null);
+    }
 
     await this.auth.whenReady();
     const uid = await this.auth.getDataUserId();
@@ -287,13 +291,23 @@ export class ReportStateService {
     this.clearFirebaseReportCache();
   }
 
+  private isValidReport(report: Report): boolean {
+    if (!report?.summary?.clientCode || !Array.isArray(report.trades) || !report.trades.length) {
+      return false;
+    }
+    return report.trades.every((trade) => Number.isFinite(trade.realisedPnL));
+  }
+
   private restoreFirebaseReportFromCache(uid: string, clientCode: string): Report | null {
     if (typeof sessionStorage === 'undefined') return null;
     try {
       const raw = sessionStorage.getItem(firebaseReportCacheKey(uid, clientCode));
       if (!raw) return null;
       const report = JSON.parse(raw) as Report;
-      if (!report?.summary?.clientCode || !Array.isArray(report.trades)) return null;
+      if (!this.isValidReport(report)) {
+        sessionStorage.removeItem(firebaseReportCacheKey(uid, clientCode));
+        return null;
+      }
       return report;
     } catch {
       return null;
