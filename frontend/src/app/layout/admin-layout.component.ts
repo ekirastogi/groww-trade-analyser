@@ -93,6 +93,11 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
           icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
         },
         {
+          label: 'Watchlists',
+          route: '/watchlists',
+          icon: 'M5 5h14M5 12h14M5 19h14',
+        },
+        {
           label: 'Market data',
           route: '/stocks',
           icon: 'M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z',
@@ -133,9 +138,9 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
       icon: 'M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
     },
     {
-      label: 'Plans',
-      route: '/trade-plans',
-      icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+      label: 'Lists',
+      route: '/watchlists',
+      icon: 'M5 5h14M5 12h14M5 19h14',
     },
     {
       label: 'Signals',

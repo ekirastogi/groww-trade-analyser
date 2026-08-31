@@ -660,6 +660,38 @@ func (s *Scheduler) RunSymbolIngestNow(ctx context.Context, symbol string) error
 	return nil
 }
 
+// SeedUniverseFromExchanges fetches NSE and BSE equity lists and writes them to Firestore universe.
+func (s *Scheduler) SeedUniverseFromExchanges(ctx context.Context) (int, error) {
+	if s.publisher == nil {
+		return 0, fmt.Errorf("firestore publisher not configured")
+	}
+
+	nse, nseErr := market.FetchNSEEquities(ctx)
+	bse, bseErr := market.FetchBSEEquities(ctx)
+	if nseErr != nil && bseErr != nil {
+		return 0, fmt.Errorf("NSE: %v; BSE: %v", nseErr, bseErr)
+	}
+	if nseErr != nil {
+		logx.Warn("NSE equity list failed (using BSE only): %v", nseErr)
+	}
+	if bseErr != nil {
+		logx.Warn("BSE equity list failed (using NSE only): %v", bseErr)
+	}
+
+	merged := market.MergeExchangeSymbols(nse, bse)
+	if len(merged) == 0 {
+		return 0, fmt.Errorf("no symbols fetched from exchanges")
+	}
+
+	count, err := s.publisher.SyncUniverseSymbols(ctx, merged)
+	if err != nil {
+		return count, err
+	}
+	logx.Info("Universe seeded: %d symbols from NSE/BSE", count)
+	s.refreshUniverse(ctx)
+	return count, nil
+}
+
 func DefaultSymbols() []string {
 	raw := os.Getenv("WATCH_SYMBOLS")
 	if raw == "" {

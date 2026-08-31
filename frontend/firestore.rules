@@ -67,6 +67,7 @@ service cloud.firestore {
         && request.resource.data.requestedBy == request.auth.uid
         && (
           request.resource.data.type == 'hot_ingest'
+          || request.resource.data.type == 'seed_universe'
           || (
             request.resource.data.type == 'symbol_ingest'
             && request.resource.data.symbol is string

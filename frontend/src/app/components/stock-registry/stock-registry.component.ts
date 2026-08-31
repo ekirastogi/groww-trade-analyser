@@ -1,8 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RegistryStockService } from '../../services/registry-stock.service';
+import { UniverseService } from '../../services/universe.service';
+import { WorkerJobService } from '../../services/worker-job.service';
 import { RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency } from '../../utils/format.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
@@ -15,8 +17,11 @@ import { TableSortState } from '../../utils/table-sort.utils';
 })
 export class StockRegistryComponent {
   private registrySvc = inject(RegistryStockService);
+  private universeSvc = inject(UniverseService);
+  private workerJobs = inject(WorkerJobService);
 
   stocks = toSignal(this.registrySvc.watchAll(), { initialValue: [] as RegistryStock[] });
+  universe = toSignal(this.universeSvc.watchAll(), { initialValue: [] });
   tableSort = new TableSortState('symbol', 'asc');
   fmt = formatCurrency;
 
@@ -24,6 +29,8 @@ export class StockRegistryComponent {
   error = signal<string | null>(null);
   success = signal<string | null>(null);
   busy = signal(false);
+  seedBusy = signal(false);
+  symbolQuery = signal('');
 
   form = {
     symbol: '',
@@ -46,6 +53,19 @@ export class StockRegistryComponent {
     notes: '',
   };
 
+  symbolOptions = computed(() => {
+    const q = this.symbolQuery().trim().toLowerCase();
+    const rows = this.universe();
+    if (!q) return rows.slice(0, 30);
+    return rows
+      .filter(
+        (s) =>
+          s.symbol.toLowerCase().includes(q) ||
+          (s.name ?? '').toLowerCase().includes(q)
+      )
+      .slice(0, 30);
+  });
+
   sortedStocks(): RegistryStock[] {
     return this.tableSort.sort(this.stocks(), (stock, col) => {
       switch (col) {
@@ -61,6 +81,7 @@ export class StockRegistryComponent {
 
   resetForm(): void {
     this.editingSymbol.set(null);
+    this.symbolQuery.set('');
     this.form = {
       symbol: '', name: '', currentPrice: '', marketCap: '', pe: '', rsi: '',
       macd: '', macdHist: '', macdSignal: '', sma20: '', sma50: '',
@@ -70,9 +91,19 @@ export class StockRegistryComponent {
     };
   }
 
+  onSymbolQuery(value: string): void {
+    this.symbolQuery.set(value);
+    this.form.symbol = value.toUpperCase();
+    const match = this.universe().find((s) => s.symbol === this.form.symbol);
+    if (match?.name) {
+      this.form.name = match.name;
+    }
+  }
+
   edit(stock: RegistryStock): void {
     this.editingSymbol.set(stock.symbol);
     this.form.symbol = stock.symbol;
+    this.symbolQuery.set(stock.symbol);
     this.form.name = stock.name;
     this.form.currentPrice = String(stock.currentPrice ?? '');
     this.form.marketCap = stock.marketCap != null ? String(stock.marketCap) : '';
@@ -143,5 +174,29 @@ export class StockRegistryComponent {
     if (!confirm(`Remove ${symbol} from registry?`)) return;
     await this.registrySvc.remove(symbol);
     if (this.editingSymbol() === symbol) this.resetForm();
+  }
+
+  async importExchangeUniverse(): Promise<void> {
+    this.error.set(null);
+    this.success.set(null);
+    this.seedBusy.set(true);
+    try {
+      const online = await this.workerJobs.getWorkerOnline();
+      if (!online) {
+        throw new Error('Worker is offline. Start it with `cd backend && go run .` then retry.');
+      }
+      const jobId = await this.workerJobs.requestSeedUniverse();
+      const job = await this.workerJobs.waitForJob(jobId, 20 * 60 * 1000);
+      if (job.status === 'failed') {
+        throw new Error(job.error ?? 'Universe import failed');
+      }
+      this.success.set(
+        `Imported ${job.symbolsIngested ?? 0} NSE/BSE symbols. Search by symbol when adding stocks.`
+      );
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Import failed');
+    } finally {
+      this.seedBusy.set(false);
+    }
   }
 }

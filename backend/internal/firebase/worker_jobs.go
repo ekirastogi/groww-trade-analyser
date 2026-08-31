@@ -87,7 +87,7 @@ func (p *Publisher) PollWorkerJobs(ctx context.Context, handler JobHandler) erro
 			}
 			data := doc.Data()
 			jobType, _ := data["type"].(string)
-			if jobType != "hot_ingest" && jobType != "symbol_ingest" {
+			if jobType != "hot_ingest" && jobType != "symbol_ingest" && jobType != "seed_universe" {
 				continue
 			}
 			seen[jobID] = true

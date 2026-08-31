@@ -1,9 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { WatchlistService } from '../../services/watchlist.service';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { AuthService } from '../../services/auth.service';
 import { ReportStateService } from '../../services/report-state.service';
@@ -29,7 +27,7 @@ import { MARKET_CAP_LABELS, MarketCapTier, matchesMarketCapFilter } from '../../
 
 const ALL_SUBTAB_ID = '__all__';
 
-type WatchlistTab = 'losing' | 'profitable' | 'custom';
+type WatchlistTab = 'losing' | 'profitable';
 
 interface TierSummary {
   stockCount: number;
@@ -51,34 +49,22 @@ interface AutoTierTab {
   count: number;
 }
 
-interface CustomSubTab {
-  id: string;
-  label: string;
-  fullLabel: string;
-  count: number;
-  color: string;
-}
-
 @Component({
   selector: 'app-watchlists',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent, MarketCapFilterComponent],
+  imports: [CommonModule, RouterLink, TradeTypeFilterComponent, MarketCapFilterComponent],
   templateUrl: './watchlists.component.html',
 })
 export class WatchlistsComponent {
-  private watchlistSvc = inject(WatchlistService);
   private stockSvc = inject(StockFirestoreService);
   readonly auth = inject(AuthService);
   readonly state = inject(ReportStateService);
 
-  watchlists = toSignal(this.watchlistSvc.watchAll(), { initialValue: [] as Watchlist[] });
-  /** Single marketCatalog doc — avoids per-stock snapshot listeners. */
   stocks = toSignal(this.stockSvc.watchMarketCatalog(), { initialValue: [] as StockSnapshot[] });
 
   readonly mainTabs: { id: WatchlistTab; label: string }[] = [
     { id: 'losing', label: 'Loss making' },
     { id: 'profitable', label: 'Profitable' },
-    { id: 'custom', label: 'Custom' },
   ];
 
   readonly allSubtabId = ALL_SUBTAB_ID;
@@ -86,13 +72,9 @@ export class WatchlistsComponent {
   activeTab = signal<WatchlistTab>('losing');
   tierMode = signal<PnlTierMode>(loadPnlTierMode());
   selectedAutoTierId = signal<string | null>(null);
-  selectedCustomWatchlistId = signal<string | null>(null);
   expandedStockKey = signal<string | null>(null);
   selectedMarketCapTiers = signal<MarketCapTier[]>([]);
   mobileFiltersOpen = signal(false);
-  newName = '';
-  newSymbol = '';
-  error = signal<string | null>(null);
 
   readonly formatCurrency = formatCurrency;
   readonly pnlClass = pnlClass;
@@ -105,24 +87,6 @@ export class WatchlistsComponent {
     { key: 'allocatedCharges', label: 'Charges', align: 'right' as const, mobile: false },
     { key: 'winRate', label: 'Win Rate', align: 'right' as const, mobile: false },
   ];
-
-  isPnlTab = computed(() => this.activeTab() === 'profitable' || this.activeTab() === 'losing');
-
-  showStockTable = computed(
-    () => this.isPnlTab() || (this.activeTab() === 'custom' && this.state.hasReport())
-  );
-
-  customWatchlists = computed(() =>
-    this.watchlists()
-      .filter((wl) => !this.watchlistSvc.isAutoWatchlist(wl))
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-  );
-
-  autoWatchlists = computed(() =>
-    this.watchlists()
-      .filter((wl) => this.watchlistSvc.isAutoWatchlist(wl))
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-  );
 
   autoTierTabs = computed((): AutoTierTab[] => {
     const summaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
@@ -197,35 +161,7 @@ export class WatchlistsComponent {
     return [allTab, ...tiers];
   });
 
-  visibleCustomSubTabs = computed((): CustomSubTab[] => {
-    const lists = this.customWatchlists();
-    const summaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
-    const allSymbols = new Set(lists.flatMap((wl) => wl.stockSymbols.map((s) => s.toUpperCase())));
-    const allCount = [...allSymbols].filter((symbol) => this.findStockSummary(summaries, symbol)).length;
-
-    return [
-      {
-        id: ALL_SUBTAB_ID,
-        label: `All (${allCount})`,
-        fullLabel: 'All custom stocks',
-        count: allCount,
-        color: '#6366f1',
-      },
-      ...lists.map((wl) => ({
-        id: wl.id,
-        label: `${wl.name} (${wl.stockSymbols.length})`,
-        fullLabel: wl.name,
-        count: wl.stockSymbols.length,
-        color: wl.color,
-      })),
-    ];
-  });
-
-  activeCustomSubTabId = computed(() => this.selectedCustomWatchlistId() ?? ALL_SUBTAB_ID);
-
   activeAutoWatchlist = computed(() => {
-    if (!this.isPnlTab()) return null;
-
     const tabs = this.visibleAutoTierTabs();
     const selected = this.selectedAutoTierId() ?? ALL_SUBTAB_ID;
     return tabs.find((tab) => tab.watchlist.id === selected)?.watchlist ?? tabs[0]?.watchlist ?? null;
@@ -237,41 +173,10 @@ export class WatchlistsComponent {
     return this.visibleAutoTierTabs().find((tab) => tab.watchlist.id === watchlist.id) ?? null;
   });
 
-  activeViewLabel = computed(() => {
-    if (this.activeTab() === 'custom') {
-      return (
-        this.visibleCustomSubTabs().find((tab) => tab.id === this.activeCustomSubTabId())?.fullLabel ??
-        'All custom stocks'
-      );
-    }
-    return this.activeAutoTierMeta()?.fullLabel ?? '';
-  });
-
-  activeCustomWatchlist = computed(() => {
-    const id = this.activeCustomSubTabId();
-    if (id === ALL_SUBTAB_ID) return null;
-    return this.customWatchlists().find((wl) => wl.id === id) ?? null;
-  });
+  activeViewLabel = computed(() => this.activeAutoTierMeta()?.fullLabel ?? '');
 
   tierStocks = computed(() => {
     const stockSummaries = this.filterByMarketCap(this.state.analysis()?.stocks ?? []);
-
-    if (this.activeTab() === 'custom') {
-      const lists = this.customWatchlists();
-      const selected = this.activeCustomSubTabId();
-      const symbols =
-        selected === ALL_SUBTAB_ID
-          ? [...new Set(lists.flatMap((wl) => wl.stockSymbols.map((s) => s.toUpperCase())))]
-          : (lists.find((wl) => wl.id === selected)?.stockSymbols ?? []);
-
-      const stocks = symbols
-        .map((symbol) => this.findStockSummary(stockSummaries, symbol))
-        .filter((stock): stock is StockSummary => !!stock)
-        .sort((a, b) => b.netPnL - a.netPnL);
-
-      return this.tableSort.sort(stocks, (stock, col) => this.tierStockSortValue(stock, col));
-    }
-
     const watchlist = this.activeAutoWatchlist();
     if (!watchlist) return [] as StockSummary[];
 
@@ -328,8 +233,6 @@ export class WatchlistsComponent {
   setTab(tab: WatchlistTab): void {
     this.activeTab.set(tab);
     this.selectedAutoTierId.set(null);
-    this.selectedCustomWatchlistId.set(null);
-    this.error.set(null);
   }
 
   setTierMode(mode: PnlTierMode): void {
@@ -367,10 +270,6 @@ export class WatchlistsComponent {
     this.expandedStockKey.set(this.expandedStockKey() === key ? null : key);
   }
 
-  selectCustomWatchlist(id: string): void {
-    this.selectedCustomWatchlistId.set(id);
-  }
-
   tierTabLabel(tab: AutoTierTab): string {
     return `${tab.shortLabel} (${tab.count})`;
   }
@@ -381,46 +280,6 @@ export class WatchlistsComponent {
     if (!stock || !key) return `${align} ${visibility}`.trim();
     if (key === 'stockName') return `col-name ${visibility}`.trim();
     return `${this.tierStockCellClass(key, stock)} ${visibility}`.trim();
-  }
-
-  async createWatchlist(): Promise<void> {
-    if (!this.newName.trim()) return;
-    try {
-      const lists = this.customWatchlists();
-      const id = await this.watchlistSvc.create({
-        name: this.newName.trim(),
-        type: 'manual',
-        color: '#6366f1',
-        sortOrder: lists.length,
-        stockSymbols: [],
-      });
-      this.newName = '';
-      this.activeTab.set('custom');
-      this.selectedCustomWatchlistId.set(id);
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Failed to create watchlist');
-    }
-  }
-
-  async addSymbol(wl: Watchlist): Promise<void> {
-    if (!this.newSymbol.trim()) return;
-    try {
-      await this.watchlistSvc.addSymbol(wl.id, this.newSymbol.trim(), wl.stockSymbols);
-      this.newSymbol = '';
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Failed to add symbol');
-    }
-  }
-
-  async removeSymbol(wl: Watchlist, symbol: string): Promise<void> {
-    await this.watchlistSvc.removeSymbol(wl.id, symbol, wl.stockSymbols);
-  }
-
-  async deleteWatchlist(id: string): Promise<void> {
-    await this.watchlistSvc.remove(id);
-    if (this.selectedCustomWatchlistId() === id) {
-      this.selectedCustomWatchlistId.set(null);
-    }
   }
 
   stockPrice(symbol: string): string {
@@ -463,16 +322,6 @@ export class WatchlistsComponent {
 
   stockSymbol(stock: StockSummary): string {
     return stock.symbol || normalizeSymbol(stock.stockName);
-  }
-
-  private findStockSummary(stocks: StockSummary[], symbol: string): StockSummary | undefined {
-    const key = symbol.toUpperCase();
-    return stocks.find(
-      (stock) =>
-        stock.symbol?.toUpperCase() === key ||
-        normalizeSymbol(stock.stockName) === key ||
-        stock.stockName.split(' ')[0].toUpperCase() === key
-    );
   }
 
   private marketCapForStock(stock: StockSummary): number | undefined {

@@ -7,10 +7,6 @@
     </div>
   }
 
-  @if (error()) {
-    <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>
-  }
-
   <div class="segmented-control" role="tablist" aria-label="Watchlist type">
     @for (tab of mainTabs; track tab.id) {
       <button
@@ -26,286 +22,245 @@
     }
   </div>
 
-  @if (activeTab() === 'custom') {
-    <div class="flex flex-wrap gap-2">
-      <input [(ngModel)]="newName" placeholder="New watchlist name" class="input-field max-w-xs" />
-      <button type="button" class="btn-primary" (click)="createWatchlist()">Create watchlist</button>
-    </div>
-  }
-
-  @if (isPnlTab() && !state.hasReport()) {
-      <div class="card overflow-hidden p-8 text-center">
-        <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
-        <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to generate watchlists and tier summaries.</p>
+  @if (!state.hasReport()) {
+    <div class="card overflow-hidden p-8 text-center">
+      <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
+      <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L file to generate watchlists and tier summaries.</p>
       <a routerLink="/settings" class="btn-primary mt-4 inline-block">Upload P&amp;L</a>
     </div>
-  } @else if (showStockTable()) {
-      <div class="watchlist-sticky-toolbar">
-        <button
-          type="button"
-          class="watchlist-filter-toggle lg:hidden"
-          (click)="toggleMobileFilters()"
-          [attr.aria-expanded]="mobileFiltersOpen()"
-        >
-          <span class="font-semibold">Filters</span>
-          <span class="watchlist-filter-summary">{{ filterSummary() }}</span>
-          <svg class="h-4 w-4 shrink-0 transition" [class.rotate-180]="mobileFiltersOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+  } @else {
+    <div class="watchlist-sticky-toolbar">
+      <button
+        type="button"
+        class="watchlist-filter-toggle lg:hidden"
+        (click)="toggleMobileFilters()"
+        [attr.aria-expanded]="mobileFiltersOpen()"
+      >
+        <span class="font-semibold">Filters</span>
+        <span class="watchlist-filter-summary">{{ filterSummary() }}</span>
+        <svg class="h-4 w-4 shrink-0 transition" [class.rotate-180]="mobileFiltersOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
-        <div
-          class="watchlist-filters"
-          [class.watchlist-filters-collapsed]="!mobileFiltersOpen()"
-        >
-          <div class="flex min-w-0 flex-wrap items-center gap-2">
-            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
-            <app-trade-type-filter [compact]="true" />
-          </div>
-          <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
-          <div class="flex min-w-0 flex-wrap items-center gap-2">
-            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cap</span>
-            <app-market-cap-filter
-              [selected]="selectedMarketCapTiers()"
-              (selectedChange)="setMarketCapTiers($event)"
-            />
-          </div>
-          <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
-          @if (isPnlTab()) {
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bands</span>
-              <div class="segmented-control">
-                <button
-                  type="button"
-                  class="segment-item !px-2.5 !py-1.5 text-xs"
-                  [class.segment-item-active]="tierMode() === 'cumulative'"
-                  (click)="setTierMode('cumulative')"
-                >
-                  Cumulative
-                </button>
-                <button
-                  type="button"
-                  class="segment-item !px-2.5 !py-1.5 text-xs"
-                  [class.segment-item-active]="tierMode() === 'band'"
-                  (click)="setTierMode('band')"
-                >
-                  Exclusive
-                </button>
-              </div>
-            </div>
-          }
+      <div
+        class="watchlist-filters"
+        [class.watchlist-filters-collapsed]="!mobileFiltersOpen()"
+      >
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
+          <app-trade-type-filter [compact]="true" />
         </div>
-
-        @if (isPnlTab()) {
-          <div class="watchlist-tier-tabs">
-            <div class="tier-segmented-control">
-              @for (tab of visibleAutoTierTabs(); track tab.watchlist.id) {
-                <button
-                  type="button"
-                  class="tier-segment-item"
-                  [class.tier-segment-item-active]="activeAutoWatchlist()?.id === tab.watchlist.id"
-                  (click)="selectAutoTier(tab.watchlist.id)"
-                >
-                  @if (tab.watchlist.id !== allSubtabId) {
-                    <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.watchlist.color"></span>
-                  }
-                  {{ tierTabLabel(tab) }}
-                </button>
-              }
-            </div>
+        <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cap</span>
+          <app-market-cap-filter
+            [selected]="selectedMarketCapTiers()"
+            (selectedChange)="setMarketCapTiers($event)"
+          />
+        </div>
+        <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Bands</span>
+          <div class="segmented-control">
+            <button
+              type="button"
+              class="segment-item !px-2.5 !py-1.5 text-xs"
+              [class.segment-item-active]="tierMode() === 'cumulative'"
+              (click)="setTierMode('cumulative')"
+            >
+              Cumulative
+            </button>
+            <button
+              type="button"
+              class="segment-item !px-2.5 !py-1.5 text-xs"
+              [class.segment-item-active]="tierMode() === 'band'"
+              (click)="setTierMode('band')"
+            >
+              Exclusive
+            </button>
           </div>
-        } @else {
-          <div class="watchlist-tier-tabs">
-            <div class="tier-segmented-control">
-              @for (tab of visibleCustomSubTabs(); track tab.id) {
-                <button
-                  type="button"
-                  class="tier-segment-item"
-                  [class.tier-segment-item-active]="activeCustomSubTabId() === tab.id"
-                  (click)="selectCustomWatchlist(tab.id)"
-                >
-                  <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.color"></span>
-                  {{ tab.label }}
-                </button>
-              }
-            </div>
-          </div>
-
-          @if (activeCustomWatchlist(); as wl) {
-            <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <div class="flex min-w-0 flex-1 gap-2">
-                <input [(ngModel)]="newSymbol" placeholder="Add symbol e.g. RELIANCE" class="input-field min-w-0 flex-1 uppercase" />
-                <button type="button" class="btn-secondary shrink-0" (click)="addSymbol(wl)">Add</button>
-              </div>
-              <button type="button" class="text-xs text-red-500" (click)="deleteWatchlist(wl.id)">Delete list</button>
-            </div>
-          }
-        }
+        </div>
       </div>
 
-      <div class="card overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="stock-table w-full md:min-w-[520px]">
-              <thead>
-                <tr>
-                  <th class="w-10 text-center">#</th>
-                  @for (col of tierStockColumns; track col.key) {
-                    <th [class]="tierColumnClass(col)">
-                      <button
-                        type="button"
-                        class="sort-btn"
-                        [class.sort-btn-active]="tableSort.isActive(col.key)"
-                        (click)="tableSort.toggle(col.key, $event)"
-                      >
-                        {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
-                      </button>
-                    </th>
-                  }
-                  <th class="w-8 md:hidden"></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (stock of tierStocks(); track stock.isin || stock.stockName; let i = $index) {
-                  <tr
-                    class="cursor-pointer transition"
-                    [ngClass]="{ 'bg-kairo-50': isStockExpanded(stock) }"
-                    (click)="toggleStockExpand(stock)"
-                  >
-                    <td class="text-center tabular-nums text-slate-400">{{ i + 1 }}</td>
-                    @for (col of tierStockColumns; track col.key) {
-                      <td [class]="tierColumnClass(col, stock, col.key)">
-                        @switch (col.key) {
-                          @case ('stockName') {
-                            <span class="block truncate font-semibold text-slate-900" [title]="stock.stockName">{{ stock.stockName }}</span>
-                            <div class="text-xs text-slate-400">{{ stockSymbol(stock) }}</div>
-                          }
-                          @case ('realisedPnL') { {{ formatCurrency(stock.realisedPnL) }} }
-                          @case ('allocatedCharges') { {{ formatCurrency(stock.allocatedCharges) }} }
-                          @case ('netPnL') { {{ formatCurrency(stock.netPnL) }} }
-                          @case ('winRate') { {{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }} }
-                        }
-                      </td>
-                    }
-                    <td class="text-slate-400 md:hidden">
-                      <svg class="h-4 w-4 transition" [class.rotate-180]="isStockExpanded(stock)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </td>
-                  </tr>
+      <div class="watchlist-tier-tabs">
+        <div class="tier-segmented-control">
+          @for (tab of visibleAutoTierTabs(); track tab.watchlist.id) {
+            <button
+              type="button"
+              class="tier-segment-item"
+              [class.tier-segment-item-active]="activeAutoWatchlist()?.id === tab.watchlist.id"
+              (click)="selectAutoTier(tab.watchlist.id)"
+            >
+              @if (tab.watchlist.id !== allSubtabId) {
+                <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" [style.background]="tab.watchlist.color"></span>
+              }
+              {{ tierTabLabel(tab) }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
 
-                  @if (isStockExpanded(stock)) {
-                    <tr>
-                      <td [attr.colspan]="tierStockColumns.length + 2" class="!border-t-0 bg-slate-50 p-0">
-                        <div class="border-t-2 border-kairo-500 px-4 py-4">
-                          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <a
-                              [routerLink]="['/stock', stockSymbol(stock)]"
-                              class="text-sm font-semibold text-kairo-600 hover:underline"
-                              (click)="$event.stopPropagation()"
-                            >
-                              View {{ stock.stockName }} details →
-                            </a>
-                            <span class="text-xs text-slate-400">{{ stock.isin || '—' }}</span>
-                          </div>
-                          <div class="mb-3 grid grid-cols-3 gap-2 md:hidden">
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L</div>
-                              <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="pnlClass(stock.realisedPnL)">{{ formatCurrency(stock.realisedPnL) }}</div>
-                            </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Charges</div>
-                              <div class="mt-0.5 text-sm font-bold tabular-nums text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</div>
-                            </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Win rate</div>
-                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }}</div>
-                            </div>
-                          </div>
-                          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trades</div>
-                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.tradeCount }}</div>
-                            </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Quantity</div>
-                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.quantity | number }}</div>
-                            </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Buy value</div>
-                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ formatCurrency(stock.buyValue) }}</div>
-                            </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sell value</div>
-                              <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ formatCurrency(stock.sellValue) }}</div>
-                            </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L %</div>
-                              <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="pnlClass(stock.realisedPnL)">
-                                {{ stock.realisedPnLPct != null ? (stock.realisedPnLPct * 100 | number:'1.1-1') + '%' : '—' }}
-                              </div>
-                            </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">LTP</div>
-                              <div class="mt-0.5 text-sm font-bold text-slate-700">{{ stockPrice(stockSymbol(stock)) }}</div>
-                            </div>
+    <div class="card overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="stock-table w-full md:min-w-[520px]">
+          <thead>
+            <tr>
+              <th class="w-10 text-center">#</th>
+              @for (col of tierStockColumns; track col.key) {
+                <th [class]="tierColumnClass(col)">
+                  <button
+                    type="button"
+                    class="sort-btn"
+                    [class.sort-btn-active]="tableSort.isActive(col.key)"
+                    (click)="tableSort.toggle(col.key, $event)"
+                  >
+                    {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
+                  </button>
+                </th>
+              }
+              <th class="w-8 md:hidden"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (stock of tierStocks(); track stock.isin || stock.stockName; let i = $index) {
+              <tr
+                class="cursor-pointer transition"
+                [ngClass]="{ 'bg-kairo-50': isStockExpanded(stock) }"
+                (click)="toggleStockExpand(stock)"
+              >
+                <td class="text-center tabular-nums text-slate-400">{{ i + 1 }}</td>
+                @for (col of tierStockColumns; track col.key) {
+                  <td [class]="tierColumnClass(col, stock, col.key)">
+                    @switch (col.key) {
+                      @case ('stockName') {
+                        <span class="block truncate font-semibold text-slate-900" [title]="stock.stockName">{{ stock.stockName }}</span>
+                        <div class="text-xs text-slate-400">{{ stockSymbol(stock) }}</div>
+                      }
+                      @case ('realisedPnL') { {{ formatCurrency(stock.realisedPnL) }} }
+                      @case ('allocatedCharges') { {{ formatCurrency(stock.allocatedCharges) }} }
+                      @case ('netPnL') { {{ formatCurrency(stock.netPnL) }} }
+                      @case ('winRate') { {{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }} }
+                    }
+                  </td>
+                }
+                <td class="text-slate-400 md:hidden">
+                  <svg class="h-4 w-4 transition" [class.rotate-180]="isStockExpanded(stock)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </td>
+              </tr>
+
+              @if (isStockExpanded(stock)) {
+                <tr>
+                  <td [attr.colspan]="tierStockColumns.length + 2" class="!border-t-0 bg-slate-50 p-0">
+                    <div class="border-t-2 border-kairo-500 px-4 py-4">
+                      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <a
+                          [routerLink]="['/stock', stockSymbol(stock)]"
+                          class="text-sm font-semibold text-kairo-600 hover:underline"
+                          (click)="$event.stopPropagation()"
+                        >
+                          View {{ stock.stockName }} details →
+                        </a>
+                        <span class="text-xs text-slate-400">{{ stock.isin || '—' }}</span>
+                      </div>
+                      <div class="mb-3 grid grid-cols-3 gap-2 md:hidden">
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="pnlClass(stock.realisedPnL)">{{ formatCurrency(stock.realisedPnL) }}</div>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Charges</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums text-red-600">{{ formatCurrency(stock.allocatedCharges) }}</div>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Win rate</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.winRate != null ? (stock.winRate | number:'1.1-1') + '%' : '—' }}</div>
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trades</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.tradeCount }}</div>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Quantity</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ stock.quantity | number }}</div>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Buy value</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ formatCurrency(stock.buyValue) }}</div>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sell value</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">{{ formatCurrency(stock.sellValue) }}</div>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L %</div>
+                          <div class="mt-0.5 text-sm font-bold tabular-nums" [class]="pnlClass(stock.realisedPnL)">
+                            {{ stock.realisedPnLPct != null ? (stock.realisedPnLPct * 100 | number:'1.1-1') + '%' : '—' }}
                           </div>
                         </div>
-                      </td>
-                    </tr>
+                        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">LTP</div>
+                          <div class="mt-0.5 text-sm font-bold text-slate-700">{{ stockPrice(stockSymbol(stock)) }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              }
+            } @empty {
+              <tr>
+                <td [attr.colspan]="tierStockColumns.length + 2" class="py-10 text-center text-sm text-slate-400">
+                  @if (activeAutoWatchlist()?.id === allSubtabId) {
+                    No {{ activeTab() === 'profitable' ? 'profitable' : 'loss-making' }} stocks found.
+                  } @else {
+                    No stocks in this tier yet.
                   }
-                } @empty {
-                  <tr>
-                    <td [attr.colspan]="tierStockColumns.length + 2" class="py-10 text-center text-sm text-slate-400">
-                      @if (activeTab() === 'custom') {
-                        No stocks in this view yet.
-                      } @else if (activeAutoWatchlist()?.id === allSubtabId) {
-                        No {{ activeTab() === 'profitable' ? 'profitable' : 'loss-making' }} stocks found.
-                      } @else {
-                        No stocks in this tier yet.
-                      }
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    @if (tierSummary(); as summary) {
+      <div class="tier-summary-bar" aria-live="polite">
+        <div class="tier-summary-compact">
+          <span class="tier-summary-tier truncate" [title]="activeViewLabel()">
+            {{ activeViewLabel() }}
+          </span>
+          <span class="tier-summary-kpi">
+            <span class="tier-summary-kpi-label">Net</span>
+            <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.netPnL)">{{ formatCurrency(summary.netPnL) }}</span>
+          </span>
+          <span class="tier-summary-kpi hidden sm:inline-flex">
+            <span class="tier-summary-kpi-label">P&amp;L</span>
+            <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.realisedPnL)">{{ formatCurrency(summary.realisedPnL) }}</span>
+          </span>
+          <span class="tier-summary-kpi hidden md:inline-flex">
+            <span class="tier-summary-kpi-label">Charges</span>
+            <span class="tier-summary-kpi-value tabular-nums text-red-400">{{ formatCurrency(summary.allocatedCharges) }}</span>
+          </span>
+          <span class="tier-summary-kpi hidden lg:inline-flex">
+            <span class="tier-summary-kpi-label">Stocks</span>
+            <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.stockCount }}</span>
+          </span>
+          <span class="tier-summary-kpi hidden lg:inline-flex">
+            <span class="tier-summary-kpi-label">Trades</span>
+            <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.tradeCount }}</span>
+          </span>
+          <span class="tier-summary-kpi hidden sm:inline-flex">
+            <span class="tier-summary-kpi-label">Win</span>
+            <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.winRate.toFixed(1) }}%</span>
+            <span class="tier-summary-kpi-sub">{{ summary.winningTrades }}W/{{ summary.losingTrades }}L</span>
+          </span>
         </div>
       </div>
-
-      @if (tierSummary(); as summary) {
-        <div class="tier-summary-bar" aria-live="polite">
-          <div class="tier-summary-compact">
-            <span class="tier-summary-tier truncate" [title]="activeViewLabel()">
-              {{ activeViewLabel() }}
-            </span>
-            <span class="tier-summary-kpi">
-              <span class="tier-summary-kpi-label">Net</span>
-              <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.netPnL)">{{ formatCurrency(summary.netPnL) }}</span>
-            </span>
-            <span class="tier-summary-kpi hidden sm:inline-flex">
-              <span class="tier-summary-kpi-label">P&amp;L</span>
-              <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.realisedPnL)">{{ formatCurrency(summary.realisedPnL) }}</span>
-            </span>
-            <span class="tier-summary-kpi hidden md:inline-flex">
-              <span class="tier-summary-kpi-label">Charges</span>
-              <span class="tier-summary-kpi-value tabular-nums text-red-400">{{ formatCurrency(summary.allocatedCharges) }}</span>
-            </span>
-            <span class="tier-summary-kpi hidden lg:inline-flex">
-              <span class="tier-summary-kpi-label">Stocks</span>
-              <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.stockCount }}</span>
-            </span>
-            <span class="tier-summary-kpi hidden lg:inline-flex">
-              <span class="tier-summary-kpi-label">Trades</span>
-              <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.tradeCount }}</span>
-            </span>
-            <span class="tier-summary-kpi hidden sm:inline-flex">
-              <span class="tier-summary-kpi-label">Win</span>
-              <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.winRate.toFixed(1) }}%</span>
-              <span class="tier-summary-kpi-sub">{{ summary.winningTrades }}W/{{ summary.losingTrades }}L</span>
-            </span>
-          </div>
-        </div>
-      }
-  } @else if (activeTab() === 'custom' && !customWatchlists().length) {
-    <p class="text-center text-slate-500">No custom watchlists yet. Create one above.</p>
+    }
   }
 </div>

@@ -1,12 +1,22 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, doc, writeBatch } from '@angular/fire/firestore';
+import {
+  Firestore,
+  collection,
+  collectionData,
+  doc,
+  orderBy,
+  query,
+  writeBatch,
+} from '@angular/fire/firestore';
+import { Observable, of, switchMap } from 'rxjs';
 import { AuthService } from './auth.service';
 
 export interface UniverseEntry {
   symbol: string;
   name?: string;
   isin?: string;
-  source: 'pnl_upload' | 'seed' | 'manual';
+  exchange?: string;
+  source: 'pnl_upload' | 'seed' | 'manual' | 'exchange_seed';
   updatedAt: number;
 }
 
@@ -14,6 +24,16 @@ export interface UniverseEntry {
 export class UniverseService {
   private firestore = inject(Firestore);
   private auth = inject(AuthService);
+
+  watchAll(): Observable<UniverseEntry[]> {
+    return this.auth.user$.pipe(
+      switchMap((user) => {
+        if (!user) return of([]);
+        const q = query(collection(this.firestore, 'universe'), orderBy('symbol', 'asc'));
+        return collectionData(q, { idField: 'symbol' }) as Observable<UniverseEntry[]>;
+      })
+    );
+  }
 
   async syncSymbols(
     symbols: Array<{ symbol: string; name?: string; isin?: string }>,

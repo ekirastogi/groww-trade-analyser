@@ -121,6 +121,13 @@ func main() {
 						return err
 					}
 					return publisher.MarkJobCompleted(ctx, jobID, 1)
+				case "seed_universe":
+					logx.Info("Processing Firestore job %s (seed_universe)", jobID)
+					count, err := scheduler.SeedUniverseFromExchanges(ctx)
+					if err != nil {
+						return err
+					}
+					return publisher.MarkJobCompleted(ctx, jobID, count)
 				default:
 					return fmt.Errorf("unknown job type: %s", jobType)
 				}

@@ -1,4 +1,13 @@
 <div class="space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <p class="text-sm text-slate-500">
+      {{ universe().length ? universe().length + ' symbols in universe' : 'Import NSE/BSE symbols once to enable search.' }}
+    </p>
+    <button type="button" class="btn-secondary" [disabled]="seedBusy()" (click)="importExchangeUniverse()">
+      {{ seedBusy() ? 'Importing…' : 'Import NSE & BSE symbols' }}
+    </button>
+  </div>
+
   <div class="card p-4">
     <h2 class="mb-4 text-lg font-bold text-slate-900">{{ editingSymbol() ? 'Edit stock' : 'Add stock' }}</h2>
     @if (error()) {
@@ -10,7 +19,19 @@
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <label class="block text-sm">
         <span class="text-slate-500">Symbol *</span>
-        <input class="input-field mt-1 w-full uppercase" [(ngModel)]="form.symbol" [readonly]="!!editingSymbol()" />
+        <input
+          class="input-field mt-1 w-full uppercase"
+          [ngModel]="symbolQuery()"
+          (ngModelChange)="onSymbolQuery($event)"
+          [readonly]="!!editingSymbol()"
+          list="registry-universe-symbols"
+          placeholder="Search symbol or name…"
+        />
+        <datalist id="registry-universe-symbols">
+          @for (s of symbolOptions(); track s.symbol) {
+            <option [value]="s.symbol">{{ s.name }}</option>
+          }
+        </datalist>
       </label>
       <label class="block text-sm">
         <span class="text-slate-500">Name</span>

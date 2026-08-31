@@ -9,95 +9,30 @@
         (ngModelChange)="onDateChange($event)"
       />
     </label>
-    <div class="grid grid-cols-3 gap-3 text-center text-sm">
-      <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
-        <div class="text-xs text-slate-500">Est. P&L</div>
-        <div class="font-bold tabular-nums" [class]="pnlClass(daySummary().estimatedPnL)">{{ fmt(daySummary().estimatedPnL) }}</div>
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="grid grid-cols-3 gap-3 text-center text-sm">
+        <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
+          <div class="text-xs text-slate-500">Est. P&L</div>
+          <div class="font-bold tabular-nums" [class]="pnlClass(daySummary().estimatedPnL)">{{ fmt(daySummary().estimatedPnL) }}</div>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
+          <div class="text-xs text-slate-500">Realized</div>
+          <div class="font-bold tabular-nums" [class]="pnlClass(daySummary().realizedPnL)">{{ fmt(daySummary().realizedPnL) }}</div>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
+          <div class="text-xs text-slate-500">Trades</div>
+          <div class="font-bold">{{ daySummary().tradeCount }} <span class="text-xs font-normal text-slate-400">({{ daySummary().executedCount }} done)</span></div>
+        </div>
       </div>
-      <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
-        <div class="text-xs text-slate-500">Realized</div>
-        <div class="font-bold tabular-nums" [class]="pnlClass(daySummary().realizedPnL)">{{ fmt(daySummary().realizedPnL) }}</div>
-      </div>
-      <div class="rounded-xl border border-slate-200 bg-white px-4 py-2">
-        <div class="text-xs text-slate-500">Trades</div>
-        <div class="font-bold">{{ daySummary().tradeCount }} <span class="text-xs font-normal text-slate-400">({{ daySummary().executedCount }} done)</span></div>
-      </div>
+      <a
+        routerLink="/trade-plans/new"
+        [queryParams]="{ date: tradeDate() }"
+        class="btn-primary"
+      >
+        Add plan
+      </a>
     </div>
   </div>
-
-  <div class="segmented-control w-fit">
-    <button type="button" class="segment-item" [class.segment-item-active]="activeTab() === 'manual'" (click)="setTab('manual')">Manual</button>
-    <button type="button" class="segment-item" [class.segment-item-active]="activeTab() === 'auto'" (click)="setTab('auto')">Auto</button>
-  </div>
-
-  @if (error()) {
-    <p class="text-sm text-red-600">{{ error() }}</p>
-  }
-
-  @if (activeTab() === 'manual') {
-    <div class="card p-4">
-      <h3 class="mb-3 font-semibold text-slate-900">Add trade plan</h3>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label class="block text-sm">
-          <span class="text-slate-500">Stock</span>
-          <select class="input-field mt-1 w-full" [(ngModel)]="form.symbol">
-            <option value="">Select…</option>
-            @for (s of registry(); track s.symbol) {
-              <option [value]="s.symbol">{{ s.symbol }} — {{ s.name }}</option>
-            }
-          </select>
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Segment</span>
-          <select class="input-field mt-1 w-full" [ngModel]="form.segment" (ngModelChange)="onSegmentChange($event)">
-            <option value="intraday">Intraday</option>
-            <option value="delivery">Delivery</option>
-          </select>
-        </label>
-        @if (form.segment === 'intraday') {
-          <label class="block text-sm">
-            <span class="text-slate-500">Direction</span>
-            <select class="input-field mt-1 w-full" [(ngModel)]="form.direction">
-              <option value="long">Long</option>
-              <option value="short">Short</option>
-            </select>
-          </label>
-        }
-        <label class="block text-sm">
-          <span class="text-slate-500">Quantity</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.quantity" />
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Entry price</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.entryPrice" />
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Target / exit</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.targetPrice" />
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Stop loss</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.stopLoss" />
-        </label>
-      </div>
-      <p class="mt-3 text-sm text-slate-600">Estimated P&L: <span class="font-bold tabular-nums" [class]="pnlClass(estimatedPreview())">{{ fmt(estimatedPreview()) }}</span></p>
-      <button type="button" class="btn-primary mt-3" [disabled]="busy()" (click)="addTrade('manual')">Add to plan</button>
-    </div>
-  } @else {
-    <div class="card p-4">
-      <h3 class="mb-3 font-semibold text-slate-900">Pick from registry</h3>
-      <p class="mb-3 text-sm text-slate-500">Select a stock to pre-fill entry/target from your registry, then add quantity on the Manual tab.</p>
-      <div class="flex flex-wrap gap-2">
-        @for (s of registry(); track s.symbol) {
-          <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:border-kairo-300" (click)="selectRegistrySymbol(s.symbol)">
-            {{ s.symbol }} · {{ fmt(s.currentPrice) }}
-          </button>
-        } @empty {
-          <p class="text-sm text-slate-400">Add stocks in Stock registry first.</p>
-        }
-      </div>
-    </div>
-  }
 
   <div class="card overflow-hidden">
     <h3 class="border-b border-slate-100 px-4 py-3 font-semibold text-slate-900">Plan for {{ tradeDate() }}</h3>
@@ -164,7 +99,10 @@
             </tr>
           } @empty {
             <tr>
-              <td colspan="10" class="py-8 text-center text-sm text-slate-400">No trades planned for this date.</td>
+              <td colspan="10" class="py-8 text-center text-sm text-slate-400">
+                No trades planned for this date.
+                <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="ml-1 text-kairo-600 hover:underline">Add one</a>
+              </td>
             </tr>
           }
         </tbody>

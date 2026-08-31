@@ -9,7 +9,7 @@ import { AuthService } from './auth.service';
 import { Observable, interval, startWith, switchMap, from, map, catchError, of } from 'rxjs';
 
 export type WorkerJobStatus = 'pending' | 'running' | 'completed' | 'failed';
-export type WorkerJobType = 'hot_ingest' | 'symbol_ingest';
+export type WorkerJobType = 'hot_ingest' | 'symbol_ingest' | 'seed_universe';
 
 export interface WorkerJob {
   id: string;
@@ -75,6 +75,10 @@ export class WorkerJobService {
     const sym = symbol.trim().toUpperCase();
     if (!sym) throw new Error('Symbol is required');
     return this.requestJob('symbol_ingest', sym);
+  }
+
+  async requestSeedUniverse(): Promise<string> {
+    return this.requestJob('seed_universe');
   }
 
   private async requestJob(type: WorkerJobType, symbol?: string): Promise<string> {
