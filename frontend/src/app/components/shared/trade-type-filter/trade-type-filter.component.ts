@@ -1,6 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReportStateService } from '../../../services/report-state.service';
+import { FilterUrlService } from '../../../services/filter-url.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../../models/trade.models';
 
 @Component({
@@ -52,6 +53,7 @@ import { TRADE_TYPE_LABELS, TradeType } from '../../../models/trade.models';
 })
 export class TradeTypeFilterComponent {
   readonly state = inject(ReportStateService);
+  private filterUrl = inject(FilterUrlService);
   readonly labels = TRADE_TYPE_LABELS;
   compact = input(false);
 
@@ -89,10 +91,10 @@ export class TradeTypeFilterComponent {
       next = [...current.filter((t) => t !== 'all'), type];
     }
 
-    this.state.applyFilters(this.state.startDate(), this.state.endDate(), next);
+    this.filterUrl.updateTradeTypes(next);
   }
 
   resetFilters(): void {
-    this.state.resetFilters();
+    this.filterUrl.resetFilters();
   }
 }

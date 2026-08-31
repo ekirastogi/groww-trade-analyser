@@ -1,21 +1,22 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, OnDestroy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { filter, Subscription } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { AuthService } from '../../services/auth.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { LazyTradeLoaderService } from '../../services/lazy-trade-loader.service';
+import { FilteredStockService } from '../../services/filtered-stock.service';
+import { FilterUrlService } from '../../services/filter-url.service';
 import { Watchlist } from '../../models/watchlist.models';
 import { StockSummary, TRADE_TYPE_LABELS, Trade } from '../../models/trade.models';
 import { StockSnapshot } from '../../models/market.models';
 import { formatCurrency, formatDate, pnlClass } from '../../utils/format.utils';
 import {
   getPnlWatchlistTier,
-  loadPnlTierMode,
   PNL_WATCHLIST_TIERS,
   PnlTierMode,
-  savePnlTierMode,
   stockSummariesForPnlTier,
   tierDisplayName,
   tierShortLabel,
@@ -25,6 +26,7 @@ import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { MarketCapFilterComponent } from '../shared/market-cap-filter/market-cap-filter.component';
 import { MARKET_CAP_LABELS, MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
+import { FILTER_QUERY_KEYS, readWatchlistFilters, serializeMarketCapTiers } from '../../utils/filter-url.utils';
 
 const ALL_SUBTAB_ID = '__all__';
 
@@ -56,16 +58,36 @@ interface AutoTierTab {
   imports: [CommonModule, RouterLink, TradeTypeFilterComponent, MarketCapFilterComponent],
   templateUrl: './watchlists.component.html',
 })
-export class WatchlistsComponent implements OnInit {
+export class WatchlistsComponent implements OnInit, OnDestroy {
   private stockSvc = inject(StockFirestoreService);
+  private router = inject(Router);
+  private filterUrl = inject(FilterUrlService);
+  private navSub?: Subscription;
   readonly auth = inject(AuthService);
   readonly state = inject(ReportStateService);
   readonly lazyTrades = inject(LazyTradeLoaderService);
+  readonly filteredStocks = inject(FilteredStockService);
 
   stocks = toSignal(this.stockSvc.watchMarketCatalog(), { initialValue: [] as StockSnapshot[] });
 
   async ngOnInit(): Promise<void> {
+    this.syncWatchlistFromUrl();
+    this.navSub = this.router.events
+      .pipe(filter((event) => event instanceof NavigationEnd))
+      .subscribe(() => this.syncWatchlistFromUrl());
     await this.state.ensureLoadedFromFirebase();
+  }
+
+  ngOnDestroy(): void {
+    this.navSub?.unsubscribe();
+  }
+
+  private syncWatchlistFromUrl(): void {
+    const wl = readWatchlistFilters(this.router.routerState.snapshot.root.queryParamMap);
+    if (wl.side) this.activeTab.set(wl.side);
+    if (wl.bands) this.tierMode.set(wl.bands);
+    this.selectedAutoTierId.set(wl.tier ?? null);
+    this.selectedMarketCapTiers.set(wl.marketCapTiers);
   }
 
   readonly formatDate = formatDate;
@@ -78,7 +100,7 @@ export class WatchlistsComponent implements OnInit {
   readonly allSubtabId = ALL_SUBTAB_ID;
 
   activeTab = signal<WatchlistTab>('losing');
-  tierMode = signal<PnlTierMode>(loadPnlTierMode());
+  tierMode = signal<PnlTierMode>('cumulative');
   selectedAutoTierId = signal<string | null>(null);
   expandedStockKey = signal<string | null>(null);
   selectedMarketCapTiers = signal<MarketCapTier[]>([]);
@@ -234,14 +256,21 @@ export class WatchlistsComponent implements OnInit {
     this.selectedAutoTierId.set(null);
     this.expandedStockKey.set(null);
     this.lazyTrades.clear();
+    this.filterUrl.patchWatchlistQuery({
+      [FILTER_QUERY_KEYS.side]: tab,
+      [FILTER_QUERY_KEYS.tier]: null,
+    });
   }
 
   setTierMode(mode: PnlTierMode): void {
     this.tierMode.set(mode);
-    savePnlTierMode(mode);
     this.selectedAutoTierId.set(null);
     this.expandedStockKey.set(null);
     this.lazyTrades.clear();
+    this.filterUrl.patchWatchlistQuery({
+      [FILTER_QUERY_KEYS.bands]: mode === 'cumulative' ? null : mode,
+      [FILTER_QUERY_KEYS.tier]: null,
+    });
   }
 
   toggleMobileFilters(): void {
@@ -253,12 +282,18 @@ export class WatchlistsComponent implements OnInit {
     this.selectedAutoTierId.set(null);
     this.expandedStockKey.set(null);
     this.lazyTrades.clear();
+    this.filterUrl.patchWatchlistQuery({
+      [FILTER_QUERY_KEYS.cap]: serializeMarketCapTiers(tiers),
+    });
   }
 
   selectAutoTier(id: string): void {
     this.selectedAutoTierId.set(id);
     this.expandedStockKey.set(null);
     this.lazyTrades.clear();
+    this.filterUrl.patchWatchlistQuery({
+      [FILTER_QUERY_KEYS.tier]: id === ALL_SUBTAB_ID ? null : id,
+    });
   }
 
   stockRowKey(stock: StockSummary): string {
@@ -342,9 +377,7 @@ export class WatchlistsComponent implements OnInit {
   }
 
   private stockSummaries(): StockSummary[] {
-    const report = this.state.report();
-    if (report?.stockSummary?.length) return report.stockSummary;
-    return this.state.analysis()?.stocks ?? [];
+    return this.filteredStocks.summaries();
   }
 
   private clientCode(): string | null {

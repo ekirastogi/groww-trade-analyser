@@ -7,6 +7,7 @@ import {
   Trade,
   TradeType,
   UploadRecord,
+  DailyAnalyticsRow,
 } from '../models/trade.models';
 import { AuthService } from './auth.service';
 import { ClientAccountService } from './client-account.service';
@@ -23,6 +24,7 @@ import {
   enrichTradeWithCharges,
   normalizeSymbol,
 } from '../utils/upload-merge.utils';
+import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
 
 export interface UploadResult {
   uploadId: string;
@@ -175,6 +177,43 @@ function tradeToRow(trade: StoredTrade, userId: string): Record<string, unknown>
     netPnl: trade.netPnL,
     clientName: trade.clientName,
     createdAt: trade.createdAt,
+  });
+}
+
+function dailyAnalyticsFromRow(row: Record<string, unknown>): DailyAnalyticsRow {
+  const camel = rowToCamel<Record<string, unknown>>(row);
+  return {
+    sellDate: String(camel['sellDate'] ?? ''),
+    tradeType: (camel['tradeType'] as TradeType) ?? 'delivery',
+    tradeCount: Number(camel['tradeCount'] ?? 0),
+    totalBuyValue: numField(camel, 'totalBuyValue'),
+    totalSellValue: numField(camel, 'totalSellValue'),
+    realisedPnL: numField(camel, 'realisedPnL', 'realisedPnl'),
+    allocatedCharges: numField(camel, 'allocatedCharges'),
+    netPnL: numField(camel, 'netPnL', 'netPnl'),
+    winningTrades: Number(camel['winningTrades'] ?? 0),
+    losingTrades: Number(camel['losingTrades'] ?? 0),
+  };
+}
+
+function dailyAnalyticsToRow(
+  row: DailyAnalyticsRow,
+  userId: string,
+  clientCode: string
+): Record<string, unknown> {
+  return objectToSnake({
+    userId,
+    clientCode,
+    sellDate: row.sellDate,
+    tradeType: row.tradeType,
+    tradeCount: row.tradeCount,
+    totalBuyValue: row.totalBuyValue,
+    totalSellValue: row.totalSellValue,
+    realisedPnl: row.realisedPnL,
+    allocatedCharges: row.allocatedCharges,
+    netPnl: row.netPnL,
+    winningTrades: row.winningTrades,
+    losingTrades: row.losingTrades,
   });
 }
 
@@ -495,6 +534,24 @@ export class TradeLedgerService {
     return all;
   }
 
+  async getFilteredStockSummaries(
+    clientCode: string,
+    filters: { startDate?: string; endDate?: string; tradeTypes?: TradeType[] }
+  ): Promise<StockSummary[]> {
+    const trades = await this.queryTrades(clientCode, {
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      tradeTypes: filters.tradeTypes,
+    });
+    if (!trades.length) return [];
+
+    const clients = await this.clientSvc.listClients();
+    const client = clients.find((c) => c.clientCode === clientCode);
+    const clientName = client?.clientName ?? clientCode;
+    const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
+    return profiles.map((profile) => this.profileToStockSummary(profile));
+  }
+
   mergeTradesIntoReport(report: Report, trades: StoredTrade[]): Report {
     const merged = this.buildReportFromStoredData(
       trades,
@@ -552,6 +609,9 @@ export class TradeLedgerService {
 
     const loadTrades = options.loadTrades !== false;
     const trades = loadTrades ? await this.getAllTrades(clientCode) : [];
+    const dailyAnalytics = loadTrades
+      ? undefined
+      : await this.getAnalyticsDaily(clientCode);
 
     const report = this.buildReportFromStoredData(
       trades,
@@ -562,6 +622,7 @@ export class TradeLedgerService {
       {
         totalTradeCount: totalTradeCount || client?.tradeCount || trades.length,
         tradesLoaded: loadTrades && trades.length > 0,
+        dailyAnalytics,
       }
     );
 
@@ -636,6 +697,7 @@ export class TradeLedgerService {
 
     const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
     await this.writeStockProfiles(clientCode, profiles);
+    await this.writeAnalyticsDaily(clientCode, buildDailyAnalyticsFromTrades(trades));
     await this.watchlists.syncPnlTierWatchlists(profiles);
     await this.registry.syncSymbols(
       profiles.map((p) => ({ symbol: p.symbol, name: p.stockName, isin: p.isin })),
@@ -661,7 +723,7 @@ export class TradeLedgerService {
     clientName: string,
     uploadMeta: UploadRecord | Omit<UploadRecord, 'id'> | undefined,
     stockProfiles?: StockProfile[],
-    meta?: { totalTradeCount?: number; tradesLoaded?: boolean }
+    meta?: { totalTradeCount?: number; tradesLoaded?: boolean; dailyAnalytics?: DailyAnalyticsRow[] }
   ): Report {
     const profiles =
       stockProfiles ??
@@ -705,7 +767,9 @@ export class TradeLedgerService {
 
     const typeSet = new Set<TradeType>(['all']);
     plainTrades.forEach((t) => typeSet.add(t.tradeType));
-    const dates = plainTrades.map((t) => t.sellDate).sort();
+    const dates = plainTrades.length
+      ? plainTrades.map((t) => t.sellDate).sort()
+      : (meta?.dailyAnalytics ?? []).map((row) => row.sellDate).sort();
     const allocatedCharges =
       trades.length > 0
         ? trades.reduce((sum, trade) => sum + trade.allocatedCharges, 0)
@@ -739,7 +803,53 @@ export class TradeLedgerService {
         : DEFAULT_REPORT_TRADE_TYPES,
       totalTradeCount,
       tradesLoaded: meta?.tradesLoaded ?? plainTrades.length > 0,
+      dailyAnalytics: meta?.dailyAnalytics,
     };
+  }
+
+  async getAnalyticsDaily(clientCode: string): Promise<DailyAnalyticsRow[]> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+
+    const pageSize = 1000;
+    const all: DailyAnalyticsRow[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.supabase.client
+        .from('analytics_daily')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('client_code', clientCode)
+        .order('sell_date', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data?.length) break;
+      all.push(...data.map((row) => dailyAnalyticsFromRow(row)));
+      if (data.length < pageSize) break;
+    }
+    return all;
+  }
+
+  private async writeAnalyticsDaily(
+    clientCode: string,
+    rows: DailyAnalyticsRow[]
+  ): Promise<void> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return;
+
+    const { error: deleteError } = await this.supabase.client
+      .from('analytics_daily')
+      .delete()
+      .eq('user_id', uid)
+      .eq('client_code', clientCode);
+    if (deleteError) throw deleteError;
+
+    for (let i = 0; i < rows.length; i += UPSERT_BATCH_LIMIT) {
+      const chunk = rows
+        .slice(i, i + UPSERT_BATCH_LIMIT)
+        .map((row) => dailyAnalyticsToRow(row, uid, clientCode));
+      const { error } = await this.supabase.client.from('analytics_daily').upsert(chunk);
+      if (error) throw error;
+    }
   }
 
   private buildStockProfilesFromTrades(
@@ -883,11 +993,12 @@ export class TradeLedgerService {
     await this.deleteTableRows('trades', uid, clientCode);
     await this.deleteTableRows('uploads', uid, clientCode);
     await this.deleteTableRows('stock_profiles', uid, clientCode);
+    await this.deleteTableRows('analytics_daily', uid, clientCode);
     await this.clientSvc.deleteClient(clientCode);
   }
 
   private async deleteTableRows(
-    table: 'trades' | 'uploads' | 'stock_profiles',
+    table: 'trades' | 'uploads' | 'stock_profiles' | 'analytics_daily',
     userId: string,
     clientCode: string
   ): Promise<void> {

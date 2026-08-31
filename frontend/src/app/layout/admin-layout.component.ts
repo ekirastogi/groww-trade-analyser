@@ -6,6 +6,7 @@ import { ReportStateService } from '../services/report-state.service';
 import { PageShellService } from '../services/page-shell.service';
 import { AuthService } from '../services/auth.service';
 import { NotificationService } from '../services/notification.service';
+import { FilterUrlService } from '../services/filter-url.service';
 import { BrandLogoComponent } from '../components/shared/brand-logo/brand-logo.component';
 import { BRAND } from '../constants/brand';
 
@@ -40,6 +41,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   readonly auth = inject(AuthService);
   readonly brand = BRAND;
   private notifications = inject(NotificationService);
+  private filterUrl = inject(FilterUrlService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private navSub?: Subscription;
@@ -174,6 +176,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     }
 
     await this.auth.whenReady();
+    this.filterUrl.start();
     this.state.startPeriodicRefresh();
   }
 

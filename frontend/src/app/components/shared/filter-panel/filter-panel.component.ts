@@ -2,6 +2,7 @@ import { Component, inject, signal, effect, output, input } from '@angular/core'
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ReportStateService } from '../../../services/report-state.service';
+import { FilterUrlService } from '../../../services/filter-url.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../../models/trade.models';
 
 @Component({
@@ -12,6 +13,7 @@ import { TRADE_TYPE_LABELS, TradeType } from '../../../models/trade.models';
 })
 export class FilterPanelComponent {
   readonly state = inject(ReportStateService);
+  private filterUrl = inject(FilterUrlService);
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
 
   collapsible = input(false);
@@ -47,7 +49,7 @@ export class FilterPanelComponent {
   }
 
   applyFilters(): void {
-    this.state.applyFilters(
+    this.filterUrl.updateDateRange(
       this.localStartDate(),
       this.localEndDate(),
       this.localTradeTypes(),
@@ -58,7 +60,7 @@ export class FilterPanelComponent {
   }
 
   resetFilters(): void {
-    this.state.resetFilters();
+    this.filterUrl.resetFilters();
     this.filtersChanged.emit();
   }
 

@@ -67,6 +67,20 @@ export interface StockSummary {
   winRate?: number;
 }
 
+/** Pre-aggregated daily bucket stored in Supabase (sell date × trade type). */
+export interface DailyAnalyticsRow {
+  sellDate: string;
+  tradeType: TradeType;
+  tradeCount: number;
+  totalBuyValue: number;
+  totalSellValue: number;
+  realisedPnL: number;
+  allocatedCharges: number;
+  netPnL: number;
+  winningTrades: number;
+  losingTrades: number;
+}
+
 export interface PeriodBucket {
   period: string;
   label: string;
@@ -92,6 +106,8 @@ export interface Report {
   /** Authoritative trade count from DB (may exceed trades.length while trades load lazily). */
   totalTradeCount?: number;
   tradesLoaded?: boolean;
+  /** Pre-aggregated daily rows from Supabase (powers charts without loading all trades). */
+  dailyAnalytics?: DailyAnalyticsRow[];
 }
 
 export interface ReportHistoryEntry {

@@ -11,6 +11,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
+import { FilteredStockService } from '../../services/filtered-stock.service';
 import { StockSummary } from '../../models/trade.models';
 import { formatCurrency } from '../../utils/format.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
@@ -64,6 +65,7 @@ interface HeatmapSection {
 })
 export class HeatmapComponent implements OnInit {
   readonly reportState = inject(ReportStateService);
+  readonly filteredStocks = inject(FilteredStockService);
   readonly fmt = formatCurrency;
   readonly heatmapHeight = HEATMAP_HEIGHT_PX;
 
@@ -71,7 +73,7 @@ export class HeatmapComponent implements OnInit {
   private paneWidth = signal(0);
   private paneHeight = signal(0);
 
-  private stockRows = computed((): StockSummary[] => this.reportState.analysis()?.stocks ?? []);
+  private stockRows = computed((): StockSummary[] => this.filteredStocks.summaries());
 
   profitableSection = computed(() =>
     this.buildSection(this.stockRows().filter((s) => s.netPnL > 0), true)

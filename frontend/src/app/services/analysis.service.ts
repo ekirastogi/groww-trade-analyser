@@ -8,6 +8,11 @@ import {
   Trade,
   TradeType,
 } from '../models/trade.models';
+import {
+  buildSummaryFromDaily,
+  filterDailyAnalytics,
+  rollupDailyToPeriodBuckets,
+} from '../utils/analytics-aggregation.utils';
 
 @Injectable({ providedIn: 'root' })
 export class AnalysisService {
@@ -20,22 +25,40 @@ export class AnalysisService {
       ? report.charges.total / reportTotalSell
       : 0;
 
-    const trades = this.filterTrades(report.trades, opts);
+    const hasTrades = report.trades.length > 0;
+    const dailyRows = filterDailyAnalytics(report.dailyAnalytics ?? [], opts);
+    const hasDaily = dailyRows.length > 0;
+
+    const trades = hasTrades ? this.filterTrades(report.trades, opts) : [];
     const stocks =
-      report.trades.length > 0
+      hasTrades
         ? this.aggregateByStock(trades, chargeRatio)
         : this.filterStockSummary(report.stockSummary, opts);
 
-    const summary =
-      report.trades.length > 0
-        ? this.buildSummary(trades, chargeRatio)
+    const summaryFromDaily = hasDaily ? buildSummaryFromDaily(dailyRows) : null;
+    const summary = hasTrades
+      ? this.buildSummary(trades, chargeRatio)
+      : summaryFromDaily
+        ? { ...summaryFromDaily, chargeRatio }
         : this.buildSummaryFromStocks(stocks, chargeRatio);
 
     return {
       summary,
-      daily: report.trades.length > 0 ? this.aggregateByPeriod(trades, chargeRatio, 'daily') : [],
-      weekly: report.trades.length > 0 ? this.aggregateByPeriod(trades, chargeRatio, 'weekly') : [],
-      monthly: report.trades.length > 0 ? this.aggregateByPeriod(trades, chargeRatio, 'monthly') : [],
+      daily: hasTrades
+        ? this.aggregateByPeriod(trades, chargeRatio, 'daily')
+        : hasDaily
+          ? rollupDailyToPeriodBuckets(dailyRows, 'daily')
+          : [],
+      weekly: hasTrades
+        ? this.aggregateByPeriod(trades, chargeRatio, 'weekly')
+        : hasDaily
+          ? rollupDailyToPeriodBuckets(dailyRows, 'weekly')
+          : [],
+      monthly: hasTrades
+        ? this.aggregateByPeriod(trades, chargeRatio, 'monthly')
+        : hasDaily
+          ? rollupDailyToPeriodBuckets(dailyRows, 'monthly')
+          : [],
       stocks,
       charges: report.charges,
       filteredTrades: trades,
@@ -131,10 +154,6 @@ export class AnalysisService {
 
   private tradeCharge(trade: Trade, chargeRatio: number): number {
     return trade.allocatedCharges ?? trade.sellValue * chargeRatio;
-  }
-
-  private tradeNetPnL(trade: Trade, chargeRatio: number): number {
-    return trade.netPnL ?? trade.realisedPnL - this.tradeCharge(trade, chargeRatio);
   }
 
   private aggregateByPeriod(

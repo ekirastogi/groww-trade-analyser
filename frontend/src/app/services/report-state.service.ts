@@ -40,6 +40,7 @@ export class ReportStateService {
   private clientSvc = inject(ClientAccountService);
   private auth = inject(AuthService);
   private periodicRefreshStarted = false;
+  private tradesLoadPromise: Promise<void> | null = null;
 
   report = signal<Report | null>(null);
   reportHistory = signal<ReportHistoryEntry[]>(this.loadHistoryFromStorage());
@@ -104,6 +105,9 @@ export class ReportStateService {
           report.tradesLoaded = true;
           report.totalTradeCount = current.totalTradeCount ?? current.trades.length;
         }
+        if (current?.dailyAnalytics?.length && !report.dailyAnalytics?.length) {
+          report.dailyAnalytics = current.dailyAnalytics;
+        }
         this.applyFirebaseReport(report);
       }
     } catch {
@@ -131,6 +135,58 @@ export class ReportStateService {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** Load individual trades when the report only has stock-level aggregates (Firebase fast path). */
+  async ensureTradesLoaded(): Promise<void> {
+    const report = this.report();
+    if (!report) return;
+    if (report.tradesLoaded && report.trades.length > 0) return;
+    if (this.dataSource() === 'local' && report.trades.length > 0) {
+      this.report.update((current) =>
+        current ? { ...current, tradesLoaded: true } : current
+      );
+      return;
+    }
+
+    const clientCode = this.activeClientCode() ?? report.summary.clientCode;
+    if (!clientCode) return;
+
+    const needsTrades =
+      (report.totalTradeCount ?? 0) > 0 ||
+      (report.stockSummary?.length ?? 0) > 0;
+    if (!needsTrades) return;
+
+    if (this.tradesLoadPromise) {
+      await this.tradesLoadPromise;
+      return;
+    }
+
+    this.tradesLoading.set(true);
+    this.tradesLoadPromise = (async () => {
+      try {
+        const trades = await this.ledger.getAllTrades(clientCode);
+        if (!trades.length) return;
+
+        const current = this.report();
+        if (!current) return;
+
+        const merged = this.ledger.mergeTradesIntoReport(current, trades);
+        merged.tradesLoaded = true;
+        merged.totalTradeCount = current.totalTradeCount ?? trades.length;
+        merged.summary = {
+          ...merged.summary,
+          period: current.summary.period,
+          unrealisedPnL: current.summary.unrealisedPnL,
+        };
+        this.applyFirebaseReport(merged);
+      } finally {
+        this.tradesLoading.set(false);
+        this.tradesLoadPromise = null;
+      }
+    })();
+
+    await this.tradesLoadPromise;
   }
 
   async ensureLoadedFromFirebase(forceRefresh = false): Promise<void> {
@@ -255,12 +311,12 @@ export class ReportStateService {
   }
 
   private applyReport(report: Report): void {
+    const hadReport = !!this.report();
     this.report.set(report);
-    this.startDate.set(report.dateRange.min);
-    this.endDate.set(report.dateRange.max);
-    this.selectedTradeTypes.set(defaultTradeTypesForReport(report));
-    this.chartPeriod.set('daily');
-    this.topStocksCount.set(10);
+    if (!hadReport) {
+      this.startDate.set(report.dateRange.min);
+      this.endDate.set(report.dateRange.max);
+    }
   }
 
   applyFirebaseReport(report: Report): void {
@@ -294,22 +350,24 @@ export class ReportStateService {
     end: string,
     types: TradeType[],
     chartPeriod?: 'daily' | 'weekly' | 'monthly',
-    topStocks?: number
+    topStocks?: number,
+    options: { syncUrl?: boolean } = {}
   ): void {
     this.startDate.set(start);
     this.endDate.set(end);
     this.selectedTradeTypes.set(types);
     if (chartPeriod) this.chartPeriod.set(chartPeriod);
     if (topStocks) this.topStocksCount.set(topStocks);
+    void options;
   }
 
-  resetFilters(): void {
+  resetFilters(defaultTypes: TradeType[] = DEFAULT_TRADE_TYPES): void {
     const report = this.report();
     if (report) {
       this.startDate.set(report.dateRange.min);
       this.endDate.set(report.dateRange.max);
     }
-    this.selectedTradeTypes.set(report ? defaultTradeTypesForReport(report) : DEFAULT_TRADE_TYPES);
+    this.selectedTradeTypes.set(defaultTypes);
     this.chartPeriod.set('daily');
     this.topStocksCount.set(10);
   }

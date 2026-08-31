@@ -40,6 +40,11 @@ import {
   pickExtremePeriod,
   sortedStocks,
 } from '../../utils/analytics-insights.utils';
+import {
+  aggregateDayOfMonthFromDaily,
+  aggregateWeekdayFromDaily,
+  filterDailyAnalytics,
+} from '../../utils/analytics-aggregation.utils';
 
 type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'costs';
 type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
@@ -135,13 +140,25 @@ export class AnalyticsComponent implements OnInit {
     this.stockSort.set(key);
   }
 
-  weekdayBuckets = computed(() =>
-    aggregateByWeekday(this.analysis()?.filteredTrades ?? [], this.chargeRatio())
-  );
+  weekdayBuckets = computed(() => {
+    const trades = this.analysis()?.filteredTrades ?? [];
+    if (trades.length) return aggregateByWeekday(trades, this.chargeRatio());
+    const daily = filterDailyAnalytics(
+      this.state.report()?.dailyAnalytics ?? [],
+      this.state.analysisOptions()
+    );
+    return aggregateWeekdayFromDaily(daily);
+  });
 
-  dayOfMonthBuckets = computed(() =>
-    aggregateByDayOfMonth(this.analysis()?.filteredTrades ?? [], this.chargeRatio())
-  );
+  dayOfMonthBuckets = computed(() => {
+    const trades = this.analysis()?.filteredTrades ?? [];
+    if (trades.length) return aggregateByDayOfMonth(trades, this.chargeRatio());
+    const daily = filterDailyAnalytics(
+      this.state.report()?.dailyAnalytics ?? [],
+      this.state.analysisOptions()
+    );
+    return aggregateDayOfMonthFromDaily(daily);
+  });
 
   bestWeekday = computed(() => pickExtremeBucket(this.weekdayBuckets(), 'best', 2));
   worstWeekday = computed(() => pickExtremeBucket(this.weekdayBuckets(), 'worst', 2));

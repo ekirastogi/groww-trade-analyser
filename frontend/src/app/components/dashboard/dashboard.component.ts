@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
 import { LazyTradeLoaderService } from '../../services/lazy-trade-loader.service';
+import { FilteredStockService } from '../../services/filtered-stock.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { ClientAccountService, ClientAccount } from '../../services/client-account.service';
 import {
@@ -80,6 +81,7 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 })
 export class DashboardComponent implements OnInit {
   readonly state = inject(ReportStateService);
+  readonly filteredStocks = inject(FilteredStockService);
   private pageShell = inject(PageShellService);
   private clientSvc = inject(ClientAccountService);
   readonly lazyTrades = inject(LazyTradeLoaderService);
@@ -297,11 +299,7 @@ export class DashboardComponent implements OnInit {
   });
 
   sortedStockData = computed(() => {
-    const report = this.state.report();
-    const stocks =
-      report?.stockSummary?.length
-        ? report.stockSummary
-        : (this.analysis()?.stocks ?? []);
+    const stocks = this.filteredStocks.summaries();
     const filtered = filterStocksByRules(stocks, this.stockFilterRules());
     return this.sortRows(filtered, (row, col) => {
       if (col === 'stockName') return row.stockName.toLowerCase();
@@ -310,7 +308,7 @@ export class DashboardComponent implements OnInit {
   });
 
   stockScenarioStats = computed(() => {
-    const total = this.state.report()?.stockSummary.length ?? this.analysis()?.stocks.length ?? 0;
+    const total = this.filteredStocks.summaries().length;
     const shown = this.sortedStockData().length;
     return { total, shown };
   });
