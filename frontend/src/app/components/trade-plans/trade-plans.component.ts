@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { switchMap } from 'rxjs';
 import { TradePlanService } from '../../services/trade-plan.service';
+import { RegistryStockService } from '../../services/registry-stock.service';
 import { PlannedTrade } from '../../models/trading-journal.models';
 import { formatCurrency, formatPctSigned, pnlClass, pnlBadgeClass } from '../../utils/format.utils';
 import {
@@ -44,6 +45,21 @@ interface PriceLevel {
     .trade-item {
       @apply transition hover:bg-slate-50/60;
     }
+    .trade-identity {
+      @apply min-w-0 shrink;
+      max-width: min(100%, calc(100vw - 8.5rem));
+    }
+    @media (min-width: 1024px) {
+      .trade-identity {
+        width: 9rem;
+        max-width: 9rem;
+      }
+    }
+    .trade-name {
+      @apply text-base font-bold leading-snug text-slate-900;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     .price-ribbon {
       @apply relative h-2 rounded-full bg-slate-100;
     }
@@ -72,6 +88,7 @@ interface PriceLevel {
 })
 export class TradePlansComponent implements OnInit {
   private planSvc = inject(TradePlanService);
+  private registrySvc = inject(RegistryStockService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
@@ -102,6 +119,8 @@ export class TradePlansComponent implements OnInit {
     toObservable(this.tradeDate).pipe(switchMap((date) => this.planSvc.watchForDate(date))),
     { initialValue: [] as PlannedTrade[] }
   );
+
+  registry = toSignal(this.registrySvc.watchAll(), { initialValue: [] });
 
   fmt = formatCurrency;
   fmtPct = formatPctSigned;
@@ -308,6 +327,14 @@ export class TradePlansComponent implements OnInit {
   segmentDetail(t: PlannedTrade): string {
     if (t.segment === 'delivery') return 'Delivery';
     return `Intraday · ${t.direction === 'short' ? 'Short' : 'Long'}`;
+  }
+
+  tradeName(t: PlannedTrade): string {
+    const fromPlan = t.stockName?.trim();
+    if (fromPlan && fromPlan.toUpperCase() !== t.symbol.toUpperCase()) return fromPlan;
+    const fromRegistry = this.registry().find((s) => s.symbol === t.symbol)?.name?.trim();
+    if (fromRegistry) return fromRegistry;
+    return fromPlan || t.symbol;
   }
 
   accentClass(t: PlannedTrade): string {

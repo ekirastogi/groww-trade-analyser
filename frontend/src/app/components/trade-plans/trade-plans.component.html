@@ -129,9 +129,10 @@
             <div class="w-1 shrink-0" [class]="accentClass(t)"></div>
             <div class="flex min-w-0 flex-1 flex-col gap-3 p-3 lg:flex-row lg:items-center lg:gap-4">
               <!-- Symbol block -->
-              <div class="flex shrink-0 items-start justify-between gap-3 lg:w-40 lg:flex-col lg:justify-start">
-                <div class="min-w-0">
-                  <h3 class="break-words text-base font-bold leading-snug text-slate-900">{{ t.symbol }}</h3>
+              <div class="flex min-w-0 items-start justify-between gap-3 lg:flex-col lg:justify-start">
+                <div class="trade-identity">
+                  <h3 class="trade-name">{{ tradeName(t) }}</h3>
+                  <p class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ t.symbol }}</p>
                   <div class="mt-1">
                     <span class="rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset" [class]="statusBadgeClass(t)">
                       {{ statusLabel(t) }}
@@ -141,7 +142,7 @@
                   <p class="text-xs font-medium tabular-nums text-slate-600">{{ t.quantity | number }} qty</p>
                 </div>
                 <!-- P&L on mobile -->
-                <div class="text-right lg:hidden">
+                <div class="shrink-0 text-right lg:hidden">
                   @if (t.status === 'executed') {
                     <p class="text-[10px] font-semibold uppercase text-slate-400">Realized</p>
                     <p class="text-sm font-bold tabular-nums" [class]="pnlClass(displayPnL(t))">{{ fmt(displayPnL(t)) }}</p>
@@ -304,8 +305,8 @@
       <div class="flex items-start justify-between gap-3">
         <div>
           <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Record execution</p>
-          <h3 class="text-lg font-bold text-slate-900">{{ trade.symbol }}</h3>
-          <p class="text-sm text-slate-500">{{ segmentDetail(trade) }} · planned {{ trade.quantity | number }} qty</p>
+          <h3 class="text-lg font-bold text-slate-900">{{ tradeName(trade) }}</h3>
+          <p class="text-sm text-slate-500">{{ trade.symbol }} · {{ segmentDetail(trade) }} · planned {{ trade.quantity | number }} qty</p>
         </div>
         <button type="button" class="text-slate-400 hover:text-slate-600" (click)="closeExecuteModal()" aria-label="Close">✕</button>
       </div>
