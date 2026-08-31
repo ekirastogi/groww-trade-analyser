@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Auth } from '@angular/fire/auth';
 import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { Observable } from 'rxjs';
+import { UI_CACHE_TTL_MS } from '../constants/cache.constants';
 import { supabaseConfig } from '../../environments/supabase.config';
 
 @Injectable({ providedIn: 'root' })
@@ -20,10 +21,16 @@ export class SupabaseService {
     await this.firebaseAuth.authStateReady();
   }
 
-  /** Live query: initial fetch + postgres_changes on table. */
-  watchTable<T>(table: string, fetch: () => Promise<T>): Observable<T> {
+  /** Live query: initial fetch + postgres_changes + periodic refresh. */
+  watchTable<T>(
+    table: string,
+    fetch: () => Promise<T>,
+    refreshMs: number = UI_CACHE_TTL_MS,
+    postgresTable = table
+  ): Observable<T> {
     return new Observable<T>((subscriber) => {
       let channel: RealtimeChannel | null = null;
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
 
       const load = async () => {
         try {
@@ -34,12 +41,18 @@ export class SupabaseService {
       };
 
       void load();
+
+      if (refreshMs > 0) {
+        pollTimer = setInterval(() => void load(), refreshMs);
+      }
+
       channel = this.client
         .channel(`watch-${table}-${Math.random().toString(36).slice(2)}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, () => void load())
+        .on('postgres_changes', { event: '*', schema: 'public', table: postgresTable }, () => void load())
         .subscribe();
 
       return () => {
+        if (pollTimer) clearInterval(pollTimer);
         if (channel) void this.client.removeChannel(channel);
       };
     });

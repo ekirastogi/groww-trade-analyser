@@ -17,7 +17,7 @@ import (
 
 const (
 	yahooFinanceReferer = "https://finance.yahoo.com/"
-	YahooBatchSize      = 50
+	YahooBatchSize      = 20 // Yahoo spark API limit
 	yahooCrumbTTL       = time.Hour
 )
 
