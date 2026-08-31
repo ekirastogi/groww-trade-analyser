@@ -299,7 +299,7 @@ export class DashboardComponent implements OnInit {
   });
 
   sortedStockData = computed(() => {
-    const stocks = this.filteredStocks.summaries();
+    const stocks = this.filteredStocks.stocks();
     const filtered = filterStocksByRules(stocks, this.stockFilterRules());
     return this.sortRows(filtered, (row, col) => {
       if (col === 'stockName') return row.stockName.toLowerCase();
@@ -308,7 +308,7 @@ export class DashboardComponent implements OnInit {
   });
 
   stockScenarioStats = computed(() => {
-    const total = this.filteredStocks.summaries().length;
+    const total = this.filteredStocks.stocks().length;
     const shown = this.sortedStockData().length;
     return { total, shown };
   });

@@ -24,6 +24,7 @@ import {
   enrichTradeWithCharges,
   normalizeSymbol,
 } from '../utils/upload-merge.utils';
+import { expandTradeTypes } from '../utils/trade-type-filter.utils';
 import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
 
 export interface UploadResult {
@@ -520,7 +521,8 @@ export class TradeLedgerService {
       if (filters.startDate) query = query.gte('sell_date', filters.startDate);
       if (filters.endDate) query = query.lte('sell_date', filters.endDate);
       if (filters.tradeTypes?.length && !filters.tradeTypes.includes('all')) {
-        query = query.in('trade_type', filters.tradeTypes);
+        const expanded = expandTradeTypes(filters.tradeTypes);
+        if (expanded?.length) query = query.in('trade_type', expanded);
       }
 
       const { data, error } = await query

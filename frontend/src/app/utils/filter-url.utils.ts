@@ -2,6 +2,9 @@ import { ParamMap } from '@angular/router';
 import { TradeType } from '../models/trade.models';
 import { MarketCapTier } from './market-cap.utils';
 import { PnlTierMode } from './pnl-watchlist.utils';
+import { defaultTradeTypesForRoute } from './trade-type-filter.utils';
+
+export { defaultTradeTypesForRoute };
 
 export const FILTER_QUERY_KEYS = {
   types: 'types',
@@ -42,7 +45,8 @@ export function parseTradeTypes(raw: string | null, fallback: TradeType[]): Trad
 }
 
 export function serializeTradeTypes(types: TradeType[]): string | null {
-  if (!types.length || types.includes('all')) return null;
+  if (!types.length) return null;
+  if (types.includes('all')) return 'all';
   return types.join(',');
 }
 
@@ -91,8 +95,4 @@ export function readWatchlistFilters(params: ParamMap): WatchlistFilterParams {
     tier: tier || null,
     marketCapTiers: parseMarketCapTiers(params.get(FILTER_QUERY_KEYS.cap)),
   };
-}
-
-export function defaultTradeTypesForRoute(url: string): TradeType[] {
-  return url.includes('/watchlists') ? ['intraday'] : ['all'];
 }

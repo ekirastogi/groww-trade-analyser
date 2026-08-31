@@ -22,7 +22,7 @@ export class FilterPanelComponent {
 
   localStartDate = signal('');
   localEndDate = signal('');
-  localTradeTypes = signal<TradeType[]>(['intraday']);
+  localTradeTypes = signal<TradeType[]>(['all']);
   chartPeriod = signal<'daily' | 'weekly' | 'monthly'>('daily');
   topStocksCount = signal(10);
   filtersExpanded = signal(false);

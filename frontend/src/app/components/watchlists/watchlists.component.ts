@@ -118,7 +118,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   ];
 
   autoTierTabs = computed((): AutoTierTab[] => {
-    const summaries = this.filterByMarketCap(this.stockSummaries());
+    const summaries = this.filterByMarketCap(this.filteredStocks.stocks());
     const mode = this.tierMode();
 
     return PNL_WATCHLIST_TIERS.map((tier) => {
@@ -165,7 +165,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   visibleAutoTierTabs = computed((): AutoTierTab[] => {
     const tiers =
       this.activeTab() === 'profitable' ? this.profitTierTabs() : this.lossTierTabs();
-    const summaries = this.filterByMarketCap(this.stockSummaries());
+    const summaries = this.filterByMarketCap(this.filteredStocks.stocks());
     const allCount = summaries.filter((stock) =>
       this.activeTab() === 'profitable' ? stock.netPnL > 0 : stock.netPnL < 0
     ).length;
@@ -205,7 +205,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   activeViewLabel = computed(() => this.activeAutoTierMeta()?.fullLabel ?? '');
 
   tierStocks = computed(() => {
-    const stockSummaries = this.filterByMarketCap(this.stockSummaries());
+    const stockSummaries = this.filterByMarketCap(this.filteredStocks.stocks());
     const watchlist = this.activeAutoWatchlist();
     if (!watchlist) return [] as StockSummary[];
 
@@ -374,10 +374,6 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
 
   stockSymbol(stock: StockSummary): string {
     return stock.symbol || normalizeSymbol(stock.stockName);
-  }
-
-  private stockSummaries(): StockSummary[] {
-    return this.filteredStocks.summaries();
   }
 
   private clientCode(): string | null {

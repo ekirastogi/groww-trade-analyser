@@ -3,6 +3,7 @@ import { AnalysisOptions, Report, StockSummary, StoredTrade, Trade, TradeType } 
 import { TradeLedgerService } from './trade-ledger.service';
 import { normalizeSymbol } from '../utils/upload-merge.utils';
 import { sortTradesBySellDateDesc, storedTradeToTrade } from '../utils/trade.utils';
+import { buildTradeTypeFilter } from '../utils/trade-type-filter.utils';
 
 @Injectable({ providedIn: 'root' })
 export class LazyTradeLoaderService {
@@ -122,8 +123,7 @@ export class LazyTradeLoaderService {
   }
 
   private buildTypeFilter(types?: TradeType[]): Set<TradeType> | null {
-    if (!types?.length || types.includes('all')) return null;
-    return new Set(types);
+    return buildTradeTypeFilter(types);
   }
 }
 

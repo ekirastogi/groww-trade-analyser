@@ -6,6 +6,7 @@ import {
   TradeType,
 } from '../models/trade.models';
 import { CalendarBucket } from './analytics-insights.utils';
+import { buildTradeTypeFilter } from './trade-type-filter.utils';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -44,8 +45,7 @@ export function buildDailyAnalyticsFromTrades(trades: StoredTrade[]): DailyAnaly
 }
 
 function buildTypeFilter(types?: TradeType[]): Set<TradeType> | null {
-  if (!types?.length || types.includes('all')) return null;
-  return new Set(types);
+  return buildTradeTypeFilter(types);
 }
 
 export function filterDailyAnalytics(

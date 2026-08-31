@@ -73,7 +73,7 @@ export class HeatmapComponent implements OnInit {
   private paneWidth = signal(0);
   private paneHeight = signal(0);
 
-  private stockRows = computed((): StockSummary[] => this.filteredStocks.summaries());
+  private stockRows = computed((): StockSummary[] => this.filteredStocks.stocks());
 
   profitableSection = computed(() =>
     this.buildSection(this.stockRows().filter((s) => s.netPnL > 0), true)

@@ -13,6 +13,7 @@ import {
   filterDailyAnalytics,
   rollupDailyToPeriodBuckets,
 } from '../utils/analytics-aggregation.utils';
+import { buildTradeTypeFilter } from '../utils/trade-type-filter.utils';
 
 @Injectable({ providedIn: 'root' })
 export class AnalysisService {
@@ -81,8 +82,7 @@ export class AnalysisService {
   }
 
   private buildTypeFilter(types?: TradeType[]): Set<TradeType> | null {
-    if (!types?.length || types.includes('all')) return null;
-    return new Set(types);
+    return buildTradeTypeFilter(types);
   }
 
   private buildSummaryFromStocks(stocks: StockSummary[], chargeRatio: number) {

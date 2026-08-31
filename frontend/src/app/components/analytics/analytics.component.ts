@@ -10,6 +10,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ChartConfiguration } from 'chart.js';
 import { ReportStateService } from '../../services/report-state.service';
+import { FilteredStockService } from '../../services/filtered-stock.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
 import { formatCurrency, pnlClass } from '../../utils/format.utils';
 import {
@@ -105,6 +106,7 @@ type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
 })
 export class AnalyticsComponent implements OnInit {
   readonly state = inject(ReportStateService);
+  readonly filteredStocks = inject(FilteredStockService);
   readonly formatCurrency = formatCurrency;
   readonly pnlClass = pnlClass;
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
@@ -169,7 +171,7 @@ export class AnalyticsComponent implements OnInit {
   bestMonth = computed(() => pickExtremePeriod(this.analysis()?.monthly ?? [], 'best'));
   worstMonth = computed(() => pickExtremePeriod(this.analysis()?.monthly ?? [], 'worst'));
 
-  stockRows = computed(() => sortedStocks(this.analysis()?.stocks ?? [], this.stockSort()));
+  stockRows = computed(() => sortedStocks(this.filteredStocks.stocks(), this.stockSort()));
 
   weekdayMaxAbs = computed(() =>
     Math.max(...this.weekdayBuckets().map((b) => Math.abs(b.netPnL)), 1)
@@ -597,7 +599,7 @@ export class AnalyticsComponent implements OnInit {
 
   topStocksChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = [...(this.analysis()?.stocks ?? [])].sort((a, b) => b.netPnL - a.netPnL);
+    const stocks = [...(this.filteredStocks.stocks())].sort((a, b) => b.netPnL - a.netPnL);
     const n = this.state.topStocksCount();
     const top = stocks.slice(0, n);
     if (!top.length) return null;
@@ -614,7 +616,7 @@ export class AnalyticsComponent implements OnInit {
 
   bottomStocksChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = [...(this.analysis()?.stocks ?? [])].sort((a, b) => a.netPnL - b.netPnL);
+    const stocks = [...(this.filteredStocks.stocks())].sort((a, b) => a.netPnL - b.netPnL);
     const n = Math.min(this.state.topStocksCount(), stocks.length);
     const bottom = stocks.slice(0, n);
     if (!bottom.length) return null;
@@ -680,7 +682,7 @@ export class AnalyticsComponent implements OnInit {
 
   tradesVsPnLChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = this.analysis()?.stocks ?? [];
+    const stocks = this.filteredStocks.stocks();
     if (stocks.length < 2) return null;
     return {
       type: 'scatter' as const,
@@ -750,7 +752,7 @@ export class AnalyticsComponent implements OnInit {
 
   pnlEfficiencyChartConfig = computed(() => {
     this.chartVersion();
-    const stocks = [...(this.analysis()?.stocks ?? [])]
+    const stocks = [...(this.filteredStocks.stocks())]
       .filter((s) => s.tradeCount > 0)
       .map((s) => ({ ...s, pnlPerTrade: s.netPnL / s.tradeCount }))
       .sort((a, b) => Math.abs(b.pnlPerTrade) - Math.abs(a.pnlPerTrade))
