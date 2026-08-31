@@ -1,24 +1,23 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { Auth } from '@angular/fire/auth';
 import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { Observable } from 'rxjs';
 import { supabaseConfig } from '../../environments/supabase.config';
 
 @Injectable({ providedIn: 'root' })
 export class SupabaseService {
+  private firebaseAuth = inject(Auth);
+
   readonly client: SupabaseClient = createClient(supabaseConfig.url, supabaseConfig.anonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
+    accessToken: async () => {
+      const user = this.firebaseAuth.currentUser;
+      if (!user) return null;
+      return user.getIdToken(false);
     },
   });
 
   async whenReady(): Promise<void> {
-    await this.client.auth.getSession();
-  }
-
-  async getUserId(): Promise<string | null> {
-    const { data } = await this.client.auth.getUser();
-    return data.user?.id ?? null;
+    await this.firebaseAuth.authStateReady();
   }
 
   /** Live query: initial fetch + postgres_changes on table. */

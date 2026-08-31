@@ -3,7 +3,6 @@ import { Auth, authState } from '@angular/fire/auth';
 import {
   GoogleAuthProvider,
   User,
-  UserCredential,
   getRedirectResult,
   signInWithPopup,
   signInWithRedirect,
@@ -18,7 +17,6 @@ export class AuthService {
   private auth = inject(Auth);
   private supabase = inject(SupabaseService);
   private initPromise: Promise<void> | null = null;
-  private dataUserIdSignal = signal<string | null>(null);
 
   readonly user = toSignal(authState(this.auth), { initialValue: null as User | null });
   readonly user$ = toObservable(this.user);
@@ -37,14 +35,13 @@ export class AuthService {
     try {
       const result = await getRedirectResult(this.auth);
       if (result) {
-        await this.signInSupabaseFromCredential(result);
+        await this.refreshFirebaseToken(true);
       }
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Sign in failed');
     }
     await this.auth.authStateReady();
     await this.supabase.whenReady();
-    await this.refreshDataUserId();
     await this.rejectIfNotAllowed();
   }
 
@@ -60,8 +57,8 @@ export class AuthService {
         return;
       }
 
-      const result = await signInWithPopup(this.auth, provider);
-      await this.signInSupabaseFromCredential(result);
+      await signInWithPopup(this.auth, provider);
+      await this.refreshFirebaseToken(true);
       await this.rejectIfNotAllowed();
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Sign in failed');
@@ -71,26 +68,22 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
-    this.dataUserIdSignal.set(null);
-    await this.supabase.client.auth.signOut();
     await signOut(this.auth);
   }
 
-  /** Firebase uid — used only for Firestore worker paths. */
+  /** Firebase uid — used for Firestore worker paths and Supabase user_id columns. */
   get uid(): string | null {
     return this.hasAccess ? (this.auth.currentUser?.uid ?? null) : null;
   }
 
-  /** Supabase auth uid — use for all Postgres data tables. */
+  /** Same as Firebase uid when using Supabase Firebase Third-Party Auth. */
   get dataUserId(): string | null {
-    return this.hasAccess ? this.dataUserIdSignal() : null;
+    return this.uid;
   }
 
   async getDataUserId(): Promise<string | null> {
     await this.whenReady();
-    if (!this.hasAccess) return null;
-    if (this.dataUserIdSignal()) return this.dataUserIdSignal();
-    return this.refreshDataUserId();
+    return this.uid;
   }
 
   get currentUser(): User | null {
@@ -102,37 +95,21 @@ export class AuthService {
     return isAllowedGoogleUser(this.auth.currentUser);
   }
 
-  async getIdToken(): Promise<string | null> {
+  async getIdToken(forceRefresh = false): Promise<string | null> {
     if (!this.hasAccess) return null;
-    return (await this.auth.currentUser?.getIdToken()) ?? null;
+    return (await this.auth.currentUser?.getIdToken(forceRefresh)) ?? null;
   }
 
-  private async signInSupabaseFromCredential(result: UserCredential): Promise<void> {
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.idToken) return;
-    const { error } = await this.supabase.client.auth.signInWithIdToken({
-      provider: 'google',
-      token: credential.idToken,
-    });
-    if (error) {
-      console.warn('Supabase sign-in failed:', error.message);
-      return;
-    }
-    await this.refreshDataUserId();
-  }
-
-  private async refreshDataUserId(): Promise<string | null> {
-    const id = await this.supabase.getUserId();
-    this.dataUserIdSignal.set(id);
-    return id;
+  /** Force-refresh Firebase JWT so Supabase sees role: authenticated custom claim. */
+  private async refreshFirebaseToken(forceRefresh: boolean): Promise<void> {
+    if (!this.auth.currentUser) return;
+    await this.auth.currentUser.getIdToken(forceRefresh);
   }
 
   private async rejectIfNotAllowed(): Promise<void> {
     const user = this.auth.currentUser;
     if (!user) return;
     if (isAllowedGoogleUser(user)) return;
-    this.dataUserIdSignal.set(null);
-    await this.supabase.client.auth.signOut();
     await signOut(this.auth);
     this.error.set(ACCESS_DENIED_MESSAGE);
   }

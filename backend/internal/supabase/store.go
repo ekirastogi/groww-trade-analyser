@@ -630,3 +630,9 @@ func (s *Store) PublishStock(ctx context.Context, symbol string, quote *market.Q
 	}
 	return s.PublishChartView(ctx, symbol, datapub.BuildChartPayload(candles))
 }
+
+// ExecSQL runs a migration script (multiple statements).
+func (s *Store) ExecSQL(ctx context.Context, sql string) error {
+	_, err := s.pool.Exec(ctx, sql)
+	return err
+}
