@@ -1,4 +1,4 @@
-import { Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, HostListener, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -101,6 +101,9 @@ export class TradePlansComponent implements OnInit {
   execBusy = signal(false);
   menuOpenId = signal<string | null>(null);
   menuPosition = signal<{ top: number; right: number; openUp: boolean } | null>(null);
+  carryForwardPreview = signal<{ count: number; sourceDate: string | null } | null>(null);
+  carryForwardBusy = signal(false);
+  carryForwardMessage = signal<string | null>(null);
 
   upcomingTabs = computed(() =>
     upcomingPlanDates().map((iso) => ({ iso, label: planDateTabLabel(iso) }))
@@ -159,6 +162,27 @@ export class TradePlansComponent implements OnInit {
     return this.trades().find((t) => t.id === id) ?? null;
   });
 
+  carryForwardLabel = computed(() => {
+    const preview = this.carryForwardPreview();
+    if (!preview?.count || !preview.sourceDate) return null;
+    const dateLabel = planDateTabLabel(preview.sourceDate);
+    const tradeWord = preview.count === 1 ? 'trade' : 'trades';
+    return `Carry forward ${preview.count} ${tradeWord} from ${dateLabel}`;
+  });
+
+  constructor() {
+    effect(() => {
+      const date = this.tradeDate();
+      this.trades();
+      this.carryForwardMessage.set(null);
+      if (!isUpcomingPlanDate(date)) {
+        this.carryForwardPreview.set(null);
+        return;
+      }
+      void this.refreshCarryForwardPreview(date);
+    });
+  }
+
   ngOnInit(): void {
     const date = this.route.snapshot.queryParamMap.get('date');
     if (date) this.setTradeDate(normalizePlanViewDate(date), false);
@@ -185,6 +209,49 @@ export class TradePlansComponent implements OnInit {
 
   canAddPlan(): boolean {
     return isUpcomingPlanDate(this.tradeDate());
+  }
+
+  private async refreshCarryForwardPreview(targetDate: string): Promise<void> {
+    try {
+      const preview = await this.planSvc.countUnfinishedFromPreviousTradingDay(targetDate);
+      if (targetDate !== this.tradeDate()) return;
+      this.carryForwardPreview.set(preview);
+    } catch {
+      if (targetDate === this.tradeDate()) {
+        this.carryForwardPreview.set(null);
+      }
+    }
+  }
+
+  async carryForwardFromPreviousDay(): Promise<void> {
+    const preview = this.carryForwardPreview();
+    if (!preview?.count || this.carryForwardBusy()) return;
+
+    const dateLabel = preview.sourceDate ? planDateTabLabel(preview.sourceDate) : 'previous day';
+    const tradeWord = preview.count === 1 ? 'trade' : 'trades';
+    if (!confirm(`Copy ${preview.count} unexecuted ${tradeWord} from ${dateLabel} to ${planDateTabLabel(this.tradeDate())}?`)) {
+      return;
+    }
+
+    this.carryForwardBusy.set(true);
+    this.carryForwardMessage.set(null);
+    try {
+      const result = await this.planSvc.copyUnfinishedFromPreviousTradingDay(this.tradeDate());
+      if (result.copied === 0) {
+        this.carryForwardMessage.set('No trades were copied — they may already exist in today\'s plan.');
+      } else {
+        let msg = `Copied ${result.copied} ${result.copied === 1 ? 'trade' : 'trades'} from ${planDateTabLabel(result.sourceDate)}.`;
+        if (result.skippedDuplicates > 0) {
+          msg += ` Skipped ${result.skippedDuplicates} duplicate${result.skippedDuplicates === 1 ? '' : 's'}.`;
+        }
+        this.carryForwardMessage.set(msg);
+      }
+      await this.refreshCarryForwardPreview(this.tradeDate());
+    } catch (e) {
+      this.carryForwardMessage.set(e instanceof Error ? e.message : 'Failed to carry forward trades');
+    } finally {
+      this.carryForwardBusy.set(false);
+    }
   }
 
   private setTradeDate(iso: string, syncRoute = true): void {

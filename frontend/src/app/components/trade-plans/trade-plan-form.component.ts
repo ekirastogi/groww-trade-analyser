@@ -35,7 +35,6 @@ export class TradePlanFormComponent implements OnInit {
   dateTabs = computed(() =>
     upcomingPlanDates().map((iso) => ({ iso, label: planDateTabLabel(iso) }))
   );
-  activeTab = signal<'manual' | 'auto'>('manual');
   symbolQuery = signal('');
 
   fmt = formatCurrency;
@@ -118,8 +117,6 @@ export class TradePlanFormComponent implements OnInit {
     }
     const date = clampToUpcomingPlanDate(this.route.snapshot.queryParamMap.get('date'));
     this.tradeDate.set(date);
-    const tab = this.route.snapshot.queryParamMap.get('tab');
-    if (tab === 'auto') this.activeTab.set('auto');
     const symbol = this.route.snapshot.queryParamMap.get('symbol');
     if (symbol) await this.pickSymbol(symbol);
   }
@@ -144,7 +141,6 @@ export class TradePlanFormComponent implements OnInit {
       }
       this.editingId.set(id);
       this.tradeDate.set(trade.tradeDate);
-      this.activeTab.set('manual');
       this.form.symbol = trade.symbol;
       this.form.name = trade.stockName ?? trade.symbol;
       this.symbolQuery.set(trade.symbol);
@@ -161,10 +157,6 @@ export class TradePlanFormComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
-  }
-
-  setTab(tab: 'manual' | 'auto'): void {
-    this.activeTab.set(tab);
   }
 
   selectDate(iso: string): void {
@@ -202,7 +194,6 @@ export class TradePlanFormComponent implements OnInit {
   async pickSymbol(symbol: string): Promise<void> {
     this.symbolQuery.set(symbol.toUpperCase());
     await this.applySymbolPrefill(symbol, { fillEntry: true, fillTargets: true });
-    this.activeTab.set('manual');
   }
 
   private async applySymbolPrefill(
@@ -247,7 +238,7 @@ export class TradePlanFormComponent implements OnInit {
     }
   }
 
-  async save(source: 'manual' | 'auto' = 'manual'): Promise<void> {
+  async save(): Promise<void> {
     this.error.set(null);
     const qty = parseFloat(this.form.quantity);
     const cmp = parseFloat(this.form.cmp);
@@ -277,7 +268,7 @@ export class TradePlanFormComponent implements OnInit {
       if (editId) {
         await this.planSvc.update(editId, payload);
       } else {
-        await this.planSvc.create({ ...payload, source });
+        await this.planSvc.create({ ...payload, source: 'manual' });
       }
       await this.router.navigate(['/trade-plans'], { queryParams: { date: this.tradeDate() } });
     } catch (e) {

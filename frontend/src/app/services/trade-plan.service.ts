@@ -11,6 +11,7 @@ import {
 } from '../models/trading-journal.models';
 import { AuthService } from './auth.service';
 import { objectToSnake, numField, rowToCamel, SupabaseService } from './supabase.service';
+import { addDaysIso, previousTradingDayOnOrBefore } from '../utils/trade-plan-date.utils';
 
 export interface CreatePlannedTradeInput {
   symbol: string;
@@ -25,6 +26,13 @@ export interface CreatePlannedTradeInput {
   stopLoss?: number;
   source?: TradePlanSource;
   notes?: string;
+  carriedFromDate?: string;
+}
+
+export interface CopyUnfinishedResult {
+  copied: number;
+  skippedDuplicates: number;
+  sourceDate: string;
 }
 
 type PlannedTradePayload = {
@@ -34,6 +42,7 @@ type PlannedTradePayload = {
   executedBuyPrice?: number | null;
   executedSellPrice?: number | null;
   updatedAt?: number;
+  carriedFromDate?: string;
 };
 
 function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
@@ -288,6 +297,7 @@ export class TradePlanService {
         executedBuyPrice: null,
         executedSellPrice: null,
         updatedAt: now,
+        carriedFromDate: input.carriedFromDate,
       },
     });
     const { error } = await this.supabase.client.from('planned_trades').insert(row);
@@ -409,6 +419,74 @@ export class TradePlanService {
       .eq('id', id)
       .eq('user_id', uid);
     if (error) throw error;
+  }
+
+  async countUnfinishedFromPreviousTradingDay(
+    targetDate: string
+  ): Promise<{ count: number; sourceDate: string | null }> {
+    const sourceDate = TradePlanService.previousTradingDayBefore(targetDate);
+    if (!sourceDate) return { count: 0, sourceDate: null };
+
+    const [sourceTrades, targetTrades] = await Promise.all([
+      this.fetchForDate(sourceDate),
+      this.fetchForDate(targetDate),
+    ]);
+    const existingKeys = new Set(targetTrades.map((t) => TradePlanService.tradeDuplicateKey(t)));
+    const count = sourceTrades
+      .filter((t) => t.status === 'planned' || t.status === 'skipped')
+      .filter((t) => !existingKeys.has(TradePlanService.tradeDuplicateKey(t))).length;
+    return { count, sourceDate };
+  }
+
+  async copyUnfinishedFromPreviousTradingDay(targetDate: string): Promise<CopyUnfinishedResult> {
+    const sourceDate = TradePlanService.previousTradingDayBefore(targetDate);
+    if (!sourceDate) return { copied: 0, skippedDuplicates: 0, sourceDate: '' };
+
+    const [sourceTrades, targetTrades] = await Promise.all([
+      this.fetchForDate(sourceDate),
+      this.fetchForDate(targetDate),
+    ]);
+    const existingKeys = new Set(targetTrades.map((t) => TradePlanService.tradeDuplicateKey(t)));
+    const unfinished = sourceTrades.filter((t) => t.status === 'planned' || t.status === 'skipped');
+
+    let copied = 0;
+    let skippedDuplicates = 0;
+    for (const t of unfinished) {
+      const key = TradePlanService.tradeDuplicateKey(t);
+      if (existingKeys.has(key)) {
+        skippedDuplicates++;
+        continue;
+      }
+      await this.create({
+        symbol: t.symbol,
+        stockName: t.stockName,
+        tradeDate: targetDate,
+        segment: t.segment,
+        direction: t.direction,
+        quantity: t.quantity,
+        cmp: t.cmp,
+        entryPrice: t.entryPrice,
+        targetPrice: t.targetPrice,
+        stopLoss: t.stopLoss,
+        source: t.source,
+        notes: t.notes,
+        carriedFromDate: sourceDate,
+      });
+      existingKeys.add(key);
+      copied++;
+    }
+    return { copied, skippedDuplicates, sourceDate };
+  }
+
+  private static previousTradingDayBefore(iso: string): string | null {
+    const prev = previousTradingDayOnOrBefore(addDaysIso(iso, -1));
+    return prev < iso ? prev : null;
+  }
+
+  private static tradeDuplicateKey(
+    t: Pick<PlannedTrade, 'symbol' | 'segment' | 'direction'>
+  ): string {
+    return `${t.symbol.toUpperCase()}:${t.segment}:${t.direction}`;
   }
 
   async remove(id: string): Promise<void> {

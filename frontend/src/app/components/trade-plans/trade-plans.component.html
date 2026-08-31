@@ -51,11 +51,26 @@
       </p>
     </div>
     @if (canAddPlan()) {
-      <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="btn-primary shrink-0 text-sm">
-        + Add plan
-      </a>
+      <div class="flex shrink-0 flex-wrap items-center gap-2">
+        @if (carryForwardLabel(); as label) {
+          <button
+            type="button"
+            class="btn-secondary text-xs"
+            [disabled]="carryForwardBusy()"
+            (click)="carryForwardFromPreviousDay()"
+          >
+            {{ carryForwardBusy() ? 'Copying…' : label }}
+          </button>
+        }
+        <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="btn-primary text-sm">
+          + Add plan
+        </a>
+      </div>
     }
   </div>
+  @if (carryForwardMessage()) {
+    <p class="-mt-2 text-xs text-slate-500">{{ carryForwardMessage() }}</p>
+  }
 
   <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
     <div class="card px-3 py-2.5">
