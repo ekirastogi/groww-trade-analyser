@@ -2,6 +2,9 @@ export interface RegistryStock {
   symbol: string;
   name: string;
   currentPrice: number;
+  isin?: string;
+  exchange?: string;
+  source?: 'pnl_upload' | 'seed' | 'manual' | 'exchange_seed';
   marketCap?: number;
   pe?: number;
   rsi?: number;

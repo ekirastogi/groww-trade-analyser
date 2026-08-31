@@ -141,7 +141,7 @@ func (s *Scheduler) refreshUniverse(ctx context.Context) {
 		}
 	}
 	if s.publisher != nil {
-		if syms, err := s.publisher.GetUniverseSymbols(ctx); err == nil {
+		if syms, err := s.publisher.GetRegistrySymbols(ctx); err == nil {
 			for _, sym := range syms {
 				set[strings.ToUpper(sym)] = true
 			}
@@ -273,7 +273,7 @@ func (s *Scheduler) refreshHotSet(ctx context.Context) {
 			}
 		}
 		// Only user-uploaded universe symbols for hot quotes — not the full CSV seed book.
-		if syms, err := s.publisher.GetUniverseSymbols(ctx); err == nil {
+		if syms, err := s.publisher.GetRegistrySymbols(ctx); err == nil {
 			for _, sym := range syms {
 				if len(s.hotSet) >= maxHot {
 					break
@@ -311,7 +311,7 @@ func (s *Scheduler) eodSymbolList(ctx context.Context) []string {
 		}
 	}
 	if s.publisher != nil {
-		if syms, err := s.publisher.GetUniverseSymbols(ctx); err == nil {
+		if syms, err := s.publisher.GetRegistrySymbols(ctx); err == nil {
 			for _, sym := range syms {
 				sym = strings.ToUpper(sym)
 				if !market.IsIndexSymbol(sym) {
@@ -676,10 +676,13 @@ func (s *Scheduler) RunSymbolIngestNow(ctx context.Context, symbol string) error
 	return nil
 }
 
-// SeedUniverseFromExchanges fetches NSE and BSE equity lists and writes them to Firestore universe.
-func (s *Scheduler) SeedUniverseFromExchanges(ctx context.Context) (int, error) {
+// SeedRegistryFromExchanges fetches NSE and BSE equity lists into the user's stock registry.
+func (s *Scheduler) SeedRegistryFromExchanges(ctx context.Context, userID string) (int, error) {
 	if s.publisher == nil {
-		return 0, fmt.Errorf("firestore publisher not configured")
+		return 0, fmt.Errorf("data publisher not configured")
+	}
+	if strings.TrimSpace(userID) == "" {
+		return 0, fmt.Errorf("user id required")
 	}
 
 	nse, nseErr := market.FetchNSEEquities(ctx)
@@ -699,11 +702,11 @@ func (s *Scheduler) SeedUniverseFromExchanges(ctx context.Context) (int, error) 
 		return 0, fmt.Errorf("no symbols fetched from exchanges")
 	}
 
-	count, err := s.publisher.SyncUniverseSymbols(ctx, merged)
+	count, err := s.publisher.SyncRegistrySymbols(ctx, userID, merged)
 	if err != nil {
 		return count, err
 	}
-	logx.Info("Universe seeded: %d symbols from NSE/BSE", count)
+	logx.Info("Stock registry seeded: %d symbols from NSE/BSE for user %s", count, userID)
 	s.refreshUniverse(ctx)
 	return count, nil
 }

@@ -213,7 +213,11 @@ func makeJobHandler(worker *firebase.Publisher, scheduler *ingestion.Scheduler) 
 			return worker.MarkJobCompleted(ctx, jobID, 1)
 		case "seed_universe":
 			logx.Info("Processing worker job %s (seed_universe)", jobID)
-			count, err := scheduler.SeedUniverseFromExchanges(ctx)
+			userID, _ := data["requestedBy"].(string)
+			if strings.TrimSpace(userID) == "" {
+				return fmt.Errorf("requestedBy user id required for seed_universe")
+			}
+			count, err := scheduler.SeedRegistryFromExchanges(ctx, userID)
 			if err != nil {
 				return err
 			}

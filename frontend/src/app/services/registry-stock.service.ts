@@ -3,15 +3,15 @@ import { Observable, of, switchMap } from 'rxjs';
 import { RegistryStock } from '../models/trading-journal.models';
 import { AuthService } from './auth.service';
 import { objectToSnake, rowsToCamel, SupabaseService } from './supabase.service';
-import { UniverseService } from './universe.service';
 
 const UPSERT_BATCH_LIMIT = 400;
+
+export type RegistryStockSource = NonNullable<RegistryStock['source']>;
 
 @Injectable({ providedIn: 'root' })
 export class RegistryStockService {
   private supabase = inject(SupabaseService);
   private auth = inject(AuthService);
-  private universe = inject(UniverseService);
 
   watchAll(): Observable<RegistryStock[]> {
     return this.auth.user$.pipe(
@@ -56,25 +56,30 @@ export class RegistryStockService {
     return count ?? 0;
   }
 
-  /** Add universe symbols to registry without overwriting existing rows. */
-  async syncFromUniverse(): Promise<{ added: number; total: number }> {
+  async syncSymbols(
+    symbols: Array<{ symbol: string; name?: string; isin?: string }>,
+    source: RegistryStockSource = 'pnl_upload'
+  ): Promise<number> {
     await this.auth.whenReady();
     const uid = await this.auth.getDataUserId();
-    if (!uid) throw new Error('Sign in to sync registry');
+    if (!uid) return 0;
 
-    const [entries, existing] = await Promise.all([this.universe.listAll(), this.listAll()]);
-    const existingSymbols = new Set(existing.map((stock) => stock.symbol));
     const now = Date.now();
     const rows: Record<string, unknown>[] = [];
+    const seen = new Set<string>();
 
-    for (const entry of entries) {
-      const symbol = entry.symbol.toUpperCase();
-      if (!symbol || existingSymbols.has(symbol)) continue;
+    for (const entry of symbols) {
+      const sym = entry.symbol.toUpperCase().trim();
+      if (!sym || seen.has(sym)) continue;
+      seen.add(sym);
       rows.push(
         objectToSnake({
           userId: uid,
-          symbol,
-          name: entry.name?.trim() || symbol,
+          symbol: sym,
+          name: entry.name ?? sym,
+          isin: entry.isin ?? '',
+          exchange: 'NSE',
+          source,
           currentPrice: 0,
           supports: [],
           resistances: [],
@@ -84,6 +89,7 @@ export class RegistryStockService {
       );
     }
 
+    if (!rows.length) return 0;
     for (let i = 0; i < rows.length; i += UPSERT_BATCH_LIMIT) {
       const chunk = rows.slice(i, i + UPSERT_BATCH_LIMIT);
       const { error } = await this.supabase.client
@@ -91,8 +97,7 @@ export class RegistryStockService {
         .upsert(chunk, { onConflict: 'user_id,symbol', ignoreDuplicates: true });
       if (error) throw error;
     }
-
-    return { added: rows.length, total: existing.length + rows.length };
+    return rows.length;
   }
 
   /** Remove registry rows that duplicate the same ISIN (keeps NSE symbol when listed). */
@@ -101,27 +106,27 @@ export class RegistryStockService {
     const uid = await this.auth.getDataUserId();
     if (!uid) return 0;
 
-    const [entries, stocks] = await Promise.all([this.universe.listAll(), this.listAll()]);
+    const stocks = await this.listAll();
     const stockSymbols = new Set(stocks.map((stock) => stock.symbol));
     const canonicalByIsin = new Map<string, string>();
 
-    for (const entry of entries) {
-      const isin = entry.isin?.trim();
+    for (const stock of stocks) {
+      const isin = stock.isin?.trim();
       if (!isin) continue;
       const existing = canonicalByIsin.get(isin);
-      if (!existing || entry.exchange === 'NSE') {
-        canonicalByIsin.set(isin, entry.symbol);
+      if (!existing || stock.exchange === 'NSE') {
+        canonicalByIsin.set(isin, stock.symbol);
       }
     }
 
     const symbolsToRemove = new Set<string>();
-    for (const entry of entries) {
-      const isin = entry.isin?.trim();
+    for (const stock of stocks) {
+      const isin = stock.isin?.trim();
       if (!isin) continue;
       const canonical = canonicalByIsin.get(isin);
-      if (!canonical || canonical === entry.symbol || !stockSymbols.has(canonical)) continue;
-      if (stockSymbols.has(entry.symbol) && entry.symbol !== canonical) {
-        symbolsToRemove.add(entry.symbol);
+      if (!canonical || canonical === stock.symbol || !stockSymbols.has(canonical)) continue;
+      if (stockSymbols.has(stock.symbol) && stock.symbol !== canonical) {
+        symbolsToRemove.add(stock.symbol);
       }
     }
 
@@ -141,6 +146,9 @@ export class RegistryStockService {
       userId: uid,
       symbol,
       name: stock.name.trim() || symbol,
+      isin: stock.isin ?? '',
+      exchange: stock.exchange ?? 'NSE',
+      source: stock.source ?? 'manual',
       currentPrice: stock.currentPrice ?? 0,
       marketCap: stock.marketCap,
       pe: stock.pe,
@@ -173,17 +181,13 @@ export class RegistryStockService {
   async deleteAll(): Promise<number> {
     const uid = await this.auth.getDataUserId();
     if (!uid) return 0;
-    const { data, error: selectError } = await this.supabase.client
+    const { count, error: countError } = await this.supabase.client
       .from('registry_stocks')
-      .select('symbol')
+      .select('*', { count: 'exact', head: true })
       .eq('user_id', uid);
-    if (selectError) throw selectError;
-    if (!data?.length) return 0;
-    const { error } = await this.supabase.client
-      .from('registry_stocks')
-      .delete()
-      .eq('user_id', uid);
+    if (countError) throw countError;
+    const { error } = await this.supabase.client.from('registry_stocks').delete().eq('user_id', uid);
     if (error) throw error;
-    return data.length;
+    return count ?? 0;
   }
 }

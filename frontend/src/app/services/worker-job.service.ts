@@ -123,11 +123,16 @@ export class WorkerJobService {
     return this.requestJob('symbol_ingest', sym);
   }
 
-  async requestSeedUniverse(): Promise<string> {
+  async requestSeedRegistry(): Promise<string> {
     if (await this.isLocalWorkerReachable()) {
-      return this.runLocalIngest('seed_universe', '/api/v1/ingest/seed-universe');
+      return this.runLocalIngest('seed_universe', '/api/v1/ingest/seed-registry');
     }
     return this.requestJob('seed_universe');
+  }
+
+  /** @deprecated Use requestSeedRegistry */
+  async requestSeedUniverse(): Promise<string> {
+    return this.requestSeedRegistry();
   }
 
   async waitForJob(jobId: string, timeoutMs = JOB_TIMEOUT_MS): Promise<WorkerJob> {
@@ -183,10 +188,18 @@ export class WorkerJobService {
     path: string,
     symbol?: string
   ): Promise<string> {
-    const res = await fetch(`${LOCAL_WORKER_URL}${path}`, {
+    await this.auth.whenReady();
+    const uid = this.auth.uid;
+    const init: RequestInit = {
       method: 'POST',
       signal: AbortSignal.timeout(JOB_TIMEOUT_MS),
-    });
+    };
+    if (type === 'seed_universe') {
+      if (!uid) throw new Error('Sign in to import NSE/BSE symbols');
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = JSON.stringify({ userId: uid });
+    }
+    const res = await fetch(`${LOCAL_WORKER_URL}${path}`, init);
     const body = (await res.json().catch(() => ({}))) as {
       error?: string;
       symbolsIngested?: number;

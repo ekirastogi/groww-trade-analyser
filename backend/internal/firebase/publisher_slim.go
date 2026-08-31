@@ -141,7 +141,7 @@ func rollingSMA(values []float64, period int) []float64 {
 	return out
 }
 
-func (p *Publisher) GetUniverseSymbols(ctx context.Context) ([]string, error) {
+func (p *Publisher) GetRegistrySymbols(ctx context.Context) ([]string, error) {
 	cacheTTL := 30 * time.Minute
 	if v := os.Getenv("UNIVERSE_CACHE_MINUTES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -349,5 +349,5 @@ func (p *Publisher) PublishStock(ctx context.Context, symbol string, quote *mark
 }
 
 func (p *Publisher) GetWatchlistSymbols(ctx context.Context) ([]string, error) {
-	return p.GetUniverseSymbols(ctx)
+	return p.GetRegistrySymbols(ctx)
 }

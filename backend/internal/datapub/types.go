@@ -65,7 +65,7 @@ type OpenRecommendation struct {
 type Backend interface {
 	PublishSlimStock(ctx context.Context, payload SlimStockPayload) error
 	PublishChartView(ctx context.Context, symbol string, chart ChartPayload) error
-	GetUniverseSymbols(ctx context.Context) ([]string, error)
+	GetRegistrySymbols(ctx context.Context) ([]string, error)
 	GetActiveVolumeShockers(ctx context.Context) (map[string]int, error)
 	PublishVolumeShockers(ctx context.Context, tradeDate string, entries, active []VolumeShockerEntry) error
 	PublishRecommendation(ctx context.Context, s signals.Suggestion) (string, error)
@@ -78,7 +78,7 @@ type Backend interface {
 	PollApprovalsOnce(ctx context.Context, seen map[string]bool, handler ApprovalHandler) error
 	PublishMarketCatalog(ctx context.Context, entries []CatalogEntry) error
 	LoadMarketCatalog(ctx context.Context) ([]CatalogEntry, error)
-	SyncUniverseSymbols(ctx context.Context, entries []market.ExchangeSymbol) (int, error)
+	SyncRegistrySymbols(ctx context.Context, userID string, entries []market.ExchangeSymbol) (int, error)
 	GetWatchlistSymbols(ctx context.Context) ([]string, error)
 	PublishStock(ctx context.Context, symbol string, quote *market.Quote, fund *market.Fundamentals, candles []market.Candle, news []market.NewsItem, dataSource string) error
 }

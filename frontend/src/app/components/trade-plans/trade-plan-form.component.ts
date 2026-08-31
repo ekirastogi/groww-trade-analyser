@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { RegistryStockService } from '../../services/registry-stock.service';
 import { TradePlanService } from '../../services/trade-plan.service';
-import { UniverseService, UniverseEntry } from '../../services/universe.service';
 import { TradeDirection, TradeSegment, RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency, formatPctSigned, pnlClass } from '../../utils/format.utils';
 import {
@@ -23,12 +22,10 @@ import {
 export class TradePlanFormComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
   private planSvc = inject(TradePlanService);
-  private universeSvc = inject(UniverseService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
   registry = signal<RegistryStock[]>([]);
-  universe = signal<UniverseEntry[]>([]);
 
   tradeDate = signal(todayIso());
   dateTabs = computed(() =>
@@ -88,7 +85,7 @@ export class TradePlanFormComponent implements OnInit {
 
   symbolOptions = computed(() => {
     const q = this.symbolQuery().trim().toLowerCase();
-    const rows = this.universe();
+    const rows = this.registry();
     if (!q) return rows.slice(0, 30);
     return rows
       .filter(
@@ -125,12 +122,8 @@ export class TradePlanFormComponent implements OnInit {
 
   private async loadLookupData(): Promise<void> {
     try {
-      const [registry, universe] = await Promise.all([
-        this.registrySvc.listAll(),
-        this.universeSvc.listAll(),
-      ]);
+      const registry = await this.registrySvc.listAll();
       this.registry.set(registry);
-      this.universe.set(universe);
     } catch {
       // Symbol search falls back to manual entry.
     }
@@ -187,16 +180,17 @@ export class TradePlanFormComponent implements OnInit {
   }
 
   pickSymbol(symbol: string): void {
-    const entry = this.universe().find((s) => s.symbol === symbol.toUpperCase());
+    const entry = this.registry().find((s) => s.symbol === symbol.toUpperCase());
     this.form.symbol = symbol.toUpperCase();
     this.form.name = entry?.name ?? symbol.toUpperCase();
     this.symbolQuery.set(this.form.symbol);
-    const reg = this.registry().find((s) => s.symbol === this.form.symbol);
-    if (reg) {
-      this.form.cmp = String(reg.currentPrice);
-      this.form.entryPrice = String(reg.currentPrice);
-      if (reg.resistances[0]) this.form.targetPrice = String(reg.resistances[0]);
-      if (reg.supports[0]) this.form.stopLoss = String(reg.supports[0]);
+    if (entry) {
+      if (entry.currentPrice > 0) {
+        this.form.cmp = String(entry.currentPrice);
+        this.form.entryPrice = String(entry.currentPrice);
+      }
+      if (entry.resistances[0]) this.form.targetPrice = String(entry.resistances[0]);
+      if (entry.supports[0]) this.form.stopLoss = String(entry.supports[0]);
     }
     this.activeTab.set('manual');
   }
@@ -212,13 +206,12 @@ export class TradePlanFormComponent implements OnInit {
       return;
     }
     const stock = this.registry().find((s) => s.symbol === this.form.symbol.toUpperCase());
-    const universeEntry = this.universe().find((s) => s.symbol === this.form.symbol.toUpperCase());
     const editId = this.editingId();
     this.busy.set(true);
     try {
       const payload = {
         symbol: this.form.symbol,
-        stockName: stock?.name ?? universeEntry?.name ?? this.form.name,
+        stockName: stock?.name ?? this.form.name,
         tradeDate: this.tradeDate(),
         segment: this.form.segment,
         direction: this.form.direction,

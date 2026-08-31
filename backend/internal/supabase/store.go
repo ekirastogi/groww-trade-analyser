@@ -25,9 +25,9 @@ import (
 type Store struct {
 	pool *pgxpool.Pool
 
-	universeMu      sync.Mutex
-	universeCache   []string
-	universeCacheAt time.Time
+	registryMu      sync.Mutex
+	registryCache   []string
+	registryCacheAt time.Time
 
 	shockersMu      sync.Mutex
 	shockersCache   map[string]int
@@ -169,45 +169,45 @@ func (s *Store) PublishChartView(ctx context.Context, symbol string, chart datap
 	return err
 }
 
-func (s *Store) GetUniverseSymbols(ctx context.Context) ([]string, error) {
+func (s *Store) GetRegistrySymbols(ctx context.Context) ([]string, error) {
 	cacheTTL := 30 * time.Minute
-	if v := os.Getenv("UNIVERSE_CACHE_MINUTES"); v != "" {
+	if v := os.Getenv("REGISTRY_CACHE_MINUTES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cacheTTL = time.Duration(n) * time.Minute
 		}
 	}
-	s.universeMu.Lock()
-	if len(s.universeCache) > 0 && time.Since(s.universeCacheAt) < cacheTTL {
-		out := append([]string(nil), s.universeCache...)
-		s.universeMu.Unlock()
+	s.registryMu.Lock()
+	if len(s.registryCache) > 0 && time.Since(s.registryCacheAt) < cacheTTL {
+		out := append([]string(nil), s.registryCache...)
+		s.registryMu.Unlock()
 		return out, nil
 	}
-	s.universeMu.Unlock()
+	s.registryMu.Unlock()
 
-	rows, err := s.pool.Query(ctx, `select symbol from universe order by symbol`)
+	rows, err := s.pool.Query(ctx, `select distinct symbol from registry_stocks order by symbol`)
 	if err != nil {
-		return s.cachedUniverseFallback(), err
+		return s.cachedRegistryFallback(), err
 	}
 	defer rows.Close()
 	var out []string
 	for rows.Next() {
 		var sym string
 		if err := rows.Scan(&sym); err != nil {
-			return s.cachedUniverseFallback(), err
+			return s.cachedRegistryFallback(), err
 		}
 		out = append(out, strings.ToUpper(sym))
 	}
-	s.universeMu.Lock()
-	s.universeCache = append([]string(nil), out...)
-	s.universeCacheAt = time.Now()
-	s.universeMu.Unlock()
+	s.registryMu.Lock()
+	s.registryCache = append([]string(nil), out...)
+	s.registryCacheAt = time.Now()
+	s.registryMu.Unlock()
 	return out, nil
 }
 
-func (s *Store) cachedUniverseFallback() []string {
-	s.universeMu.Lock()
-	defer s.universeMu.Unlock()
-	return append([]string(nil), s.universeCache...)
+func (s *Store) cachedRegistryFallback() []string {
+	s.registryMu.Lock()
+	defer s.registryMu.Unlock()
+	return append([]string(nil), s.registryCache...)
 }
 
 func (s *Store) GetActiveVolumeShockers(ctx context.Context) (map[string]int, error) {
@@ -564,8 +564,8 @@ func floatField(m map[string]interface{}, key string) float64 {
 	}
 }
 
-func (s *Store) SyncUniverseSymbols(ctx context.Context, entries []market.ExchangeSymbol) (int, error) {
-	if len(entries) == 0 {
+func (s *Store) SyncRegistrySymbols(ctx context.Context, userID string, entries []market.ExchangeSymbol) (int, error) {
+	if len(entries) == 0 || strings.TrimSpace(userID) == "" {
 		return 0, nil
 	}
 	now := time.Now().UnixMilli()
@@ -577,12 +577,14 @@ func (s *Store) SyncUniverseSymbols(ctx context.Context, entries []market.Exchan
 			continue
 		}
 		batch.Queue(`
-			insert into universe (symbol, name, isin, exchange, source, updated_at)
-			values ($1,$2,$3,$4,'exchange_seed',$5)
-			on conflict (symbol) do update set
+			insert into registry_stocks (
+				user_id, symbol, name, isin, exchange, source, current_price,
+				supports, resistances, notes, updated_at
+			) values ($1,$2,$3,$4,$5,'exchange_seed',0,'[]'::jsonb,'[]'::jsonb,'',$6)
+			on conflict (user_id, symbol) do update set
 				name=excluded.name, isin=excluded.isin, exchange=excluded.exchange,
 				source=excluded.source, updated_at=excluded.updated_at
-		`, symbol, entry.Name, entry.ISIN, entry.Exchange, now)
+		`, userID, symbol, entry.Name, entry.ISIN, entry.Exchange, now)
 		count++
 	}
 	br := s.pool.SendBatch(ctx, batch)
@@ -592,15 +594,15 @@ func (s *Store) SyncUniverseSymbols(ctx context.Context, entries []market.Exchan
 			return count, err
 		}
 	}
-	s.universeMu.Lock()
-	s.universeCache = nil
-	s.universeCacheAt = time.Time{}
-	s.universeMu.Unlock()
+	s.registryMu.Lock()
+	s.registryCache = nil
+	s.registryCacheAt = time.Time{}
+	s.registryMu.Unlock()
 	return count, nil
 }
 
 func (s *Store) GetWatchlistSymbols(ctx context.Context) ([]string, error) {
-	return s.GetUniverseSymbols(ctx)
+	return s.GetRegistrySymbols(ctx)
 }
 
 func (s *Store) PublishStock(ctx context.Context, symbol string, quote *market.Quote, fund *market.Fundamentals, candles []market.Candle, news []market.NewsItem, dataSource string) error {

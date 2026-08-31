@@ -2,7 +2,6 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RegistryStockService } from '../../services/registry-stock.service';
-import { UniverseService, UniverseEntry } from '../../services/universe.service';
 import { WorkerJobService } from '../../services/worker-job.service';
 import { RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency } from '../../utils/format.utils';
@@ -25,12 +24,10 @@ type RegistryColumnKey =
 })
 export class StockRegistryComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
-  private universeSvc = inject(UniverseService);
   private workerJobs = inject(WorkerJobService);
 
   stocks = signal<RegistryStock[]>([]);
   stockCount = signal(0);
-  universe = signal<UniverseEntry[]>([]);
   loading = signal(false);
   tableSort = new TableSortState('symbol', 'asc');
   fmt = formatCurrency;
@@ -82,7 +79,7 @@ export class StockRegistryComponent implements OnInit {
 
   symbolOptions = computed(() => {
     const q = this.symbolQuery().trim().toLowerCase();
-    const rows = this.universe();
+    const rows = this.stocks();
     if (!q) return rows.slice(0, 30);
     return rows
       .filter(
@@ -136,9 +133,8 @@ export class StockRegistryComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [stocks, universe, stockCount] = await Promise.all([
+      const [stocks, stockCount] = await Promise.all([
         this.registrySvc.listAll(),
-        this.universeSvc.listAll(),
         this.registrySvc.count(),
       ]);
 
@@ -148,36 +144,11 @@ export class StockRegistryComponent implements OnInit {
 
       this.stocks.set(finalStocks);
       this.stockCount.set(finalCount);
-      this.universe.set(universe);
       this.currentPage.set(1);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
     } finally {
       this.loading.set(false);
-    }
-  }
-
-  async syncFromUniverse(): Promise<void> {
-    this.error.set(null);
-    this.success.set(null);
-    this.busy.set(true);
-    try {
-      const sync = await this.registrySvc.syncFromUniverse();
-      const deduped = await this.registrySvc.dedupeByIsin();
-      await this.reload();
-      const parts = [
-        sync.added > 0 ? `Added ${sync.added} symbol(s)` : null,
-        deduped > 0 ? `removed ${deduped} duplicate(s)` : null,
-      ].filter(Boolean);
-      this.success.set(
-        parts.length
-          ? `Synced from universe: ${parts.join(', ')}.`
-          : 'Registry is already up to date with the imported universe.'
-      );
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Sync failed');
-    } finally {
-      this.busy.set(false);
     }
   }
 
@@ -260,7 +231,7 @@ export class StockRegistryComponent implements OnInit {
   onSymbolQuery(value: string): void {
     this.symbolQuery.set(value);
     this.form.symbol = value.toUpperCase();
-    const match = this.universe().find((s) => s.symbol === this.form.symbol);
+    const match = this.stocks().find((s) => s.symbol === this.form.symbol);
     if (match?.name) {
       this.form.name = match.name;
     }
@@ -357,17 +328,16 @@ export class StockRegistryComponent implements OnInit {
       if (!online) {
         throw new Error('Worker is offline. Start it with `cd backend && go run .` then retry.');
       }
-      const jobId = await this.workerJobs.requestSeedUniverse();
+      const jobId = await this.workerJobs.requestSeedRegistry();
       const job = await this.workerJobs.waitForJob(jobId, 20 * 60 * 1000);
       if (job.status === 'failed') {
-        throw new Error(job.error ?? 'Universe import failed');
+        throw new Error(job.error ?? 'Registry import failed');
       }
 
-      const sync = await this.registrySvc.syncFromUniverse();
       const deduped = await this.registrySvc.dedupeByIsin();
       await this.reload();
 
-      const imported = job.symbolsIngested ?? sync.added;
+      const imported = job.symbolsIngested ?? 0;
       const dedupeNote = deduped > 0 ? ` Removed ${deduped} duplicate listing(s) for the same company.` : '';
       this.success.set(
         `Imported ${imported} NSE/BSE symbols into your registry.${dedupeNote} Edit any stock to add price, indicators, and notes.`

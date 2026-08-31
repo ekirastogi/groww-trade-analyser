@@ -146,7 +146,7 @@ func (h *Handler) IngestSymbol(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) IngestSeedUniverse(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) IngestSeedRegistry(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -155,7 +155,16 @@ func (h *Handler) IngestSeedUniverse(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "ingestion scheduler not available")
 		return
 	}
-	count, err := h.scheduler.SeedUniverseFromExchanges(r.Context())
+	var body struct {
+		UserID string `json:"userId"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	userID := strings.TrimSpace(body.UserID)
+	if userID == "" {
+		writeError(w, http.StatusBadRequest, "userId is required")
+		return
+	}
+	count, err := h.scheduler.SeedRegistryFromExchanges(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

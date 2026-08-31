@@ -129,10 +129,10 @@ export class SettingsComponent {
     this.workerError.set(null);
     this.workerSuccess.set(null);
     try {
-      const jobId = await this.workerJobs.requestSeedUniverse();
+      const jobId = await this.workerJobs.requestSeedRegistry();
       const job = await this.workerJobs.waitForJob(jobId, 20 * 60 * 1000);
       if (job.status === 'completed') {
-        this.workerSuccess.set(`Imported ${job.symbolsIngested ?? 0} NSE/BSE symbols into universe.`);
+        this.workerSuccess.set(`Imported ${job.symbolsIngested ?? 0} NSE/BSE symbols into stock registry.`);
       } else {
         this.workerError.set(job.error ?? 'Universe import failed');
       }
@@ -156,7 +156,7 @@ export class SettingsComponent {
         rebuildProfiles: this.rebuildProfiles(),
       });
 
-      let message = `Synced ${result.symbolsSynced} symbol(s) from ${result.clientsProcessed} client account(s) to the universe collection.`;
+      let message = `Synced ${result.symbolsSynced} symbol(s) from ${result.clientsProcessed} client account(s) to your stock registry.`;
       if (result.profilesRebuilt) {
         message += ` Rebuilt stock profiles for ${result.profilesRebuilt} client(s).`;
       }

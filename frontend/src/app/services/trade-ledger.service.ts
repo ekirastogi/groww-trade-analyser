@@ -13,7 +13,6 @@ import { ClientAccountService } from './client-account.service';
 import { ParserService } from './parser.service';
 import { RegistryStockService } from './registry-stock.service';
 import { TradePlanService } from './trade-plan.service';
-import { UniverseService } from './universe.service';
 import { WatchlistService } from './watchlist.service';
 import { objectToSnake, numField, rowToCamel, SupabaseService } from './supabase.service';
 import {
@@ -185,7 +184,6 @@ export class TradeLedgerService {
   private parser = inject(ParserService);
   private registry = inject(RegistryStockService);
   private tradePlans = inject(TradePlanService);
-  private universe = inject(UniverseService);
   private watchlists = inject(WatchlistService);
 
   async uploadReport(file: File, options: UploadOptions = {}): Promise<UploadResult> {
@@ -342,7 +340,7 @@ export class TradeLedgerService {
       }
     }
 
-    const symbolsSynced = await this.universe.syncSymbols([...symbolMap.values()], 'pnl_upload');
+    const symbolsSynced = await this.registry.syncSymbols([...symbolMap.values()], 'pnl_upload');
 
     return {
       clientsProcessed: clients.length,
@@ -441,7 +439,7 @@ export class TradeLedgerService {
     const stockProfiles = await this.getStockProfiles(clientCode);
 
     if (stockProfiles.length) {
-      await this.universe.syncSymbols(
+      await this.registry.syncSymbols(
         stockProfiles.map((profile) => ({
           symbol: profile.symbol,
           name: profile.stockName,
@@ -513,7 +511,7 @@ export class TradeLedgerService {
     const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
     await this.writeStockProfiles(clientCode, profiles);
     await this.watchlists.syncPnlTierWatchlists(profiles);
-    await this.universe.syncSymbols(
+    await this.registry.syncSymbols(
       profiles.map((p) => ({ symbol: p.symbol, name: p.stockName, isin: p.isin })),
       'pnl_upload'
     );
