@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, of, switchMap } from 'rxjs';
 import { RegistryStock } from '../models/trading-journal.models';
 import { AuthService } from './auth.service';
-import { objectToSnake, rowsToCamel, SupabaseService } from './supabase.service';
+import { objectToSnake, rowToCamel, rowsToCamel, SupabaseService } from './supabase.service';
 
 const UPSERT_BATCH_LIMIT = 400;
 
@@ -134,6 +134,76 @@ export class RegistryStockService {
       await this.remove(symbol);
     }
     return symbolsToRemove.size;
+  }
+
+  /**
+   * Copy CMP, market cap, P/E, and indicators from the worker `stocks` table
+   * (populated by Groww ingest) into the user's registry rows.
+   */
+  async enrichFromMarketData(): Promise<{ updated: number; pending: number }> {
+    await this.auth.whenReady();
+    const uid = await this.auth.getDataUserId();
+    if (!uid) throw new Error('Sign in to refresh market data');
+
+    const registry = await this.listAll();
+    if (!registry.length) return { updated: 0, pending: 0 };
+
+    const bySymbol = new Map(registry.map((stock) => [stock.symbol, stock]));
+    const symbols = [...bySymbol.keys()];
+    const marketBySymbol = new Map<string, Record<string, unknown>>();
+    const chunkSize = 200;
+
+    for (let i = 0; i < symbols.length; i += chunkSize) {
+      const chunk = symbols.slice(i, i + chunkSize);
+      const { data, error } = await this.supabase.client.from('stocks').select('*').in('symbol', chunk);
+      if (error) throw error;
+      for (const row of data ?? []) {
+        const camel = rowToCamel<Record<string, unknown>>(row);
+        marketBySymbol.set(String(camel['symbol'] ?? '').toUpperCase(), camel);
+      }
+    }
+
+    let updated = 0;
+
+    for (const stock of registry) {
+      const market = marketBySymbol.get(stock.symbol);
+      if (!market) continue;
+
+      const ltp = Number(market['ltp'] ?? 0);
+      const marketCap = Number(market['marketCap'] ?? 0);
+      const pe = Number(market['pe'] ?? 0);
+      const indicators = (market['indicators'] as Record<string, number> | undefined) ?? {};
+      const supports = ((market['supportLevels'] as number[]) ?? []).filter((v) => v > 0).slice(0, 3);
+      const resistances = ((market['resistanceLevels'] as number[]) ?? []).filter((v) => v > 0).slice(0, 3);
+
+      const hasData =
+        ltp > 0 ||
+        marketCap > 0 ||
+        pe > 0 ||
+        indicators['rsi'] != null ||
+        supports.length > 0 ||
+        resistances.length > 0;
+      if (!hasData) continue;
+
+      await this.save({
+        ...stock,
+        name: String(market['name'] ?? stock.name),
+        currentPrice: ltp > 0 ? ltp : stock.currentPrice,
+        marketCap: marketCap > 0 ? marketCap : stock.marketCap,
+        pe: pe > 0 ? pe : stock.pe,
+        rsi: indicators['rsi'] ?? stock.rsi,
+        macd: indicators['macd'] ?? stock.macd,
+        macdHist: indicators['macdHist'] ?? stock.macdHist,
+        macdSignal: indicators['macdSignal'] ?? stock.macdSignal,
+        sma20: indicators['sma20'] ?? stock.sma20,
+        sma50: indicators['sma50'] ?? stock.sma50,
+        supports: supports.length ? supports : stock.supports,
+        resistances: resistances.length ? resistances : stock.resistances,
+      });
+      updated++;
+    }
+
+    return { updated, pending: registry.length - updated };
   }
 
   async save(stock: Omit<RegistryStock, 'updatedAt'>): Promise<void> {

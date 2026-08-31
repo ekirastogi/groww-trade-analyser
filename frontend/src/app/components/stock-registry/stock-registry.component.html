@@ -10,11 +10,17 @@
     <div>
       <p class="text-sm font-medium text-slate-900">{{ stockCount() }} stocks in your registry</p>
       <p class="mt-0.5 text-xs text-slate-500">
-        Your personal stock book — imported NSE/BSE symbols plus any you add manually. Enrich each row with price, indicators, and levels.
+        Your personal stock book. NSE/BSE import adds names only — use <strong>Refresh market data</strong> after worker ingest for CMP, market cap, and indicators.
       </p>
     </div>
     <div class="flex flex-wrap gap-2">
       <button type="button" class="btn-primary" (click)="openAddForm()">Add stock</button>
+      <button type="button" class="btn-secondary" [disabled]="busy() || loading()" (click)="backfillFromYahoo()">
+        {{ busy() ? 'Backfilling…' : 'Backfill from Yahoo' }}
+      </button>
+      <button type="button" class="btn-secondary" [disabled]="busy() || loading()" (click)="refreshMarketData()">
+        {{ busy() ? 'Refreshing…' : 'Refresh market data' }}
+      </button>
       <button type="button" class="btn-secondary" [disabled]="seedBusy() || loading()" (click)="reload()">
         {{ loading() ? 'Loading…' : 'Refresh' }}
       </button>

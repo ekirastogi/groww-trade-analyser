@@ -55,10 +55,12 @@ func main() {
 	}
 
 	var dataBackend datapub.Backend
+	var pgStore *supabase.Store
 	if sb, err := supabase.NewStore(ctx); err != nil {
 		log.Fatalf("supabase: %v", err)
 	} else {
 		defer sb.Close()
+		pgStore = sb
 		dataBackend = sb
 		logx.Info("Supabase Postgres connected (data layer)")
 	}
@@ -95,7 +97,7 @@ func main() {
 		if interval == "" {
 			interval = "15m"
 		}
-		api := handlers.NewWithScheduler(store.New(), scheduler)
+		api := handlers.NewWithScheduler(store.New(), scheduler, pgStore)
 		go startHTTPServer(addr, api, map[string]any{
 			"status":          "ok",
 			"service":         "groww-trading-worker",

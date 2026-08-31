@@ -319,6 +319,48 @@ export class StockRegistryComponent implements OnInit {
     await this.reload();
   }
 
+  async backfillFromYahoo(): Promise<void> {
+    this.error.set(null);
+    this.success.set(null);
+    this.busy.set(true);
+    try {
+      const result = await this.workerJobs.backfillRegistryFromYahoo(true);
+      await this.reload();
+      this.success.set(
+        `Yahoo backfill complete: updated ${result.updated} of ${result.processed} symbol(s) with CMP, market cap, and P/E (delayed data).`
+      );
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Yahoo backfill failed');
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async refreshMarketData(): Promise<void> {
+    this.error.set(null);
+    this.success.set(null);
+    this.busy.set(true);
+    try {
+      const result = await this.registrySvc.enrichFromMarketData();
+      await this.reload();
+      if (!result.updated) {
+        this.success.set(
+          'No market data found yet. Run Settings → Worker → Hot ingest (with Groww credentials in backend/.env) then try again.'
+        );
+      } else {
+        const pendingNote =
+          result.pending > 0
+            ? ` ${result.pending} symbol(s) still need ingest (run Hot ingest in Settings → Worker).`
+            : '';
+        this.success.set(`Updated market data for ${result.updated} stock(s).${pendingNote}`);
+      }
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Market data refresh failed');
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   async importExchangeUniverse(): Promise<void> {
     this.error.set(null);
     this.success.set(null);

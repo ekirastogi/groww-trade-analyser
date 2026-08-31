@@ -31,6 +31,7 @@ func startHTTPServer(addr string, h *handlers.Handler, health map[string]any) {
 	mux.HandleFunc("POST /api/v1/ingest/symbol/{symbol}", h.IngestSymbol)
 	mux.HandleFunc("POST /api/v1/ingest/seed-registry", h.IngestSeedRegistry)
 	mux.HandleFunc("POST /api/v1/ingest/seed-universe", h.IngestSeedRegistry)
+	mux.HandleFunc("POST /api/v1/registry/backfill-yahoo", h.BackfillRegistryYahoo)
 
 	server := &http.Server{
 		Addr:              addr,

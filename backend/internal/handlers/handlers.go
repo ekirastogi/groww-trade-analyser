@@ -3,26 +3,30 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/analysis"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/ingestion"
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/market"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/models"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/parser"
 	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/store"
+	"github.com/ekanshrastogi/groww-pnl-analyzer/internal/supabase"
 )
 
 type Handler struct {
 	store     *store.Store
 	scheduler *ingestion.Scheduler
+	data      *supabase.Store
 }
 
 func New(s *store.Store) *Handler {
 	return &Handler{store: s}
 }
 
-func NewWithScheduler(s *store.Store, scheduler *ingestion.Scheduler) *Handler {
-	return &Handler{store: s, scheduler: scheduler}
+func NewWithScheduler(s *store.Store, scheduler *ingestion.Scheduler, data *supabase.Store) *Handler {
+	return &Handler{store: s, scheduler: scheduler, data: data}
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -173,6 +177,53 @@ func (h *Handler) IngestSeedRegistry(w http.ResponseWriter, r *http.Request) {
 		"status":          "ok",
 		"symbolsIngested": count,
 	})
+}
+
+func (h *Handler) BackfillRegistryYahoo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.data == nil {
+		writeError(w, http.StatusServiceUnavailable, "supabase data store not available")
+		return
+	}
+	var body struct {
+		UserID      string `json:"userId"`
+		Offset      int    `json:"offset"`
+		Limit       int    `json:"limit"`
+		OnlyMissing bool   `json:"onlyMissing"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	userID := strings.TrimSpace(body.UserID)
+	if userID == "" {
+		writeError(w, http.StatusBadRequest, "userId is required")
+		return
+	}
+	if body.Limit <= 0 {
+		if v := strings.TrimSpace(r.URL.Query().Get("limit")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				body.Limit = n
+			}
+		}
+	}
+	if body.Offset < 0 {
+		body.Offset = 0
+	}
+
+	result, err := h.data.BackfillRegistryFromYahoo(
+		r.Context(),
+		market.NewYahooProvider(),
+		userID,
+		body.Offset,
+		body.Limit,
+		body.OnlyMissing,
+	)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func parseTradeTypes(raw string) []models.TradeType {

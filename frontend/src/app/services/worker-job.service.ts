@@ -135,6 +135,52 @@ export class WorkerJobService {
     return this.requestSeedRegistry();
   }
 
+  async backfillRegistryFromYahoo(
+    onlyMissing = true,
+    batchLimit = 200
+  ): Promise<{ processed: number; updated: number; done: boolean }> {
+    await this.auth.whenReady();
+    const uid = this.auth.uid;
+    if (!uid) throw new Error('Sign in to backfill registry');
+
+    const online = await this.isLocalWorkerReachable();
+    if (!online) {
+      throw new Error('Worker is offline. Start it with `cd backend && go run .` then retry.');
+    }
+
+    let offset = 0;
+    let processed = 0;
+    let updated = 0;
+    let done = false;
+
+    while (!done) {
+      const res = await fetch(`${LOCAL_WORKER_URL}/api/v1/registry/backfill-yahoo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(JOB_TIMEOUT_MS),
+        body: JSON.stringify({ userId: uid, offset, limit: batchLimit, onlyMissing }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        processed?: number;
+        updated?: number;
+        done?: boolean;
+      };
+      if (!res.ok) {
+        throw new Error(body.error ?? `Yahoo backfill failed (${res.status})`);
+      }
+      processed += body.processed ?? 0;
+      updated += body.updated ?? 0;
+      done = !!body.done;
+      if (!done) {
+        offset += body.processed ?? batchLimit;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
+    return { processed, updated, done };
+  }
+
   async waitForJob(jobId: string, timeoutMs = JOB_TIMEOUT_MS): Promise<WorkerJob> {
     const local = this.localJobs.get(jobId);
     if (local) {
