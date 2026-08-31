@@ -45,27 +45,30 @@ export class FilteredStockService {
   });
 
   constructor() {
-    effect(() => {
-      const report = this.state.report();
-      const opts = this.state.analysisOptions();
-      if (!report) {
-        this.dateFiltered.set([]);
-        return;
-      }
+    effect(
+      () => {
+        const report = this.state.report();
+        const opts = this.state.analysisOptions();
+        if (!report) {
+          this.dateFiltered.set([]);
+          return;
+        }
 
-      const profiles = report.stockProfiles ?? [];
-      const needsTradeQuery =
-        !isFullReportDateRange(report.dateRange, opts) ||
-        (profiles.length > 0 && !profilesHaveTypeBreakdown(profiles));
+        const profiles = report.stockProfiles ?? [];
+        const needsTradeQuery =
+          !isFullReportDateRange(report.dateRange, opts) ||
+          (profiles.length > 0 && !profilesHaveTypeBreakdown(profiles));
 
-      if (!needsTradeQuery) {
-        this.dateFiltered.set([]);
-        this.loading.set(false);
-        return;
-      }
+        if (!needsTradeQuery) {
+          this.dateFiltered.set([]);
+          this.loading.set(false);
+          return;
+        }
 
-      void this.reloadFromTrades(report.summary.clientCode, report.dateRange, opts);
-    });
+        void this.reloadFromTrades(report.summary.clientCode, report.dateRange, opts);
+      },
+      { allowSignalWrites: true }
+    );
   }
 
   private async reloadFromTrades(

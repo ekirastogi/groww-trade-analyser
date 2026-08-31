@@ -138,8 +138,13 @@ function tradeFromRow(row: Record<string, unknown>): StoredTrade {
   };
 }
 
-function profileToRow(profile: StockProfile, userId: string): Record<string, unknown> {
-  return objectToSnake({
+function profileToRow(
+  profile: StockProfile,
+  userId: string,
+  options: { includeByTradeType?: boolean } = {}
+): Record<string, unknown> {
+  const includeByTradeType = options.includeByTradeType !== false;
+  const row: Record<string, unknown> = {
     userId,
     clientCode: profile.clientCode,
     symbol: profile.symbol,
@@ -155,8 +160,20 @@ function profileToRow(profile: StockProfile, userId: string): Record<string, unk
     winningTrades: profile.winningTrades,
     losingTrades: profile.losingTrades,
     winRate: profile.winRate,
-    byTradeType: profile.byTradeType,
-  });
+  };
+  if (includeByTradeType && Object.keys(profile.byTradeType).length > 0) {
+    row['byTradeType'] = profile.byTradeType;
+  }
+  return objectToSnake(row);
+}
+
+function isMissingColumnError(error: { message?: string; code?: string }, column: string): boolean {
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    error.code === 'PGRST204' ||
+    message.includes(column) ||
+    message.includes('column') && message.includes('does not exist')
+  );
 }
 
 function tradeToRow(trade: StoredTrade, userId: string): Record<string, unknown> {
@@ -234,6 +251,8 @@ export class TradeLedgerService {
   private registry = inject(RegistryStockService);
   private tradePlans = inject(TradePlanService);
   private watchlists = inject(WatchlistService);
+  /** null = unknown; false = `by_trade_type` column not on remote DB yet. */
+  private stockProfilesSupportByTradeType: boolean | null = null;
 
   async uploadReport(file: File, options: UploadOptions = {}): Promise<UploadResult> {
     await this.auth.whenReady();
@@ -561,7 +580,7 @@ export class TradeLedgerService {
     return profiles.map((profile) => profileToStockSummary(profile));
   }
 
-  /** Rebuild and persist stock profiles (including per-type breakdown) from all trades. */
+  /** Rebuild stock profiles (including per-type breakdown) from all trades. */
   async rebuildStockProfiles(clientCode: string): Promise<StockProfile[]> {
     const clients = await this.clientSvc.listClients();
     const client = clients.find((c) => c.clientCode === clientCode);
@@ -570,14 +589,28 @@ export class TradeLedgerService {
     if (!trades.length) return [];
 
     const profiles = this.buildStockProfilesFromTrades(trades, clientCode, clientName);
-    await this.writeStockProfiles(clientCode, profiles);
-    await this.writeAnalyticsDaily(clientCode, buildDailyAnalyticsFromTrades(trades));
+    try {
+      await this.writeStockProfiles(clientCode, profiles);
+      await this.writeAnalyticsDaily(clientCode, buildDailyAnalyticsFromTrades(trades));
+    } catch (error) {
+      console.warn('Could not persist rebuilt stock profiles', error);
+    }
     return profiles;
   }
 
   async ensureStockProfilesWithBreakdown(clientCode: string, profiles: StockProfile[]): Promise<StockProfile[]> {
     if (profiles.length && profilesHaveTypeBreakdown(profiles)) return profiles;
-    return this.rebuildStockProfiles(clientCode);
+    try {
+      return await this.rebuildStockProfiles(clientCode);
+    } catch (error) {
+      console.warn('Could not rebuild stock profiles with trade-type breakdown', error);
+      const clients = await this.clientSvc.listClients();
+      const client = clients.find((c) => c.clientCode === clientCode);
+      const clientName = client?.clientName ?? clientCode;
+      const trades = await this.getAllTrades(clientCode);
+      if (!trades.length) return profiles;
+      return this.buildStockProfilesFromTrades(trades, clientCode, clientName);
+    }
   }
 
   mergeTradesIntoReport(report: Report, trades: StoredTrade[]): Report {
@@ -992,11 +1025,21 @@ export class TradeLedgerService {
   private async writeStockProfiles(clientCode: string, profiles: StockProfile[]): Promise<void> {
     const uid = await this.auth.getDataUserId();
     if (!uid) return;
+
+    const includeByTradeType = this.stockProfilesSupportByTradeType !== false;
     for (let i = 0; i < profiles.length; i += UPSERT_BATCH_LIMIT) {
-      const chunk = profiles
-        .slice(i, i + UPSERT_BATCH_LIMIT)
-        .map((profile) => profileToRow(profile, uid));
-      const { error } = await this.supabase.client.from('stock_profiles').upsert(chunk);
+      const slice = profiles.slice(i, i + UPSERT_BATCH_LIMIT);
+      let chunk = slice.map((profile) =>
+        profileToRow(profile, uid, { includeByTradeType })
+      );
+      let { error } = await this.supabase.client.from('stock_profiles').upsert(chunk);
+      if (error && includeByTradeType && isMissingColumnError(error, 'by_trade_type')) {
+        this.stockProfilesSupportByTradeType = false;
+        chunk = slice.map((profile) => profileToRow(profile, uid, { includeByTradeType: false }));
+        ({ error } = await this.supabase.client.from('stock_profiles').upsert(chunk));
+      } else if (!error && includeByTradeType) {
+        this.stockProfilesSupportByTradeType = true;
+      }
       if (error) throw error;
     }
   }
