@@ -30,6 +30,7 @@ import {
   buildLineDataset,
 } from '../../utils/chart-theme';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
+import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
 import {
@@ -53,7 +54,7 @@ type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
 @Component({
   selector: 'app-analytics',
   standalone: true,
-  imports: [CommonModule, RouterLink, FilterPanelComponent, ChartCardComponent, ReportHistoryComponent],
+  imports: [CommonModule, RouterLink, FilterPanelComponent, TradeTypeFilterComponent, ChartCardComponent, ReportHistoryComponent],
   templateUrl: './analytics.component.html',
   styles: `
     .analytics-hero {

@@ -35,6 +35,7 @@ import {
   persistStockScenarios,
 } from '../../utils/stock-scenario.utils';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
+import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import {
@@ -76,7 +77,7 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, FilterPanelComponent, ReportHistoryComponent, ChartCardComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FilterPanelComponent, TradeTypeFilterComponent, ReportHistoryComponent, ChartCardComponent],
   templateUrl: './dashboard.component.html',
 })
 export class DashboardComponent implements OnInit {

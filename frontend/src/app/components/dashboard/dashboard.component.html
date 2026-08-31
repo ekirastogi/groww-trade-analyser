@@ -53,6 +53,11 @@
     </div>
   }
 
+  <div class="mb-3 flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 sm:mb-4">
+    <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
+    <app-trade-type-filter [compact]="true" />
+  </div>
+
   <div class="mb-4 sm:mb-6">
     <app-filter-panel [collapsible]="true" />
   </div>
