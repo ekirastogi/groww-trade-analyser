@@ -48,7 +48,28 @@ interface PriceLevel {
       @apply bg-slate-900 text-white shadow-sm hover:bg-slate-900 hover:text-white;
     }
     .trade-item {
-      @apply transition hover:bg-slate-50/60;
+      @apply transition;
+    }
+    .trade-item:not(.trade-card-skipped):not(.trade-card-profit):not(.trade-card-loss):hover {
+      @apply bg-slate-50/60;
+    }
+    .trade-card-skipped {
+      @apply bg-amber-50;
+    }
+    .trade-card-skipped:hover {
+      @apply bg-amber-100/80;
+    }
+    .trade-card-profit {
+      @apply bg-emerald-50;
+    }
+    .trade-card-profit:hover {
+      @apply bg-emerald-100/70;
+    }
+    .trade-card-loss {
+      @apply bg-red-50;
+    }
+    .trade-card-loss:hover {
+      @apply bg-red-100/70;
     }
     .trade-identity {
       @apply min-w-0 shrink;
@@ -80,6 +101,15 @@ interface PriceLevel {
     .ribbon-loss {
       @apply bg-red-500;
     }
+    .ribbon-executed {
+      @apply absolute top-1/2 z-20 h-3 -translate-y-1/2 rounded-full shadow-md ring-2 ring-white;
+    }
+    .ribbon-executed-profit {
+      @apply bg-emerald-600;
+    }
+    .ribbon-executed-loss {
+      @apply bg-red-600;
+    }
     .price-marker {
       @apply absolute top-1/2 z-10 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white;
     }
@@ -88,6 +118,9 @@ interface PriceLevel {
     }
     .action-menu-item {
       @apply flex w-full items-center px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50;
+    }
+    .scale-in-marker {
+      @apply h-2 w-2 bg-sky-400;
     }
   `,
 })
@@ -343,10 +376,23 @@ export class TradePlansComponent implements OnInit {
 
   statusBadgeClass(t: PlannedTrade): string {
     switch (t.status) {
-      case 'executed': return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
-      case 'skipped': return 'bg-slate-100 text-slate-600 ring-slate-200';
-      default: return 'bg-amber-50 text-amber-800 ring-amber-200';
+      case 'executed':
+        return this.displayPnL(t) >= 0
+          ? 'bg-emerald-100 text-emerald-800 ring-emerald-300'
+          : 'bg-red-100 text-red-800 ring-red-300';
+      case 'skipped': return 'bg-amber-100 text-amber-800 ring-amber-300';
+      default: return 'bg-slate-100 text-slate-700 ring-slate-200';
     }
+  }
+
+  tradeCardClass(t: PlannedTrade): string {
+    if (t.status === 'skipped') return 'trade-card-skipped';
+    if (t.status === 'executed') {
+      const pnl = this.displayPnL(t);
+      if (pnl > 0) return 'trade-card-profit';
+      if (pnl < 0) return 'trade-card-loss';
+    }
+    return '';
   }
 
   typeBadgeClass(t: PlannedTrade): string {
@@ -363,13 +409,20 @@ export class TradePlansComponent implements OnInit {
       this.execSellLegs.set(summary.sellLegs.map((leg) => ({ quantity: String(leg.quantity), price: String(leg.price) })));
       return;
     }
-    const qty = String(trade.quantity);
+    const entryLegs = trade.entryLegs?.length
+      ? trade.entryLegs
+      : [{ quantity: trade.quantity, price: trade.entryPrice }];
+    const totalQty = entryLegs.reduce((sum, leg) => sum + leg.quantity, 0);
     if (trade.segment === 'intraday' && trade.direction === 'short') {
-      this.execBuyLegs.set([{ quantity: qty, price: String(trade.targetPrice) }]);
-      this.execSellLegs.set([{ quantity: qty, price: String(trade.entryPrice) }]);
+      this.execBuyLegs.set([{ quantity: String(totalQty), price: String(trade.targetPrice) }]);
+      this.execSellLegs.set(
+        entryLegs.map((leg) => ({ quantity: String(leg.quantity), price: String(leg.price) }))
+      );
     } else {
-      this.execBuyLegs.set([{ quantity: qty, price: String(trade.entryPrice) }]);
-      this.execSellLegs.set([{ quantity: qty, price: String(trade.targetPrice) }]);
+      this.execBuyLegs.set(
+        entryLegs.map((leg) => ({ quantity: String(leg.quantity), price: String(leg.price) }))
+      );
+      this.execSellLegs.set([{ quantity: String(totalQty), price: String(trade.targetPrice) }]);
     }
   }
 
@@ -464,6 +517,43 @@ export class TradePlansComponent implements OnInit {
     return `Intraday · ${t.direction === 'short' ? 'Short' : 'Long'}`;
   }
 
+  entryLabel(t: PlannedTrade): string {
+    return this.hasScaleIns(t) ? 'Avg entry' : 'Entry';
+  }
+
+  hasScaleIns(t: PlannedTrade): boolean {
+    return (t.entryLegs?.length ?? 0) > 1;
+  }
+
+  quantityDetail(t: PlannedTrade): string {
+    const legs = t.entryLegs?.length ?? 0;
+    if (legs > 1) {
+      return `${t.quantity} qty · ${legs} entries · avg ${this.fmt(t.entryPrice)}`;
+    }
+    return `${t.quantity} qty`;
+  }
+
+  scaleInLevels(t: PlannedTrade): { key: string; label: string; price: number; quantity: number }[] {
+    const legs = t.entryLegs ?? [];
+    if (legs.length <= 1) return [];
+    return legs.slice(1).map((leg, index) => ({
+      key: `scale-${index}`,
+      label: `Scale ${index + 1}`,
+      price: leg.price,
+      quantity: leg.quantity,
+    }));
+  }
+
+  scaleInMarkers(t: PlannedTrade): { key: string; price: number; markerClass: string }[] {
+    const legs = t.entryLegs ?? [];
+    if (legs.length <= 1) return [];
+    return legs.slice(1).map((leg, index) => ({
+      key: `scale-marker-${index}`,
+      price: leg.price,
+      markerClass: 'bg-sky-400',
+    }));
+  }
+
   tradeName(t: PlannedTrade): string {
     const fromPlan = t.stockName?.trim();
     if (fromPlan && fromPlan.toUpperCase() !== t.symbol.toUpperCase()) return fromPlan;
@@ -478,9 +568,13 @@ export class TradePlansComponent implements OnInit {
   }
 
   priceRange(t: PlannedTrade): { min: number; max: number } {
-    const prices = [t.cmp, t.entryPrice, t.targetPrice, t.stopLoss].filter(
-      (p): p is number => p != null && p > 0
-    );
+    const prices = [
+      t.cmp,
+      t.entryPrice,
+      t.targetPrice,
+      t.stopLoss,
+      ...(t.entryLegs?.map((leg) => leg.price) ?? []),
+    ].filter((p): p is number => p != null && p > 0);
     if (!prices.length) return { min: 0, max: 1 };
     const min = Math.min(...prices);
     const max = Math.max(...prices);
@@ -507,6 +601,14 @@ export class TradePlansComponent implements OnInit {
   ribbonLossSegment(t: PlannedTrade): { left: number; width: number } | null {
     if (t.stopLoss == null) return null;
     return this.ribbonSegment(t.entryPrice, t.stopLoss, t);
+  }
+
+  executedTradeSegment(t: PlannedTrade): { left: number; width: number; profitable: boolean } | null {
+    if (t.status !== 'executed') return null;
+    const summary = this.executionSummary(t);
+    if (!summary) return null;
+    const segment = this.ribbonSegment(summary.avgBuyPrice, summary.avgSellPrice, t);
+    return { ...segment, profitable: summary.realizedPnL >= 0 };
   }
 
   isShort(t: PlannedTrade): boolean {
@@ -546,7 +648,7 @@ export class TradePlansComponent implements OnInit {
     }
     levels.push({
       key: 'entry',
-      label: 'Entry',
+      label: this.entryLabel(t),
       price: t.entryPrice,
       pct: this.entryPct(t),
       labelClass: 'text-emerald-600',

@@ -139,7 +139,7 @@
 
     <div class="flex flex-col gap-3">
       @for (t of sortedTrades(); track t.id) {
-        <article class="trade-item card group overflow-visible">
+        <article class="trade-item card group overflow-visible" [class]="tradeCardClass(t)">
           <div class="flex">
             <div class="w-1 shrink-0" [class]="accentClass(t)"></div>
             <div class="flex min-w-0 flex-1 flex-col gap-3 p-3 lg:flex-row lg:items-center lg:gap-4">
@@ -154,7 +154,7 @@
                     </span>
                   </div>
                   <p class="mt-0.5 text-xs text-slate-500">{{ segmentDetail(t) }}</p>
-                  <p class="text-xs font-medium tabular-nums text-slate-600">{{ t.quantity | number }} qty</p>
+                  <p class="text-xs font-medium tabular-nums text-slate-600">{{ quantityDetail(t) }}</p>
                 </div>
                 <!-- P&L on mobile -->
                 <div class="shrink-0 text-right lg:hidden">
@@ -174,7 +174,7 @@
               <div class="min-w-0 flex-1">
                 <div class="relative mx-1 mb-1 h-14">
                   <div class="ribbon-pin-label" [style.left.%]="markerLeft(t.entryPrice, t)">
-                    <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">Entry</p>
+                    <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">{{ entryLabel(t) }}</p>
                     <p class="text-xs font-bold tabular-nums text-slate-900">{{ fmt(t.entryPrice) }}</p>
                     @if (entryPct(t) != null) {
                       <p class="text-[10px] tabular-nums" [class]="pnlClass(entryPct(t) ?? 0)">{{ fmtPct(entryPct(t)) }}</p>
@@ -190,14 +190,28 @@
                 </div>
 
                 <div class="price-ribbon mx-1">
-                  @if (ribbonProfitSegment(t); as profit) {
-                    <span class="ribbon-segment ribbon-profit" [style.left.%]="profit.left" [style.width.%]="profit.width"></span>
+                  @if (t.status !== 'executed') {
+                    @if (ribbonProfitSegment(t); as profit) {
+                      <span class="ribbon-segment ribbon-profit" [style.left.%]="profit.left" [style.width.%]="profit.width"></span>
+                    }
+                    @if (ribbonLossSegment(t); as loss) {
+                      <span class="ribbon-segment ribbon-loss" [style.left.%]="loss.left" [style.width.%]="loss.width"></span>
+                    }
                   }
-                  @if (ribbonLossSegment(t); as loss) {
-                    <span class="ribbon-segment ribbon-loss" [style.left.%]="loss.left" [style.width.%]="loss.width"></span>
+                  @if (executedTradeSegment(t); as executed) {
+                    <span
+                      class="ribbon-segment ribbon-executed"
+                      [class.ribbon-executed-profit]="executed.profitable"
+                      [class.ribbon-executed-loss]="!executed.profitable"
+                      [style.left.%]="executed.left"
+                      [style.width.%]="executed.width"
+                    ></span>
                   }
                   @for (level of priceLevels(t); track level.key) {
                     <span class="price-marker" [class]="level.markerClass" [style.left.%]="markerLeft(level.price, t)"></span>
+                  }
+                  @for (leg of scaleInMarkers(t); track leg.key) {
+                    <span class="price-marker scale-in-marker" [class]="leg.markerClass" [style.left.%]="markerLeft(leg.price, t)"></span>
                   }
                 </div>
 
@@ -217,6 +231,15 @@
                     </div>
                   }
                 </div>
+                @if (scaleInLevels(t).length) {
+                  <div class="mt-2 flex flex-wrap gap-1.5">
+                    @for (leg of scaleInLevels(t); track leg.key) {
+                      <span class="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-sky-700 ring-1 ring-inset ring-sky-200">
+                        {{ leg.label }} {{ fmt(leg.price) }} · {{ leg.quantity | number }} qty
+                      </span>
+                    }
+                  </div>
+                }
               </div>
 
               <!-- P&L desktop -->

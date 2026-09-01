@@ -25,7 +25,7 @@
       <p class="text-sm text-red-600">{{ error() }}</p>
     }
 
-    <div class="card p-4">
+    <div class="card space-y-5 p-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label class="block text-sm sm:col-span-2">
           <span class="text-slate-500">Stock</span>
@@ -63,48 +63,121 @@
           </label>
         }
         <label class="block text-sm">
-          <span class="text-slate-500">Quantity</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.quantity" />
-        </label>
-        <label class="block text-sm">
           <span class="text-slate-500">CMP (current price) *</span>
           <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.cmp" />
         </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Entry price *</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.entryPrice" />
-          @if (entryPctPreview() != null) {
-            <span class="mt-1 block text-xs text-slate-400">vs CMP: {{ fmtPct(entryPctPreview()) }}</span>
+      </div>
+
+      <div>
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p class="text-sm font-semibold text-slate-800">Entry plan</p>
+            <p class="text-xs text-slate-500">{{ scaleInHint() }}</p>
+          </div>
+          <button type="button" class="text-xs font-medium text-kairo-600 hover:underline" (click)="addScaleIn()">
+            + Add scale-in
+          </button>
+        </div>
+
+        <div class="space-y-2">
+          @for (row of entryLegRows(); track $index) {
+            <div class="entry-row" [class.entry-row-scale]="$index > 0">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {{ $index === 0 ? 'Initial entry' : 'Scale-in ' + $index }}
+                </p>
+                @if ($index > 0) {
+                  <button type="button" class="text-xs text-slate-400 hover:text-red-600" (click)="removeScaleIn($index)">
+                    Remove
+                  </button>
+                }
+              </div>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <label class="block text-sm">
+                  <span class="text-slate-500">{{ isShort() ? 'Short entry price' : 'Buy price' }}</span>
+                  <input
+                    class="input-field mt-1 w-full"
+                    type="number"
+                    step="0.01"
+                    [ngModel]="row.price"
+                    (ngModelChange)="updateEntryLeg($index, 'price', $event)"
+                  />
+                </label>
+                <label class="block text-sm">
+                  <span class="text-slate-500">Quantity</span>
+                  <input
+                    class="input-field mt-1 w-full"
+                    type="number"
+                    [ngModel]="row.quantity"
+                    (ngModelChange)="updateEntryLeg($index, 'quantity', $event)"
+                  />
+                </label>
+              </div>
+            </div>
           }
-        </label>
+        </div>
+
+        @if (ladderMarkers().length) {
+          <div class="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Price ladder</p>
+            <div class="ladder-track">
+              @for (marker of ladderMarkers(); track marker.label + marker.left) {
+                <span class="ladder-marker" [class]="marker.className" [style.left.%]="marker.left" [title]="marker.label"></span>
+              }
+            </div>
+            <div class="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
+              @for (marker of ladderMarkers(); track marker.label + marker.left) {
+                <span class="inline-flex items-center gap-1">
+                  <span class="inline-block h-2 w-2 rounded-full" [class]="marker.className"></span>
+                  {{ marker.label }}
+                </span>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-2">
         <label class="block text-sm">
           <span class="text-slate-500">Target / exit *</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.targetPrice" />
+          <input class="input-field mt-1 w-full" type="number" step="0.01" [(ngModel)]="form.targetPrice" />
           @if (exitPctPreview() != null) {
-            <span class="mt-1 block text-xs text-slate-400">vs entry: {{ fmtPct(exitPctPreview()) }}</span>
+            <span class="mt-1 block text-xs text-slate-400">vs avg entry: {{ fmtPct(exitPctPreview()) }}</span>
           }
         </label>
         <label class="block text-sm">
           <span class="text-slate-500">Stop loss</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.stopLoss" />
+          <input class="input-field mt-1 w-full" type="number" step="0.01" [(ngModel)]="form.stopLoss" />
           @if (stopLossPctPreview() != null) {
-            <span class="mt-1 block text-xs text-slate-400">vs entry: {{ fmtPct(stopLossPctPreview()) }}</span>
+            <span class="mt-1 block text-xs text-slate-400">vs avg entry: {{ fmtPct(stopLossPctPreview()) }}</span>
           }
         </label>
       </div>
-      <div class="mt-3 flex flex-wrap gap-4 text-sm text-slate-600">
-        <p>
-          If target:
-          <span class="font-bold tabular-nums" [class]="pnlClass(estimatedPreview())">{{ fmt(estimatedPreview()) }}</span>
-        </p>
-        @if (stopLossPreview() != null) {
-          <p>
-            If SL hit:
-            <span class="font-bold tabular-nums text-red-600">{{ fmt(stopLossPreview()!) }}</span>
-          </p>
-        }
-      </div>
-      <div class="mt-4 flex flex-wrap gap-2">
+
+      @if (entrySummary(); as summary) {
+        <div class="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p class="text-[11px] font-medium text-slate-500">Total quantity</p>
+            <p class="font-bold tabular-nums text-slate-900">{{ summary.totalQuantity | number }}</p>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium text-slate-500">Avg entry</p>
+            <p class="font-bold tabular-nums text-slate-900">{{ fmt(summary.avgEntryPrice) }}</p>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium text-slate-500">If target</p>
+            <p class="font-bold tabular-nums" [class]="pnlClass(summary.estimatedPnL)">{{ fmt(summary.estimatedPnL) }}</p>
+          </div>
+          @if (summary.estimatedStopLossPnL != null) {
+            <div>
+              <p class="text-[11px] font-medium text-slate-500">If SL hit</p>
+              <p class="font-bold tabular-nums text-red-600">{{ fmt(summary.estimatedStopLossPnL) }}</p>
+            </div>
+          }
+        </div>
+      }
+
+      <div class="flex flex-wrap gap-2">
         <button type="button" class="btn-primary" [disabled]="busy()" (click)="save()">
           {{ isEditing() ? (busy() ? 'Saving…' : 'Save changes') : 'Add to plan' }}
         </button>

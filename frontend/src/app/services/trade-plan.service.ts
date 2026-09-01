@@ -3,6 +3,7 @@ import { Observable, map, of, switchMap } from 'rxjs';
 import {
   DayTradeSummary,
   ExecutionLeg,
+  PlannedEntryLeg,
   PlannedTrade,
   TradeDirection,
   TradeExecutionInput,
@@ -25,6 +26,7 @@ export interface CreatePlannedTradeInput {
   entryPrice: number;
   targetPrice: number;
   stopLoss?: number;
+  entryLegs?: PlannedEntryLeg[];
   source?: TradePlanSource;
   notes?: string;
   carriedFromDate?: string;
@@ -44,6 +46,7 @@ type PlannedTradePayload = {
   executedSellPrice?: number | null;
   buyLegs?: ExecutionLeg[] | null;
   sellLegs?: ExecutionLeg[] | null;
+  entryLegs?: PlannedEntryLeg[] | null;
   updatedAt?: number;
   carriedFromDate?: string;
 };
@@ -69,6 +72,13 @@ function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
   const legacyLegs = legsFromLegacy(executedQuantity, executedBuyPrice, executedSellPrice);
   const buyLegs = payload.buyLegs?.length ? payload.buyLegs : legacyLegs.buyLegs;
   const sellLegs = payload.sellLegs?.length ? payload.sellLegs : legacyLegs.sellLegs;
+  const quantity = Number(camel['quantity'] ?? 0);
+  const entryPrice = Number(camel['entryPrice'] ?? 0);
+  const entryLegs = payload.entryLegs?.length
+    ? payload.entryLegs
+    : quantity > 0 && entryPrice > 0
+      ? [{ quantity, price: entryPrice }]
+      : undefined;
   return {
     id: String(camel['id'] ?? ''),
     symbol: String(camel['symbol'] ?? ''),
@@ -76,11 +86,12 @@ function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
     tradeDate: String(camel['tradeDate'] ?? ''),
     segment: camel['segment'] as TradeSegment,
     direction: camel['direction'] as TradeDirection,
-    quantity: Number(camel['quantity'] ?? 0),
+    quantity,
     cmp: camel['cmp'] as number | undefined,
-    entryPrice: Number(camel['entryPrice'] ?? 0),
+    entryPrice,
     targetPrice: Number(camel['targetPrice'] ?? 0),
     stopLoss: camel['stopLoss'] as number | undefined,
+    entryLegs,
     source: payload.source ?? 'manual',
     status: (camel['status'] as TradeExecutionStatus) ?? 'planned',
     estimatedPnL: numField(camel, 'estimatedPnL', 'estimatedPnl'),
@@ -266,6 +277,80 @@ export class TradePlanService {
     return TradePlanService.legTotalValue(sellLegs) - TradePlanService.legTotalValue(buyLegs);
   }
 
+  static resolveEntryLegs(
+    legs: PlannedEntryLeg[] | undefined,
+    entryPrice: number,
+    quantity: number
+  ): PlannedEntryLeg[] {
+    if (legs?.length) return legs;
+    if (quantity > 0 && entryPrice > 0) return [{ quantity, price: entryPrice }];
+    return [];
+  }
+
+  static estimatePnLFromEntryLegs(
+    segment: TradeSegment,
+    direction: TradeDirection,
+    legs: PlannedEntryLeg[],
+    exitPrice: number
+  ): number {
+    return legs.reduce(
+      (sum, leg) =>
+        sum + TradePlanService.estimatePnL(segment, direction, leg.quantity, leg.price, exitPrice),
+      0
+    );
+  }
+
+  static validatePlannedEntryLegs(
+    legs: PlannedEntryLeg[],
+    segment: TradeSegment,
+    direction: TradeDirection
+  ): string | null {
+    if (!legs.length) return 'Add at least one entry level';
+    for (const leg of legs) {
+      if (!leg.quantity || leg.quantity <= 0 || !leg.price || leg.price <= 0) {
+        return 'Each entry needs a positive quantity and price';
+      }
+    }
+    const initial = legs[0].price;
+    const isShort = segment === 'intraday' && direction === 'short';
+    for (let i = 1; i < legs.length; i++) {
+      const price = legs[i].price;
+      if (isShort && price <= initial) {
+        return 'Short scale-ins should be at higher prices than the initial entry';
+      }
+      if (!isShort && price >= initial) {
+        return 'Long scale-ins should be at lower prices than the initial entry';
+      }
+    }
+    return null;
+  }
+
+  static entryLegSummary(
+    legs: PlannedEntryLeg[],
+    segment: TradeSegment,
+    direction: TradeDirection,
+    targetPrice: number,
+    stopLoss?: number
+  ): {
+    totalQuantity: number;
+    avgEntryPrice: number;
+    estimatedPnL: number;
+    estimatedStopLossPnL: number | null;
+  } {
+    const totalQuantity = TradePlanService.legTotalQty(legs);
+    const avgEntryPrice = TradePlanService.weightedAvgPrice(legs);
+    const estimatedPnL = TradePlanService.estimatePnLFromEntryLegs(
+      segment,
+      direction,
+      legs,
+      targetPrice
+    );
+    const estimatedStopLossPnL = stopLoss
+      ? TradePlanService.estimatePnLFromEntryLegs(segment, direction, legs, stopLoss)
+      : null;
+    return { totalQuantity, avgEntryPrice, estimatedPnL, estimatedStopLossPnL };
+  }
+
   static validateExecutionLegs(buyLegs: ExecutionLeg[], sellLegs: ExecutionLeg[]): string | null {
     if (!buyLegs.length || !sellLegs.length) {
       return 'Add at least one buy and one sell entry';
@@ -347,24 +432,19 @@ export class TradePlanService {
       direction = 'long';
     }
 
-    const now = Date.now();
-    const id = crypto.randomUUID();
-    const estimatedPnL = TradePlanService.estimatePnL(
+    const entryLegs = TradePlanService.resolveEntryLegs(input.entryLegs, input.entryPrice, input.quantity);
+    const validationError = TradePlanService.validatePlannedEntryLegs(entryLegs, segment, direction);
+    if (validationError) throw new Error(validationError);
+    const summary = TradePlanService.entryLegSummary(
+      entryLegs,
       segment,
       direction,
-      input.quantity,
-      input.entryPrice,
-      input.targetPrice
+      input.targetPrice,
+      input.stopLoss
     );
-    const estimatedStopLossPnL = input.stopLoss
-      ? TradePlanService.estimatePnL(
-          segment,
-          direction,
-          input.quantity,
-          input.entryPrice,
-          input.stopLoss
-        )
-      : null;
+
+    const now = Date.now();
+    const id = crypto.randomUUID();
 
     const row = objectToSnake({
       id,
@@ -374,22 +454,23 @@ export class TradePlanService {
       tradeDate: input.tradeDate,
       segment,
       direction,
-      quantity: input.quantity,
+      quantity: summary.totalQuantity,
       cmp: input.cmp ?? null,
-      entryPrice: input.entryPrice,
+      entryPrice: summary.avgEntryPrice,
       targetPrice: input.targetPrice,
       stopLoss: input.stopLoss ?? null,
       status: 'planned' as TradeExecutionStatus,
-      estimatedPnl: estimatedPnL,
+      estimatedPnl: summary.estimatedPnL,
       realizedPnl: null,
       notes: input.notes ?? '',
       createdAt: now,
       payload: {
         source: input.source ?? 'manual',
-        estimatedStopLossPnL,
+        estimatedStopLossPnL: summary.estimatedStopLossPnL,
         executedQuantity: null,
         executedBuyPrice: null,
         executedSellPrice: null,
+        entryLegs,
         updatedAt: now,
         carriedFromDate: input.carriedFromDate,
       },
@@ -416,6 +497,7 @@ export class TradePlanService {
       executedSellPrice: null,
       buyLegs: null,
       sellLegs: null,
+      entryLegs: existing?.entryLegs ?? null,
     };
     let realizedPnl: number | null = null;
     if (status === 'executed' && execution) {
@@ -470,31 +552,26 @@ export class TradePlanService {
       direction = 'long';
     }
 
-    const estimatedPnL = TradePlanService.estimatePnL(
+    const entryLegs = TradePlanService.resolveEntryLegs(input.entryLegs, input.entryPrice, input.quantity);
+    const validationError = TradePlanService.validatePlannedEntryLegs(entryLegs, segment, direction);
+    if (validationError) throw new Error(validationError);
+    const summary = TradePlanService.entryLegSummary(
+      entryLegs,
       segment,
       direction,
-      input.quantity,
-      input.entryPrice,
-      input.targetPrice
+      input.targetPrice,
+      input.stopLoss
     );
-    const estimatedStopLossPnL = input.stopLoss
-      ? TradePlanService.estimatePnL(
-          segment,
-          direction,
-          input.quantity,
-          input.entryPrice,
-          input.stopLoss
-        )
-      : null;
 
     const payload: PlannedTradePayload = {
       source: input.source ?? existing?.source ?? 'manual',
-      estimatedStopLossPnL,
+      estimatedStopLossPnL: summary.estimatedStopLossPnL,
       executedQuantity: existing?.executedQuantity ?? null,
       executedBuyPrice: existing?.executedBuyPrice ?? null,
       executedSellPrice: existing?.executedSellPrice ?? null,
       buyLegs: existing?.buyLegs ?? null,
       sellLegs: existing?.sellLegs ?? null,
+      entryLegs,
       updatedAt: Date.now(),
     };
 
@@ -507,13 +584,13 @@ export class TradePlanService {
           tradeDate: input.tradeDate,
           segment,
           direction,
-          quantity: input.quantity,
+          quantity: summary.totalQuantity,
           cmp: input.cmp ?? null,
-          entryPrice: input.entryPrice,
+          entryPrice: summary.avgEntryPrice,
           targetPrice: input.targetPrice,
           stopLoss: input.stopLoss ?? null,
           notes: input.notes ?? '',
-          estimatedPnl: estimatedPnL,
+          estimatedPnl: summary.estimatedPnL,
           payload,
         })
       )
@@ -569,6 +646,7 @@ export class TradePlanService {
         entryPrice: t.entryPrice,
         targetPrice: t.targetPrice,
         stopLoss: t.stopLoss,
+        entryLegs: t.entryLegs,
         source: t.source,
         notes: t.notes,
         carriedFromDate: sourceDate,

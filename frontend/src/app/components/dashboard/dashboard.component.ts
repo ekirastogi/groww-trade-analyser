@@ -118,6 +118,7 @@ export class DashboardComponent implements OnInit {
   stockScenarioPanelOpen = signal(false);
   periodColumnsPanelOpen = signal(false);
   stockFilterRules = signal<StockFilterRule[]>([]);
+  stockSearchQuery = signal('');
   savedStockScenarios = signal<StockScenario[]>(loadSavedStockScenarios());
   scenarioNameInput = signal('');
   visibleStockColumns = signal<Set<StockColumnKey>>(new Set(DEFAULT_VISIBLE_STOCK_COLUMNS));
@@ -302,16 +303,20 @@ export class DashboardComponent implements OnInit {
   sortedStockData = computed(() => {
     const stocks = this.filteredStocks.stocks();
     const filtered = filterStocksByRules(stocks, this.stockFilterRules());
-    return this.sortRows(filtered, (row, col) => {
+    const searched = filtered.filter((stock) => this.matchesStockSearch(stock, this.stockSearchQuery()));
+    return this.sortRows(searched, (row, col) => {
       if (col === 'stockName') return row.stockName.toLowerCase();
       return row[col as keyof StockSummary] as number;
     });
   });
 
+  hasStockSearch = computed(() => this.stockSearchQuery().trim().length > 0);
+
   stockScenarioStats = computed(() => {
-    const total = this.filteredStocks.stocks().length;
-    const shown = this.sortedStockData().length;
-    return { total, shown };
+    const stocks = this.filteredStocks.stocks();
+    const afterRules = filterStocksByRules(stocks, this.stockFilterRules());
+    const shown = afterRules.filter((stock) => this.matchesStockSearch(stock, this.stockSearchQuery())).length;
+    return { total: stocks.length, shown };
   });
 
   stockTableTotals = computed(() => {
@@ -701,6 +706,20 @@ export class DashboardComponent implements OnInit {
 
   private clientCode(): string | null {
     return this.state.activeClientCode() ?? this.state.report()?.summary.clientCode ?? null;
+  }
+
+  private matchesStockSearch(stock: StockSummary, query: string): boolean {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const haystack = [stock.stockName, stock.isin, stock.symbol]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(q);
+  }
+
+  clearStockSearch(): void {
+    this.stockSearchQuery.set('');
   }
 
   private async ensureStockTradesLoaded(stock: StockSummary): Promise<void> {

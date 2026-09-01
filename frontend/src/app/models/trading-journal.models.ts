@@ -29,6 +29,9 @@ export interface ExecutionLeg {
   price: number;
 }
 
+/** Planned entry levels — initial entry plus optional scale-ins at other prices. */
+export type PlannedEntryLeg = ExecutionLeg;
+
 export interface PlannedTrade {
   id: string;
   symbol: string;
@@ -41,6 +44,7 @@ export interface PlannedTrade {
   entryPrice: number;
   targetPrice: number;
   stopLoss?: number;
+  entryLegs?: PlannedEntryLeg[];
   source: TradePlanSource;
   status: TradeExecutionStatus;
   estimatedPnL: number;

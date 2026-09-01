@@ -7,7 +7,7 @@ import { take } from 'rxjs/operators';
 import { RegistryStockService } from '../../services/registry-stock.service';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { TradePlanService } from '../../services/trade-plan.service';
-import { TradeDirection, TradeSegment, RegistryStock } from '../../models/trading-journal.models';
+import { PlannedEntryLeg, TradeDirection, TradeSegment, RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency, formatPctSigned, pnlClass } from '../../utils/format.utils';
 import {
   clampToUpcomingPlanDate,
@@ -16,11 +16,30 @@ import {
   upcomingPlanDates,
 } from '../../utils/trade-plan-date.utils';
 
+interface EntryLegRow {
+  price: string;
+  quantity: string;
+}
+
 @Component({
   selector: 'app-trade-plan-form',
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './trade-plan-form.component.html',
+  styles: `
+    .ladder-track {
+      @apply relative mx-1 mt-2 h-2 rounded-full bg-slate-100;
+    }
+    .ladder-marker {
+      @apply absolute top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white;
+    }
+    .entry-row {
+      @apply rounded-xl border border-slate-200 bg-slate-50/60 p-3;
+    }
+    .entry-row-scale {
+      @apply border-dashed border-sky-200 bg-sky-50/40;
+    }
+  `,
 })
 export class TradePlanFormComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
@@ -30,6 +49,7 @@ export class TradePlanFormComponent implements OnInit {
   private router = inject(Router);
 
   registry = signal<RegistryStock[]>([]);
+  entryLegRows = signal<EntryLegRow[]>([{ price: '', quantity: '' }]);
 
   tradeDate = signal(todayIso());
   dateTabs = computed(() =>
@@ -51,39 +71,65 @@ export class TradePlanFormComponent implements OnInit {
     name: '',
     segment: 'intraday' as TradeSegment,
     direction: 'long' as TradeDirection,
-    quantity: '',
     cmp: '',
-    entryPrice: '',
     targetPrice: '',
     stopLoss: '',
     notes: '',
   };
 
-  entryPctPreview = computed(() => {
-    const cmp = parseFloat(this.form.cmp);
-    const entry = parseFloat(this.form.entryPrice);
-    return TradePlanService.pctVsCmp(entry, cmp);
+  isShort = computed(() => this.form.segment === 'intraday' && this.form.direction === 'short');
+
+  scaleInHint = computed(() =>
+    this.isShort()
+      ? 'Add scale-in levels at higher prices if the stock rallies against your short.'
+      : 'Add scale-in levels at lower prices if the stock dips before your target.'
+  );
+
+  parsedEntryLegs = computed((): PlannedEntryLeg[] =>
+    this.entryLegRows()
+      .map((row) => ({
+        quantity: parseFloat(row.quantity),
+        price: parseFloat(row.price),
+      }))
+      .filter((leg) => Number.isFinite(leg.quantity) && leg.quantity > 0 && Number.isFinite(leg.price) && leg.price > 0)
+  );
+
+  entrySummary = computed(() => {
+    const legs = this.parsedEntryLegs();
+    const target = parseFloat(this.form.targetPrice);
+    const stop = parseFloat(this.form.stopLoss);
+    if (!legs.length || !target) return null;
+    return TradePlanService.entryLegSummary(
+      legs,
+      this.form.segment,
+      this.form.direction,
+      target,
+      Number.isFinite(stop) && stop > 0 ? stop : undefined
+    );
   });
 
   exitPctPreview = computed(() => {
-    const entry = parseFloat(this.form.entryPrice);
+    const summary = this.entrySummary();
     const target = parseFloat(this.form.targetPrice);
-    return TradePlanService.exitPctVsEntry(entry, target, this.form.segment, this.form.direction);
-  });
-
-  stopLossPreview = computed(() => {
-    const qty = parseFloat(this.form.quantity);
-    const entry = parseFloat(this.form.entryPrice);
-    const stop = parseFloat(this.form.stopLoss);
-    if (!qty || !entry || !stop) return null;
-    return TradePlanService.estimatePnL(this.form.segment, this.form.direction, qty, entry, stop);
+    if (!summary || !target) return null;
+    return TradePlanService.exitPctVsEntry(
+      summary.avgEntryPrice,
+      target,
+      this.form.segment,
+      this.form.direction
+    );
   });
 
   stopLossPctPreview = computed(() => {
-    const entry = parseFloat(this.form.entryPrice);
+    const summary = this.entrySummary();
     const stop = parseFloat(this.form.stopLoss);
-    if (!entry || !stop) return null;
-    return TradePlanService.stopLossPctVsEntry(entry, stop, this.form.segment, this.form.direction);
+    if (!summary || !stop) return null;
+    return TradePlanService.stopLossPctVsEntry(
+      summary.avgEntryPrice,
+      stop,
+      this.form.segment,
+      this.form.direction
+    );
   });
 
   symbolOptions = computed(() => {
@@ -99,12 +145,39 @@ export class TradePlanFormComponent implements OnInit {
       .slice(0, 30);
   });
 
-  estimatedPreview = computed(() => {
-    const qty = parseFloat(this.form.quantity);
-    const entry = parseFloat(this.form.entryPrice);
+  ladderMarkers = computed(() => {
+    const cmp = parseFloat(this.form.cmp);
     const target = parseFloat(this.form.targetPrice);
-    if (!qty || !entry || !target) return 0;
-    return TradePlanService.estimatePnL(this.form.segment, this.form.direction, qty, entry, target);
+    const stop = parseFloat(this.form.stopLoss);
+    const legs = this.parsedEntryLegs();
+    const prices = [
+      ...legs.map((leg) => leg.price),
+      ...(Number.isFinite(cmp) && cmp > 0 ? [cmp] : []),
+      ...(Number.isFinite(target) && target > 0 ? [target] : []),
+      ...(Number.isFinite(stop) && stop > 0 ? [stop] : []),
+    ];
+    if (prices.length < 2) return [];
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const span = max - min || 1;
+    const markers: { left: number; label: string; className: string }[] = [];
+    if (Number.isFinite(cmp) && cmp > 0) {
+      markers.push({ left: ((cmp - min) / span) * 100, label: 'CMP', className: 'bg-blue-500' });
+    }
+    legs.forEach((leg, index) => {
+      markers.push({
+        left: ((leg.price - min) / span) * 100,
+        label: index === 0 ? 'E1' : `S${index}`,
+        className: index === 0 ? 'bg-emerald-500' : 'bg-sky-500',
+      });
+    });
+    if (Number.isFinite(target) && target > 0) {
+      markers.push({ left: ((target - min) / span) * 100, label: 'TGT', className: 'bg-rose-500' });
+    }
+    if (Number.isFinite(stop) && stop > 0) {
+      markers.push({ left: ((stop - min) / span) * 100, label: 'SL', className: 'bg-red-700' });
+    }
+    return markers;
   });
 
   async ngOnInit(): Promise<void> {
@@ -146,12 +219,16 @@ export class TradePlanFormComponent implements OnInit {
       this.symbolQuery.set(trade.symbol);
       this.form.segment = trade.segment;
       this.form.direction = trade.direction;
-      this.form.quantity = String(trade.quantity);
       this.form.cmp = trade.cmp != null ? String(trade.cmp) : '';
-      this.form.entryPrice = String(trade.entryPrice);
       this.form.targetPrice = String(trade.targetPrice);
       this.form.stopLoss = trade.stopLoss != null ? String(trade.stopLoss) : '';
       this.form.notes = trade.notes ?? '';
+      const legs = trade.entryLegs?.length
+        ? trade.entryLegs
+        : [{ price: trade.entryPrice, quantity: trade.quantity }];
+      this.entryLegRows.set(
+        legs.map((leg) => ({ price: String(leg.price), quantity: String(leg.quantity) }))
+      );
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load trade');
     } finally {
@@ -177,7 +254,7 @@ export class TradePlanFormComponent implements OnInit {
     const registryEntry = this.registry().find((s) => s.symbol === sym);
     if (!registryEntry) return;
     void this.applySymbolPrefill(sym, {
-      fillEntry: !this.form.entryPrice,
+      fillEntry: !this.entryLegRows()[0]?.price,
       fillTargets: !this.form.targetPrice && !this.form.stopLoss,
     });
   }
@@ -186,7 +263,7 @@ export class TradePlanFormComponent implements OnInit {
     const sym = this.form.symbol.trim().toUpperCase();
     if (!sym || this.form.cmp) return;
     void this.applySymbolPrefill(sym, {
-      fillEntry: !this.form.entryPrice,
+      fillEntry: !this.entryLegRows()[0]?.price,
       fillTargets: false,
     });
   }
@@ -194,6 +271,21 @@ export class TradePlanFormComponent implements OnInit {
   async pickSymbol(symbol: string): Promise<void> {
     this.symbolQuery.set(symbol.toUpperCase());
     await this.applySymbolPrefill(symbol, { fillEntry: true, fillTargets: true });
+  }
+
+  addScaleIn(): void {
+    this.entryLegRows.update((rows) => [...rows, { price: '', quantity: '' }]);
+  }
+
+  removeScaleIn(index: number): void {
+    if (index === 0) return;
+    this.entryLegRows.update((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  updateEntryLeg(index: number, field: 'price' | 'quantity', value: string): void {
+    this.entryLegRows.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, [field]: value } : row))
+    );
   }
 
   private async applySymbolPrefill(
@@ -210,8 +302,8 @@ export class TradePlanFormComponent implements OnInit {
     const cmp = await this.resolveCmp(sym, registryEntry);
     if (cmp != null && cmp > 0) {
       this.form.cmp = String(cmp);
-      if (options.fillEntry !== false && !this.form.entryPrice) {
-        this.form.entryPrice = String(cmp);
+      if (options.fillEntry !== false && !this.entryLegRows()[0]?.price) {
+        this.updateEntryLeg(0, 'price', String(cmp));
       }
     }
 
@@ -240,14 +332,29 @@ export class TradePlanFormComponent implements OnInit {
 
   async save(): Promise<void> {
     this.error.set(null);
-    const qty = parseFloat(this.form.quantity);
     const cmp = parseFloat(this.form.cmp);
-    const entry = parseFloat(this.form.entryPrice);
     const target = parseFloat(this.form.targetPrice);
-    if (!this.form.symbol || !qty || !cmp || !entry || !target) {
-      this.error.set('Symbol, quantity, CMP, entry, and target are required');
+    const entryLegs = this.parsedEntryLegs();
+    if (!this.form.symbol || !cmp || !target || !entryLegs.length) {
+      this.error.set('Symbol, CMP, at least one entry, and target are required');
       return;
     }
+    const validationError = TradePlanService.validatePlannedEntryLegs(
+      entryLegs,
+      this.form.segment,
+      this.form.direction
+    );
+    if (validationError) {
+      this.error.set(validationError);
+      return;
+    }
+    const summary = TradePlanService.entryLegSummary(
+      entryLegs,
+      this.form.segment,
+      this.form.direction,
+      target,
+      parseFloat(this.form.stopLoss) || undefined
+    );
     const stock = this.registry().find((s) => s.symbol === this.form.symbol.toUpperCase());
     const editId = this.editingId();
     this.busy.set(true);
@@ -258,11 +365,12 @@ export class TradePlanFormComponent implements OnInit {
         tradeDate: this.tradeDate(),
         segment: this.form.segment,
         direction: this.form.direction,
-        quantity: qty,
+        quantity: summary.totalQuantity,
         cmp,
-        entryPrice: entry,
+        entryPrice: summary.avgEntryPrice,
         targetPrice: target,
         stopLoss: parseFloat(this.form.stopLoss) || undefined,
+        entryLegs,
         notes: this.form.notes,
       };
       if (editId) {
