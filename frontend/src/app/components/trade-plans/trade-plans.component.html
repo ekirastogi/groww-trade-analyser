@@ -224,10 +224,8 @@
                 @if (t.status === 'executed') {
                   <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Realized</p>
                   <p class="text-base font-bold tabular-nums" [class]="pnlClass(displayPnL(t))">{{ fmt(displayPnL(t)) }}</p>
-                  @if (t.executedBuyPrice || t.executedSellPrice) {
-                    <p class="mt-0.5 text-[10px] text-slate-500">
-                      B {{ fmt(t.executedBuyPrice ?? 0) }}<br />S {{ fmt(t.executedSellPrice ?? 0) }}
-                    </p>
+                  @if (executionFillSummary(t); as fillSummary) {
+                    <p class="mt-0.5 text-[10px] text-slate-500">{{ fillSummary }}</p>
                   }
                 } @else {
                   <p class="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">Est. P&L</p>
@@ -316,7 +314,7 @@
 
 @if (executingTrade(); as trade) {
   <div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-    <div class="card w-full max-w-md p-5">
+    <div class="card max-h-[90vh] w-full max-w-lg overflow-y-auto p-5">
       <div class="flex items-start justify-between gap-3">
         <div>
           <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Record execution</p>
@@ -326,26 +324,67 @@
         <button type="button" class="text-slate-400 hover:text-slate-600" (click)="closeExecuteModal()" aria-label="Close">✕</button>
       </div>
 
-      <p class="mt-4 text-sm text-slate-600">Enter per-share fill prices. P&L = (sell price − buy price) × quantity.</p>
+      <p class="mt-4 text-sm text-slate-600">Add multiple buy and sell fills. Total buy quantity must equal total sell quantity.</p>
 
-      <div class="mt-4 grid gap-3">
-        <label class="block text-sm">
-          <span class="text-slate-500">Quantity</span>
-          <input class="input-field mt-1 w-full" type="number" [(ngModel)]="execForm.quantity" />
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Buy price (₹ per share)</span>
-          <input class="input-field mt-1 w-full" type="number" step="0.01" [(ngModel)]="execForm.buyPrice" />
-        </label>
-        <label class="block text-sm">
-          <span class="text-slate-500">Sell price (₹ per share)</span>
-          <input class="input-field mt-1 w-full" type="number" step="0.01" [(ngModel)]="execForm.sellPrice" />
-        </label>
+      <div class="mt-4 space-y-4">
+        <div>
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <p class="text-sm font-medium text-slate-700">Buy entries</p>
+            <button type="button" class="text-xs font-medium text-kairo-600 hover:underline" (click)="addExecBuyLeg()">+ Add buy</button>
+          </div>
+          <div class="space-y-2">
+            @for (leg of execBuyLegs(); track $index) {
+              <div class="grid grid-cols-[1fr_1fr_auto] gap-2">
+                <input class="input-field w-full" type="number" placeholder="Qty" [ngModel]="leg.quantity" (ngModelChange)="updateExecBuyLeg($index, 'quantity', $event)" />
+                <input class="input-field w-full" type="number" step="0.01" placeholder="Price" [ngModel]="leg.price" (ngModelChange)="updateExecBuyLeg($index, 'price', $event)" />
+                <button
+                  type="button"
+                  class="rounded-lg border border-slate-200 px-2 text-slate-400 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40"
+                  [disabled]="execBuyLegs().length <= 1"
+                  (click)="removeExecBuyLeg($index)"
+                  aria-label="Remove buy entry"
+                >
+                  ✕
+                </button>
+              </div>
+            }
+          </div>
+          <p class="mt-1 text-xs text-slate-500">Total buy qty: {{ execBuyTotalQty() || 0 }}</p>
+        </div>
+
+        <div>
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <p class="text-sm font-medium text-slate-700">Sell entries</p>
+            <button type="button" class="text-xs font-medium text-kairo-600 hover:underline" (click)="addExecSellLeg()">+ Add sell</button>
+          </div>
+          <div class="space-y-2">
+            @for (leg of execSellLegs(); track $index) {
+              <div class="grid grid-cols-[1fr_1fr_auto] gap-2">
+                <input class="input-field w-full" type="number" placeholder="Qty" [ngModel]="leg.quantity" (ngModelChange)="updateExecSellLeg($index, 'quantity', $event)" />
+                <input class="input-field w-full" type="number" step="0.01" placeholder="Price" [ngModel]="leg.price" (ngModelChange)="updateExecSellLeg($index, 'price', $event)" />
+                <button
+                  type="button"
+                  class="rounded-lg border border-slate-200 px-2 text-slate-400 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40"
+                  [disabled]="execSellLegs().length <= 1"
+                  (click)="removeExecSellLeg($index)"
+                  aria-label="Remove sell entry"
+                >
+                  ✕
+                </button>
+              </div>
+            }
+          </div>
+          <p class="mt-1 text-xs text-slate-500">Total sell qty: {{ execSellTotalQty() || 0 }}</p>
+        </div>
       </div>
+
+      @if (!execQtyBalanced() && execBuyTotalQty() > 0 && execSellTotalQty() > 0) {
+        <p class="mt-3 text-xs text-amber-600">Buy and sell quantities must match before saving.</p>
+      }
 
       @if (execPreviewPnL() != null) {
         <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <p class="text-xs font-medium text-slate-500">Realized P&L</p>
+          <p class="text-xs font-medium text-slate-500">Combined realized P&L</p>
           <p class="text-2xl font-bold tabular-nums" [class]="pnlClass(execPreviewPnL()!)">
             {{ fmt(execPreviewPnL()!) }}
           </p>

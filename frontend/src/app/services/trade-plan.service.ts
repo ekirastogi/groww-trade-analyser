@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map, of, switchMap } from 'rxjs';
 import {
   DayTradeSummary,
+  ExecutionLeg,
   PlannedTrade,
   TradeDirection,
   TradeExecutionInput,
@@ -41,13 +42,33 @@ type PlannedTradePayload = {
   executedQuantity?: number | null;
   executedBuyPrice?: number | null;
   executedSellPrice?: number | null;
+  buyLegs?: ExecutionLeg[] | null;
+  sellLegs?: ExecutionLeg[] | null;
   updatedAt?: number;
   carriedFromDate?: string;
 };
 
+function legsFromLegacy(
+  quantity?: number,
+  buyPrice?: number,
+  sellPrice?: number
+): { buyLegs?: ExecutionLeg[]; sellLegs?: ExecutionLeg[] } {
+  if (!quantity || buyPrice == null || sellPrice == null) return {};
+  return {
+    buyLegs: [{ quantity, price: buyPrice }],
+    sellLegs: [{ quantity, price: sellPrice }],
+  };
+}
+
 function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
   const camel = rowToCamel<Record<string, unknown>>(row);
   const payload = (camel['payload'] as PlannedTradePayload | undefined) ?? {};
+  const executedQuantity = payload.executedQuantity ?? undefined;
+  const executedBuyPrice = payload.executedBuyPrice ?? undefined;
+  const executedSellPrice = payload.executedSellPrice ?? undefined;
+  const legacyLegs = legsFromLegacy(executedQuantity, executedBuyPrice, executedSellPrice);
+  const buyLegs = payload.buyLegs?.length ? payload.buyLegs : legacyLegs.buyLegs;
+  const sellLegs = payload.sellLegs?.length ? payload.sellLegs : legacyLegs.sellLegs;
   return {
     id: String(camel['id'] ?? ''),
     symbol: String(camel['symbol'] ?? ''),
@@ -65,9 +86,11 @@ function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
     estimatedPnL: numField(camel, 'estimatedPnL', 'estimatedPnl'),
     estimatedStopLossPnL: payload.estimatedStopLossPnL ?? undefined,
     realizedPnL: (camel['realizedPnL'] ?? camel['realizedPnl']) as number | undefined,
-    executedQuantity: payload.executedQuantity ?? undefined,
-    executedBuyPrice: payload.executedBuyPrice ?? undefined,
-    executedSellPrice: payload.executedSellPrice ?? undefined,
+    executedQuantity,
+    executedBuyPrice,
+    executedSellPrice,
+    buyLegs,
+    sellLegs,
     notes: camel['notes'] as string | undefined,
     createdAt: Number(camel['createdAt'] ?? 0),
     updatedAt: payload.updatedAt ?? Number(camel['createdAt'] ?? 0),
@@ -225,6 +248,77 @@ export class TradePlanService {
     return (sellPrice - buyPrice) * quantity;
   }
 
+  static legTotalQty(legs: ExecutionLeg[]): number {
+    return legs.reduce((sum, leg) => sum + leg.quantity, 0);
+  }
+
+  static weightedAvgPrice(legs: ExecutionLeg[]): number {
+    const qty = TradePlanService.legTotalQty(legs);
+    if (!qty) return 0;
+    return legs.reduce((sum, leg) => sum + leg.quantity * leg.price, 0) / qty;
+  }
+
+  static legTotalValue(legs: ExecutionLeg[]): number {
+    return legs.reduce((sum, leg) => sum + leg.quantity * leg.price, 0);
+  }
+
+  static realizedPnLFromLegs(buyLegs: ExecutionLeg[], sellLegs: ExecutionLeg[]): number {
+    return TradePlanService.legTotalValue(sellLegs) - TradePlanService.legTotalValue(buyLegs);
+  }
+
+  static validateExecutionLegs(buyLegs: ExecutionLeg[], sellLegs: ExecutionLeg[]): string | null {
+    if (!buyLegs.length || !sellLegs.length) {
+      return 'Add at least one buy and one sell entry';
+    }
+    for (const leg of [...buyLegs, ...sellLegs]) {
+      if (!leg.quantity || leg.quantity <= 0 || !leg.price || leg.price <= 0) {
+        return 'Each entry needs a positive quantity and price';
+      }
+    }
+    const buyQty = TradePlanService.legTotalQty(buyLegs);
+    const sellQty = TradePlanService.legTotalQty(sellLegs);
+    if (buyQty !== sellQty) {
+      return `Buy quantity (${buyQty}) must match sell quantity (${sellQty})`;
+    }
+    return null;
+  }
+
+  static executionSummary(trade: Pick<PlannedTrade, 'buyLegs' | 'sellLegs' | 'executedQuantity' | 'executedBuyPrice' | 'executedSellPrice' | 'realizedPnL'>): {
+    buyLegs: ExecutionLeg[];
+    sellLegs: ExecutionLeg[];
+    quantity: number;
+    avgBuyPrice: number;
+    avgSellPrice: number;
+    realizedPnL: number;
+  } | null {
+    const buyLegs = trade.buyLegs ?? [];
+    const sellLegs = trade.sellLegs ?? [];
+    if (!buyLegs.length || !sellLegs.length) {
+      if (trade.executedQuantity && trade.executedBuyPrice != null && trade.executedSellPrice != null) {
+        const buy = [{ quantity: trade.executedQuantity, price: trade.executedBuyPrice }];
+        const sell = [{ quantity: trade.executedQuantity, price: trade.executedSellPrice }];
+        return {
+          buyLegs: buy,
+          sellLegs: sell,
+          quantity: trade.executedQuantity,
+          avgBuyPrice: trade.executedBuyPrice,
+          avgSellPrice: trade.executedSellPrice,
+          realizedPnL: trade.realizedPnL ?? TradePlanService.realizedPnLFromLegs(buy, sell),
+        };
+      }
+      return null;
+    }
+    const quantity = TradePlanService.legTotalQty(buyLegs);
+    return {
+      buyLegs,
+      sellLegs,
+      quantity,
+      avgBuyPrice: TradePlanService.weightedAvgPrice(buyLegs),
+      avgSellPrice: TradePlanService.weightedAvgPrice(sellLegs),
+      realizedPnL: trade.realizedPnL ?? TradePlanService.realizedPnLFromLegs(buyLegs, sellLegs),
+    };
+  }
+
   static pctVsCmp(entry: number, cmp?: number): number | null {
     if (!cmp || !entry) return null;
     return ((entry - cmp) / cmp) * 100;
@@ -320,17 +414,22 @@ export class TradePlanService {
       executedQuantity: null,
       executedBuyPrice: null,
       executedSellPrice: null,
+      buyLegs: null,
+      sellLegs: null,
     };
     let realizedPnl: number | null = null;
     if (status === 'executed' && execution) {
-      realizedPnl = TradePlanService.realizedPnLFromPrices(
-        execution.quantity,
-        execution.buyPrice,
-        execution.sellPrice
-      );
-      payload.executedQuantity = execution.quantity;
-      payload.executedBuyPrice = execution.buyPrice;
-      payload.executedSellPrice = execution.sellPrice;
+      const validationError = TradePlanService.validateExecutionLegs(execution.buyLegs, execution.sellLegs);
+      if (validationError) throw new Error(validationError);
+      const quantity = TradePlanService.legTotalQty(execution.buyLegs);
+      const avgBuy = TradePlanService.weightedAvgPrice(execution.buyLegs);
+      const avgSell = TradePlanService.weightedAvgPrice(execution.sellLegs);
+      realizedPnl = TradePlanService.realizedPnLFromLegs(execution.buyLegs, execution.sellLegs);
+      payload.executedQuantity = quantity;
+      payload.executedBuyPrice = avgBuy;
+      payload.executedSellPrice = avgSell;
+      payload.buyLegs = execution.buyLegs;
+      payload.sellLegs = execution.sellLegs;
     }
     const { error } = await this.supabase.client
       .from('planned_trades')
@@ -394,6 +493,8 @@ export class TradePlanService {
       executedQuantity: existing?.executedQuantity ?? null,
       executedBuyPrice: existing?.executedBuyPrice ?? null,
       executedSellPrice: existing?.executedSellPrice ?? null,
+      buyLegs: existing?.buyLegs ?? null,
+      sellLegs: existing?.sellLegs ?? null,
       updatedAt: Date.now(),
     };
 

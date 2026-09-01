@@ -24,6 +24,11 @@ export type TradeDirection = 'long' | 'short';
 export type TradePlanSource = 'manual' | 'auto';
 export type TradeExecutionStatus = 'planned' | 'executed' | 'skipped';
 
+export interface ExecutionLeg {
+  quantity: number;
+  price: number;
+}
+
 export interface PlannedTrade {
   id: string;
   symbol: string;
@@ -44,15 +49,16 @@ export interface PlannedTrade {
   executedQuantity?: number;
   executedBuyPrice?: number;
   executedSellPrice?: number;
+  buyLegs?: ExecutionLeg[];
+  sellLegs?: ExecutionLeg[];
   notes?: string;
   createdAt: number;
   updatedAt: number;
 }
 
 export interface TradeExecutionInput {
-  quantity: number;
-  buyPrice: number;
-  sellPrice: number;
+  buyLegs: ExecutionLeg[];
+  sellLegs: ExecutionLeg[];
 }
 
 export interface DayTradeSummary {

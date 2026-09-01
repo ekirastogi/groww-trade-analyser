@@ -21,6 +21,11 @@ import {
 
 type SortKey = 'symbol' | 'estimatedPnL' | 'realizedPnL';
 
+interface ExecLegRow {
+  quantity: string;
+  price: string;
+}
+
 interface PriceLevel {
   key: 'cmp' | 'entry' | 'exit' | 'sl';
   label: string;
@@ -96,7 +101,8 @@ export class TradePlansComponent implements OnInit {
   calendarOpen = signal(false);
   sortKey = signal<SortKey>('symbol');
   executingTrade = signal<PlannedTrade | null>(null);
-  execForm = { quantity: '', buyPrice: '', sellPrice: '' };
+  execBuyLegs = signal<ExecLegRow[]>([{ quantity: '', price: '' }]);
+  execSellLegs = signal<ExecLegRow[]>([{ quantity: '', price: '' }]);
   execError = signal<string | null>(null);
   execBusy = signal(false);
   menuOpenId = signal<string | null>(null);
@@ -133,11 +139,25 @@ export class TradePlansComponent implements OnInit {
   daySummary = computed(() => this.planSvc.summarizeDay(this.tradeDate(), this.trades()));
 
   execPreviewPnL = computed(() => {
-    const qty = parseFloat(this.execForm.quantity);
-    const buy = parseFloat(this.execForm.buyPrice);
-    const sell = parseFloat(this.execForm.sellPrice);
-    if (!Number.isFinite(qty) || !Number.isFinite(buy) || !Number.isFinite(sell)) return null;
-    return TradePlanService.realizedPnLFromPrices(qty, buy, sell);
+    const buyLegs = this.parseExecLegs(this.execBuyLegs());
+    const sellLegs = this.parseExecLegs(this.execSellLegs());
+    if (!buyLegs.length || !sellLegs.length) return null;
+    if (TradePlanService.validateExecutionLegs(buyLegs, sellLegs)) return null;
+    return TradePlanService.realizedPnLFromLegs(buyLegs, sellLegs);
+  });
+
+  execBuyTotalQty = computed(() =>
+    this.parseExecLegs(this.execBuyLegs()).reduce((sum, leg) => sum + leg.quantity, 0)
+  );
+
+  execSellTotalQty = computed(() =>
+    this.parseExecLegs(this.execSellLegs()).reduce((sum, leg) => sum + leg.quantity, 0)
+  );
+
+  execQtyBalanced = computed(() => {
+    const buy = this.execBuyTotalQty();
+    const sell = this.execSellTotalQty();
+    return buy > 0 && buy === sell;
   });
 
   sortedTrades = computed(() => {
@@ -287,8 +307,26 @@ export class TradePlansComponent implements OnInit {
   }
 
   displayPnL(t: PlannedTrade): number {
-    if (t.status === 'executed' && t.realizedPnL != null) return t.realizedPnL;
+    if (t.status === 'executed') {
+      const summary = this.executionSummary(t);
+      if (summary) return summary.realizedPnL;
+      if (t.realizedPnL != null) return t.realizedPnL;
+    }
     return t.estimatedPnL;
+  }
+
+  executionSummary(t: PlannedTrade) {
+    return TradePlanService.executionSummary(t);
+  }
+
+  executionFillSummary(t: PlannedTrade): string | null {
+    const summary = this.executionSummary(t);
+    if (!summary) return null;
+    const legNote =
+      summary.buyLegs.length > 1 || summary.sellLegs.length > 1
+        ? ` · ${summary.buyLegs.length}B/${summary.sellLegs.length}S`
+        : '';
+    return `${summary.quantity} qty · B ${this.fmt(summary.avgBuyPrice)} · S ${this.fmt(summary.avgSellPrice)}${legNote}`;
   }
 
   pnlLabel(t: PlannedTrade): string {
@@ -319,52 +357,82 @@ export class TradePlansComponent implements OnInit {
   openExecuteModal(trade: PlannedTrade): void {
     this.executingTrade.set(trade);
     this.execError.set(null);
-    const qty = trade.executedQuantity ?? trade.quantity;
-    if (trade.executedBuyPrice != null && trade.executedSellPrice != null) {
-      this.execForm = {
-        quantity: String(qty),
-        buyPrice: String(trade.executedBuyPrice),
-        sellPrice: String(trade.executedSellPrice),
-      };
+    const summary = TradePlanService.executionSummary(trade);
+    if (summary) {
+      this.execBuyLegs.set(summary.buyLegs.map((leg) => ({ quantity: String(leg.quantity), price: String(leg.price) })));
+      this.execSellLegs.set(summary.sellLegs.map((leg) => ({ quantity: String(leg.quantity), price: String(leg.price) })));
       return;
     }
+    const qty = String(trade.quantity);
     if (trade.segment === 'intraday' && trade.direction === 'short') {
-      this.execForm = {
-        quantity: String(qty),
-        buyPrice: String(trade.targetPrice),
-        sellPrice: String(trade.entryPrice),
-      };
+      this.execBuyLegs.set([{ quantity: qty, price: String(trade.targetPrice) }]);
+      this.execSellLegs.set([{ quantity: qty, price: String(trade.entryPrice) }]);
     } else {
-      this.execForm = {
-        quantity: String(qty),
-        buyPrice: String(trade.entryPrice),
-        sellPrice: String(trade.targetPrice),
-      };
+      this.execBuyLegs.set([{ quantity: qty, price: String(trade.entryPrice) }]);
+      this.execSellLegs.set([{ quantity: qty, price: String(trade.targetPrice) }]);
     }
   }
 
   closeExecuteModal(): void {
     this.executingTrade.set(null);
     this.execError.set(null);
-    this.execForm = { quantity: '', buyPrice: '', sellPrice: '' };
+    this.execBuyLegs.set([{ quantity: '', price: '' }]);
+    this.execSellLegs.set([{ quantity: '', price: '' }]);
+  }
+
+  addExecBuyLeg(): void {
+    this.execBuyLegs.update((rows) => [...rows, { quantity: '', price: '' }]);
+  }
+
+  removeExecBuyLeg(index: number): void {
+    this.execBuyLegs.update((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
+  }
+
+  addExecSellLeg(): void {
+    this.execSellLegs.update((rows) => [...rows, { quantity: '', price: '' }]);
+  }
+
+  removeExecSellLeg(index: number): void {
+    this.execSellLegs.update((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
+  }
+
+  updateExecBuyLeg(index: number, field: 'quantity' | 'price', value: string): void {
+    this.execBuyLegs.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, [field]: value } : row))
+    );
+  }
+
+  updateExecSellLeg(index: number, field: 'quantity' | 'price', value: string): void {
+    this.execSellLegs.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, [field]: value } : row))
+    );
+  }
+
+  private parseExecLegs(rows: ExecLegRow[]) {
+    return rows
+      .map((row) => ({
+        quantity: parseFloat(row.quantity),
+        price: parseFloat(row.price),
+      }))
+      .filter((leg) => Number.isFinite(leg.quantity) && leg.quantity > 0 && Number.isFinite(leg.price) && leg.price > 0);
   }
 
   async confirmExecuted(): Promise<void> {
     const trade = this.executingTrade();
     if (!trade) return;
 
-    const quantity = parseFloat(this.execForm.quantity);
-    const buyPrice = parseFloat(this.execForm.buyPrice);
-    const sellPrice = parseFloat(this.execForm.sellPrice);
-    if (!quantity || !buyPrice || !sellPrice) {
-      this.execError.set('Quantity, buy price, and sell price are required');
+    const buyLegs = this.parseExecLegs(this.execBuyLegs());
+    const sellLegs = this.parseExecLegs(this.execSellLegs());
+    const validationError = TradePlanService.validateExecutionLegs(buyLegs, sellLegs);
+    if (validationError) {
+      this.execError.set(validationError);
       return;
     }
 
     this.execBusy.set(true);
     this.execError.set(null);
     try {
-      await this.planSvc.updateExecution(trade.id, 'executed', { quantity, buyPrice, sellPrice });
+      await this.planSvc.updateExecution(trade.id, 'executed', { buyLegs, sellLegs });
       this.closeExecuteModal();
     } catch (e) {
       this.execError.set(e instanceof Error ? e.message : 'Failed to save execution');
