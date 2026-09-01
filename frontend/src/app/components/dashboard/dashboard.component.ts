@@ -1,10 +1,11 @@
-import { Component, signal, computed, inject, HostListener, effect, OnInit } from '@angular/core';
+import { Component, signal, computed, inject, effect, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
 import { LazyTradeLoaderService } from '../../services/lazy-trade-loader.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
+import { FilterUrlService } from '../../services/filter-url.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { ClientAccountService, ClientAccount } from '../../services/client-account.service';
 import {
@@ -34,18 +35,7 @@ import {
   operatorsForColumn,
   persistStockScenarios,
 } from '../../utils/stock-scenario.utils';
-import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
-import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
-import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
-import {
-  abbreviateLabel,
-  sparklineChartOptions,
-  CHART_COLORS,
-  isMobileChart,
-  withDecimation,
-  buildPnLBarDataset,
-} from '../../utils/chart-theme';
 
 type PeriodColumnKey = 'period' | 'tradeCount' | 'totalBuyValue' | 'totalSellValue' | 'realisedPnL' | 'allocatedCharges' | 'netPnL' | 'winRate';
 
@@ -77,12 +67,13 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, FilterPanelComponent, TradeTypeFilterComponent, ReportHistoryComponent, ChartCardComponent],
+  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent],
   templateUrl: './dashboard.component.html',
 })
 export class DashboardComponent implements OnInit {
   readonly state = inject(ReportStateService);
   readonly filteredStocks = inject(FilteredStockService);
+  private filterUrl = inject(FilterUrlService);
   private pageShell = inject(PageShellService);
   private clientSvc = inject(ClientAccountService);
   readonly lazyTrades = inject(LazyTradeLoaderService);
@@ -108,7 +99,6 @@ export class DashboardComponent implements OnInit {
   }
 
   activeTab = signal<TabId>('stocks');
-  dragOver = signal(false);
   sortColumn = signal('realisedPnL');
   sortDirection = signal<SortDir>('desc');
   expandedPeriod = signal<string | null>(null);
@@ -123,7 +113,6 @@ export class DashboardComponent implements OnInit {
   scenarioNameInput = signal('');
   visibleStockColumns = signal<Set<StockColumnKey>>(new Set(DEFAULT_VISIBLE_STOCK_COLUMNS));
   visiblePeriodColumns = signal<Set<PeriodColumnKey>>(new Set(DEFAULT_VISIBLE_PERIOD_COLUMNS));
-  private chartVersion = signal(0);
 
   readonly stockFilterColumns = STOCK_FILTER_COLUMNS;
   readonly exampleStockScenarios = EXAMPLE_STOCK_SCENARIOS;
@@ -174,27 +163,6 @@ export class DashboardComponent implements OnInit {
     this.periodColumns.filter((col) => this.visiblePeriodColumns().has(col.key as PeriodColumnKey))
   );
 
-  topStats = computed(() => {
-    const report = this.state.report();
-    const summary = this.analysis()?.summary;
-    const stockDaySummary = this.stockDayWinRateSummary();
-    if (!report) return [];
-    const tradeCount = report.totalTradeCount ?? report.trades.length ?? summary?.tradeCount ?? 0;
-    return [
-      { label: 'Client', value: report.summary.clientName, cls: 'text-slate-900' },
-      { label: 'Trades', value: String(tradeCount), cls: 'text-slate-900' },
-      { label: 'Stocks', value: String(report.stockSummary.length), cls: 'text-slate-900' },
-      {
-        label: 'Win Rate',
-        value: summary ? `${summary.winRate.toFixed(1)}%` : '—',
-        cls: 'text-slate-900',
-        sub: summary
-          ? `${summary.winningTrades}W / ${summary.losingTrades}L · Stock-Day ${stockDaySummary.rate.toFixed(1)}%`
-          : undefined,
-      },
-    ];
-  });
-
   analysis = computed(() => this.state.analysis());
 
   stockDayWinRateSummary = computed(() => {
@@ -244,62 +212,6 @@ export class DashboardComponent implements OnInit {
     })
   );
 
-  periodChartData = computed(() =>
-    [...this.activePeriodData()].sort((a, b) => a.period.localeCompare(b.period))
-  );
-
-  periodChartConfig = computed(() => {
-    this.chartVersion();
-    const tab = this.activeTab();
-    if (tab !== 'daily' && tab !== 'weekly' && tab !== 'monthly') return null;
-
-    const periods = this.periodChartData();
-    if (!periods.length) return null;
-
-    const mobile = isMobileChart();
-    const netValues = periods.map((d) => d.netPnL);
-    const overallPositive = netValues.reduce((s, v) => s + v, 0) >= 0;
-    const lineColor = overallPositive ? CHART_COLORS.success : CHART_COLORS.danger;
-    const fillColor = overallPositive ? 'rgba(16,185,129,0.10)' : 'rgba(239,68,68,0.10)';
-
-    const formatLabel = (label: string): string => {
-      if (tab === 'monthly') {
-        // "Jun 2025" → "Jun '25"
-        const parts = label.split(' ');
-        return parts.length >= 2 ? `${parts[0]} '${parts[1].slice(2)}` : label;
-      }
-      if (tab === 'weekly') {
-        // "02–08 Jun 2025" → take the month part e.g. "Jun"
-        const m = label.match(/([A-Za-z]+)/);
-        return m ? m[1] : label.slice(0, 6);
-      }
-      // daily: "02 Jun 2025" → "02 Jun"
-      const parts = label.split(' ');
-      return parts.length >= 2 ? `${parts[0]} ${parts[1]}` : label;
-    };
-
-    return withDecimation({
-      type: 'line',
-      data: {
-        labels: periods.map((d) => formatLabel(d.label)),
-        datasets: [
-          {
-            label: 'Net P&L',
-            data: netValues,
-            borderColor: lineColor,
-            backgroundColor: fillColor,
-            fill: true,
-            tension: 0.35,
-            borderWidth: 2,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          },
-        ],
-      },
-      options: sparklineChartOptions(),
-    });
-  });
-
   sortedStockData = computed(() => {
     const stocks = this.filteredStocks.stocks();
     const filtered = filterStocksByRules(stocks, this.stockFilterRules());
@@ -342,34 +254,21 @@ export class DashboardComponent implements OnInit {
     };
   });
 
-  onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (input.files?.length) this.state.loadFile(input.files[0]);
-  }
-
   async loadClient(clientCode: string): Promise<void> {
     await this.state.loadFromClient(clientCode);
     this.clients.set(await this.clientSvc.listClients());
   }
 
-  onDrop(event: DragEvent): void {
-    event.preventDefault();
-    this.dragOver.set(false);
-    const file = event.dataTransfer?.files[0];
-    if (file) this.state.loadFile(file);
+  onDateFilterChange(which: 'start' | 'end', value: string): void {
+    const report = this.state.report();
+    if (!report) return;
+    const start = which === 'start' ? value : this.state.startDate();
+    const end = which === 'end' ? value : this.state.endDate();
+    this.filterUrl.updateDateRange(start, end, this.state.selectedTradeTypes());
   }
 
-  onDragOver(event: DragEvent): void {
-    event.preventDefault();
-    this.dragOver.set(true);
-  }
-
-  onDragLeave(): void {
-    this.dragOver.set(false);
-  }
-
-  openRecentUploads(): void {
-    this.state.clear();
+  resetDateFilters(): void {
+    this.filterUrl.resetFilters();
   }
 
   setTab(tab: TabId): void {
@@ -379,12 +278,6 @@ export class DashboardComponent implements OnInit {
     this.expandedPerStock.set(null);
     this.lazyTrades.clear();
     this.resetSortForTab(tab);
-    this.chartVersion.update((v) => v + 1);
-  }
-
-  @HostListener('window:resize')
-  onResize(): void {
-    this.chartVersion.update((v) => v + 1);
   }
 
   togglePeriodExpand(period: string): void {

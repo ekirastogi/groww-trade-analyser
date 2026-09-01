@@ -575,6 +575,10 @@ export class TradePlansComponent implements OnInit {
       t.stopLoss,
       ...(t.entryLegs?.map((leg) => leg.price) ?? []),
     ].filter((p): p is number => p != null && p > 0);
+    const summary = this.executionSummary(t);
+    if (summary) {
+      prices.push(summary.avgBuyPrice, summary.avgSellPrice);
+    }
     if (!prices.length) return { min: 0, max: 1 };
     const min = Math.min(...prices);
     const max = Math.max(...prices);

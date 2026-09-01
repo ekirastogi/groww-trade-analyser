@@ -25,68 +25,28 @@
     </div>
   }
 } @else {
-  @if (state.report(); as report) {
-    <div class="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-end">
-      <div class="flex gap-2">
-        <a routerLink="/analytics" class="btn-secondary flex-1 sm:flex-none">📊 Charts</a>
-        @if (state.hasHistory()) {
-          <button type="button" class="btn-secondary flex-1 sm:flex-none" (click)="openRecentUploads()">
-            Recent files
-          </button>
-        }
-        <label class="btn-secondary flex-1 cursor-pointer sm:flex-none">
-          <a routerLink="/settings">Upload</a>
-        </label>
-      </div>
-    </div>
-
-    <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-4">
-      @for (stat of topStats(); track stat.label) {
-        <div class="card border-l-4 border-l-kairo-500 p-4">
-          <div class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ stat.label }}</div>
-          <div class="mt-1 truncate text-sm font-semibold sm:text-base" [class]="stat.cls">{{ stat.value }}</div>
-          @if (stat.sub) {
-            <div class="mt-0.5 text-xs text-slate-400">{{ stat.sub }}</div>
-          }
-        </div>
-      }
-    </div>
-  }
-
-  <div class="mb-3 flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 sm:mb-4">
-    <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
-    <app-trade-type-filter [compact]="true" />
-  </div>
-
-  <div class="mb-4 sm:mb-6">
-    <app-filter-panel [collapsible]="true" />
-  </div>
-
   @if (analysis(); as data) {
-    <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-4">
-      @for (stat of [
-        { label: 'Realised P&L', value: formatCurrency(data.summary.realisedPnL), cls: pnlClass(data.summary.realisedPnL) },
-        { label: 'Net P&L', value: formatCurrency(data.summary.netPnL), cls: pnlClass(data.summary.netPnL) },
-        { label: 'Charges', value: formatCurrency(data.summary.allocatedCharges), cls: 'text-red-600', link: '/charges' },
-        {
-          label: 'Win Rate',
-          value: (data.summary.winRate | number:'1.1-1') + '%',
-          cls: 'text-slate-900',
-          sub: data.summary.winningTrades + 'W / ' + data.summary.losingTrades + 'L · Stock-Day ' + (stockDayWinRateSummary().rate | number:'1.1-1') + '%'
-        }
-      ]; track stat.label) {
-        <div class="card p-4">
-          <div class="text-xs font-medium text-slate-500">{{ stat.label }}</div>
-          @if (stat.link) {
-            <a [routerLink]="stat.link" class="mt-1 block text-base font-bold sm:text-lg hover:underline" [class]="stat.cls">{{ stat.value }}</a>
-          } @else {
-            <div class="mt-1 text-base font-bold sm:text-lg" [class]="stat.cls">{{ stat.value }}</div>
-          }
-          @if (stat.sub) {
-            <div class="mt-0.5 text-xs text-slate-400">{{ stat.sub }}</div>
-          }
-        </div>
-      }
+    <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+      <span class="font-semibold text-slate-700">{{ state.report()!.summary.clientName }}</span>
+      <span class="text-slate-300">|</span>
+      <span><span class="text-slate-500">Net P&L</span> <span class="font-bold tabular-nums" [class]="pnlClass(data.summary.netPnL)">{{ formatCurrency(data.summary.netPnL) }}</span></span>
+      <span><span class="text-slate-500">P&L</span> <span class="font-semibold tabular-nums" [class]="pnlClass(data.summary.realisedPnL)">{{ formatCurrency(data.summary.realisedPnL) }}</span></span>
+      <span><span class="text-slate-500">Charges</span> <a routerLink="/charges" class="font-semibold tabular-nums text-red-600 hover:underline">{{ formatCurrency(data.summary.allocatedCharges) }}</a></span>
+      <span><span class="text-slate-500">Win</span> <span class="font-semibold tabular-nums">{{ data.summary.winRate | number:'1.0-0' }}%</span> <span class="text-slate-400">({{ data.summary.winningTrades }}W/{{ data.summary.losingTrades }}L)</span></span>
+      <span class="text-slate-400">{{ state.report()!.stockSummary.length }} stocks · {{ data.summary.tradeCount }} trades</span>
+    </div>
+
+    <div class="mb-2 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <app-trade-type-filter [compact]="true" />
+      <label class="text-[10px] font-medium text-slate-500">
+        From
+        <input type="date" class="input-field mt-0.5 block py-1 text-xs" [ngModel]="state.startDate()" (ngModelChange)="onDateFilterChange('start', $event)" />
+      </label>
+      <label class="text-[10px] font-medium text-slate-500">
+        To
+        <input type="date" class="input-field mt-0.5 block py-1 text-xs" [ngModel]="state.endDate()" (ngModelChange)="onDateFilterChange('end', $event)" />
+      </label>
+      <button type="button" class="btn-ghost px-2 py-1 text-xs" (click)="resetDateFilters()">Reset dates</button>
     </div>
 
     <div class="card overflow-hidden">
@@ -111,13 +71,7 @@
 
       <div class="p-0">
         @if (activeTab() === 'daily' || activeTab() === 'weekly' || activeTab() === 'monthly') {
-          <div class="border-b border-slate-100 px-3 pb-1 pt-1.5 sm:px-4">
-            <app-chart-card
-              [config]="periodChartConfig()"
-              [heightPx]="80"
-            />
-          </div>
-          <div class="border-b border-slate-100 px-4 py-2 sm:px-4">
+          <div class="border-b border-slate-100 px-4 py-1.5 sm:px-4">
             <div class="flex items-center justify-between">
               <p class="text-[11px] text-slate-400">Click a row to expand trades by stock</p>
               <button
@@ -284,14 +238,15 @@
         }
 
         @if (activeTab() === 'stocks') {
-          <div class="space-y-3 border-b border-slate-100 px-3 py-3 sm:px-4">
-            <div class="relative max-w-md">
+          <div class="space-y-2 border-b border-slate-100 px-3 py-2 sm:px-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="relative min-w-[12rem] flex-1 max-w-xs">
               <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
               </svg>
               <input
                 type="search"
-                class="input-field w-full py-2 pl-9 pr-9 text-sm"
+                class="input-field w-full py-1.5 pl-9 pr-9 text-xs"
                 placeholder="Search stocks by name or symbol…"
                 [ngModel]="stockSearchQuery()"
                 (ngModelChange)="stockSearchQuery.set($event)"
@@ -309,7 +264,6 @@
               }
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition"
