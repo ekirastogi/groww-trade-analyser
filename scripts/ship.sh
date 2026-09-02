@@ -111,4 +111,17 @@ log "Deploying frontend to Firebase"
   npm run deploy
 )
 
+if [[ -d "$ROOT/functions" ]]; then
+  log "Deploying Cloud Functions"
+  (
+    cd "$ROOT/functions"
+    npm install
+    npm run build
+  )
+  (
+    cd "$ROOT"
+    firebase deploy --only functions --project kairo-trade
+  )
+fi
+
 log "Done"

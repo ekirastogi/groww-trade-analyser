@@ -4,6 +4,10 @@ backend/bin/
 backend/groww-pnl-analyzer
 backend/*.exe
 
+# Cloud Functions
+functions/node_modules/
+functions/lib/
+
 # Frontend (see frontend/.gitignore for full list)
 frontend/node_modules/
 frontend/dist/
