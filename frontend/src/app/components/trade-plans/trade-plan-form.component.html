@@ -54,18 +54,45 @@
           </select>
         </label>
         @if (form.segment === 'intraday') {
-          <label class="block text-sm">
+          <div class="block text-sm">
             <span class="text-slate-500">Direction</span>
-            <select class="input-field mt-1 w-full" [(ngModel)]="form.direction">
-              <option value="long">Long</option>
-              <option value="short">Short</option>
-            </select>
-          </label>
+            <div class="segmented-control mt-1 w-full" role="group" aria-label="Trade direction">
+              <button
+                type="button"
+                class="segment-item flex-1"
+                [class.segment-item-active]="form.direction === 'long'"
+                (click)="setDirection('long')"
+              >
+                Long
+              </button>
+              <button
+                type="button"
+                class="segment-item flex-1"
+                [class.segment-item-active]="form.direction === 'short'"
+                (click)="setDirection('short')"
+              >
+                Short
+              </button>
+            </div>
+          </div>
+        } @else {
+          <div class="block text-sm">
+            <span class="text-slate-500">Direction</span>
+            <p class="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">Long only (delivery)</p>
+          </div>
         }
         <label class="block text-sm">
           <span class="text-slate-500">CMP (current price) *</span>
           <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.cmp" />
         </label>
+      </div>
+
+      <div
+        class="rounded-xl border px-3 py-2.5 text-sm"
+        [class]="isShort() ? 'border-rose-200 bg-rose-50/60 text-rose-900' : 'border-emerald-200 bg-emerald-50/60 text-emerald-900'"
+      >
+        <p class="font-medium">{{ isShort() ? 'Short trade' : 'Long trade' }}</p>
+        <p class="mt-0.5 text-xs opacity-80">{{ directionSummary() }}</p>
       </div>
 
       <div>
@@ -84,7 +111,7 @@
             <div class="entry-row" [class.entry-row-scale]="$index > 0">
               <div class="mb-2 flex items-center justify-between gap-2">
                 <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {{ $index === 0 ? 'Initial entry' : 'Scale-in ' + $index }}
+                  {{ $index === 0 ? initialEntryTitle() : (isShort() ? 'Add-on short ' + $index : 'Scale-in ' + $index) }}
                 </p>
                 @if ($index > 0) {
                   <button type="button" class="text-xs text-slate-400 hover:text-red-600" (click)="removeScaleIn($index)">
@@ -94,7 +121,7 @@
               </div>
               <div class="grid gap-2 sm:grid-cols-2">
                 <label class="block text-sm">
-                  <span class="text-slate-500">{{ isShort() ? 'Short entry price' : 'Buy price' }}</span>
+                  <span class="text-slate-500">{{ entryPriceLabel() }}</span>
                   <input
                     class="input-field mt-1 w-full"
                     type="number"
@@ -139,18 +166,16 @@
 
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="block text-sm">
-          <span class="text-slate-500">Target / exit *</span>
+          <span class="text-slate-500">{{ targetLabel() }}</span>
           <input class="input-field mt-1 w-full" type="number" step="0.01" [(ngModel)]="form.targetPrice" />
           @if (exitPctPreview() != null) {
-            <span class="mt-1 block text-xs text-slate-400">vs avg entry: {{ fmtPct(exitPctPreview()) }}</span>
+            <span class="mt-1 block text-xs text-slate-400">vs avg {{ isShort() ? 'short' : 'entry' }}: {{ fmtPct(exitPctPreview()) }}</span>
           }
         </label>
         <label class="block text-sm">
           <span class="text-slate-500">Stop loss</span>
           <input class="input-field mt-1 w-full" type="number" step="0.01" [(ngModel)]="form.stopLoss" />
-          @if (stopLossPctPreview() != null) {
-            <span class="mt-1 block text-xs text-slate-400">vs avg entry: {{ fmtPct(stopLossPctPreview()) }}</span>
-          }
+          <span class="mt-1 block text-xs text-slate-400">{{ stopLossHint() }}</span>
         </label>
       </div>
 
@@ -161,7 +186,7 @@
             <p class="font-bold tabular-nums text-slate-900">{{ summary.totalQuantity | number }}</p>
           </div>
           <div>
-            <p class="text-[11px] font-medium text-slate-500">Avg entry</p>
+            <p class="text-[11px] font-medium text-slate-500">Avg {{ isShort() ? 'short' : 'entry' }}</p>
             <p class="font-bold tabular-nums text-slate-900">{{ fmt(summary.avgEntryPrice) }}</p>
           </div>
           <div>

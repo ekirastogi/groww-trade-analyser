@@ -22,7 +22,7 @@ export interface RegistryStock {
 export type TradeSegment = 'intraday' | 'delivery';
 export type TradeDirection = 'long' | 'short';
 export type TradePlanSource = 'manual' | 'auto';
-export type TradeExecutionStatus = 'planned' | 'executed' | 'skipped';
+export type TradeExecutionStatus = 'planned' | 'executed' | 'skipped' | 'open';
 
 export interface ExecutionLeg {
   quantity: number;
@@ -56,6 +56,8 @@ export interface PlannedTrade {
   buyLegs?: ExecutionLeg[];
   sellLegs?: ExecutionLeg[];
   notes?: string;
+  /** Original plan date when moved to the open pool. */
+  openedFromDate?: string;
   createdAt: number;
   updatedAt: number;
 }

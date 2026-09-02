@@ -3,8 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { switchMap } from 'rxjs';
-import { TradePlanService } from '../../services/trade-plan.service';
+import { combineLatest, of, switchMap } from 'rxjs';
+import { OPEN_TRADES_PAGE_SIZE, TradePlanService } from '../../services/trade-plan.service';
 import { RegistryStockService } from '../../services/registry-stock.service';
 import { PlannedTrade } from '../../models/trading-journal.models';
 import { formatCurrency, formatPctSigned, pnlClass, pnlBadgeClass } from '../../utils/format.utils';
@@ -143,6 +143,12 @@ export class TradePlansComponent implements OnInit {
   carryForwardPreview = signal<{ count: number; sourceDate: string | null } | null>(null);
   carryForwardBusy = signal(false);
   carryForwardMessage = signal<string | null>(null);
+  viewMode = signal<'open' | 'date'>('date');
+  openPage = signal(0);
+  assigningTrade = signal<PlannedTrade | null>(null);
+  assignTargetDate = signal('');
+  assignError = signal<string | null>(null);
+  assignBusy = signal(false);
 
   upcomingTabs = computed(() =>
     upcomingPlanDates().map((iso) => ({ iso, label: planDateTabLabel(iso) }))
@@ -154,13 +160,39 @@ export class TradePlansComponent implements OnInit {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
 
-  viewingPast = computed(() => isPastPlanDate(this.tradeDate()));
-  dateHeading = computed(() => planDateHeading(this.tradeDate()));
+  viewingPast = computed(() => this.viewMode() === 'date' && isPastPlanDate(this.tradeDate()));
+  isOpenView = computed(() => this.viewMode() === 'open');
+  dateHeading = computed(() => (this.isOpenView() ? 'Open trades' : planDateHeading(this.tradeDate())));
 
   trades = toSignal(
     toObservable(this.tradeDate).pipe(switchMap((date) => this.planSvc.watchForDate(date))),
     { initialValue: [] as PlannedTrade[] }
   );
+
+  openTradesPage = toSignal(
+    combineLatest([toObservable(this.viewMode), toObservable(this.openPage)]).pipe(
+      switchMap(([mode, page]) =>
+        mode === 'open'
+          ? this.planSvc.watchOpenTrades(page, OPEN_TRADES_PAGE_SIZE)
+          : of({ trades: [], total: 0, page, pageSize: OPEN_TRADES_PAGE_SIZE })
+      )
+    ),
+    { initialValue: { trades: [] as PlannedTrade[], total: 0, page: 0, pageSize: OPEN_TRADES_PAGE_SIZE } }
+  );
+
+  openTrades = computed(() => this.openTradesPage().trades);
+  openTradesTotal = computed(() => this.openTradesPage().total);
+  openPageCount = computed(() =>
+    Math.max(1, Math.ceil(this.openTradesTotal() / OPEN_TRADES_PAGE_SIZE))
+  );
+  openPageLabel = computed(() => {
+    const total = this.openTradesTotal();
+    if (!total) return 'No open trades';
+    const page = this.openPage();
+    const from = page * OPEN_TRADES_PAGE_SIZE + 1;
+    const to = Math.min(total, (page + 1) * OPEN_TRADES_PAGE_SIZE);
+    return `${from}–${to} of ${total}`;
+  });
 
   registry = toSignal(this.registrySvc.watchAll(), { initialValue: [] });
 
@@ -195,7 +227,23 @@ export class TradePlansComponent implements OnInit {
 
   sortedTrades = computed(() => {
     const key = this.sortKey();
-    const rows = [...this.trades()];
+    const rows = this.trades().filter((t) => t.status !== 'open' && t.status !== 'skipped');
+    rows.sort((a, b) => {
+      switch (key) {
+        case 'estimatedPnL':
+          return b.estimatedPnL - a.estimatedPnL;
+        case 'realizedPnL':
+          return (b.realizedPnL ?? 0) - (a.realizedPnL ?? 0);
+        default:
+          return a.symbol.localeCompare(b.symbol);
+      }
+    });
+    return rows;
+  });
+
+  sortedOpenTrades = computed(() => {
+    const key = this.sortKey();
+    const rows = [...this.openTrades()];
     rows.sort((a, b) => {
       switch (key) {
         case 'estimatedPnL':
@@ -212,7 +260,11 @@ export class TradePlansComponent implements OnInit {
   menuTrade = computed(() => {
     const id = this.menuOpenId();
     if (!id) return null;
-    return this.trades().find((t) => t.id === id) ?? null;
+    return (
+      this.trades().find((t) => t.id === id) ??
+      this.openTrades().find((t) => t.id === id) ??
+      null
+    );
   });
 
   carryForwardLabel = computed(() => {
@@ -237,17 +289,38 @@ export class TradePlansComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    const view = this.route.snapshot.queryParamMap.get('view');
+    if (view === 'open') {
+      this.selectOpenTab(false);
+      return;
+    }
     const date = this.route.snapshot.queryParamMap.get('date');
     if (date) this.setTradeDate(normalizePlanViewDate(date), false);
   }
 
+  selectOpenTab(syncRoute = true): void {
+    this.viewMode.set('open');
+    this.calendarOpen.set(false);
+    this.openPage.set(0);
+    if (syncRoute) {
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { view: 'open', date: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+    }
+  }
+
   selectTab(iso: string): void {
+    this.viewMode.set('date');
     this.setTradeDate(iso);
     this.calendarOpen.set(false);
   }
 
   onPastDatePick(value: string): void {
     if (!value || isWeekend(value) || !isPastPlanDate(value)) return;
+    this.viewMode.set('date');
     this.setTradeDate(value);
     this.calendarOpen.set(false);
   }
@@ -308,15 +381,21 @@ export class TradePlansComponent implements OnInit {
   }
 
   private setTradeDate(iso: string, syncRoute = true): void {
+    this.viewMode.set('date');
     this.tradeDate.set(iso);
     if (syncRoute) {
       void this.router.navigate([], {
         relativeTo: this.route,
-        queryParams: { date: iso },
+        queryParams: { date: iso, view: null },
         queryParamsHandling: 'merge',
         replaceUrl: true,
       });
     }
+  }
+
+  setOpenPage(page: number): void {
+    const max = this.openPageCount() - 1;
+    this.openPage.set(Math.max(0, Math.min(page, max)));
   }
 
   entryPct(t: PlannedTrade): number | null {
@@ -369,6 +448,7 @@ export class TradePlansComponent implements OnInit {
   statusLabel(t: PlannedTrade): string {
     switch (t.status) {
       case 'executed': return 'Executed';
+      case 'open': return 'Open';
       case 'skipped': return 'Skipped';
       default: return 'Planned';
     }
@@ -380,13 +460,14 @@ export class TradePlansComponent implements OnInit {
         return this.displayPnL(t) >= 0
           ? 'bg-emerald-100 text-emerald-800 ring-emerald-300'
           : 'bg-red-100 text-red-800 ring-red-300';
+      case 'open':
       case 'skipped': return 'bg-amber-100 text-amber-800 ring-amber-300';
       default: return 'bg-slate-100 text-slate-700 ring-slate-200';
     }
   }
 
   tradeCardClass(t: PlannedTrade): string {
-    if (t.status === 'skipped') return 'trade-card-skipped';
+    if (t.status === 'open' || t.status === 'skipped') return 'trade-card-skipped';
     if (t.status === 'executed') {
       const pnl = this.displayPnL(t);
       if (pnl > 0) return 'trade-card-profit';
@@ -495,7 +576,45 @@ export class TradePlansComponent implements OnInit {
   }
 
   async markSkipped(trade: PlannedTrade): Promise<void> {
-    await this.planSvc.updateExecution(trade.id, 'skipped');
+    await this.planSvc.moveToOpen(trade.id);
+  }
+
+  openAssignModal(trade: PlannedTrade): void {
+    this.assigningTrade.set(trade);
+    this.assignTargetDate.set(normalizePlanViewDate(todayIso()));
+    this.assignError.set(null);
+  }
+
+  closeAssignModal(): void {
+    this.assigningTrade.set(null);
+    this.assignTargetDate.set('');
+    this.assignError.set(null);
+  }
+
+  async confirmAssignToDay(): Promise<void> {
+    const trade = this.assigningTrade();
+    const targetDate = this.assignTargetDate().trim();
+    if (!trade || !targetDate) return;
+    if (isWeekend(targetDate)) {
+      this.assignError.set('Pick a weekday');
+      return;
+    }
+
+    this.assignBusy.set(true);
+    this.assignError.set(null);
+    try {
+      await this.planSvc.assignOpenTradeToDate(trade.id, targetDate);
+      this.closeAssignModal();
+    } catch (e) {
+      this.assignError.set(e instanceof Error ? e.message : 'Failed to assign trade');
+    } finally {
+      this.assignBusy.set(false);
+    }
+  }
+
+  openedFromLabel(t: PlannedTrade): string | null {
+    if (!t.openedFromDate) return null;
+    return `From ${planDateTabLabel(t.openedFromDate)}`;
   }
 
   async resetPlanned(trade: PlannedTrade): Promise<void> {

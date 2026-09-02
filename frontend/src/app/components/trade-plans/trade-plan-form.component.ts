@@ -79,6 +79,22 @@ export class TradePlanFormComponent implements OnInit {
 
   isShort = computed(() => this.form.segment === 'intraday' && this.form.direction === 'short');
 
+  directionSummary = computed(() =>
+    this.isShort()
+      ? 'Sell first at entry → cover (buy back) at target. Scale-in by shorting more at higher prices.'
+      : 'Buy at entry → sell at target. Scale-in by buying more at lower prices.'
+  );
+
+  initialEntryTitle = computed(() => (this.isShort() ? 'Initial short (sell first)' : 'Initial entry (buy)'));
+
+  entryPriceLabel = computed(() => (this.isShort() ? 'Sell price' : 'Buy price'));
+
+  targetLabel = computed(() => (this.isShort() ? 'Cover price (buy back) *' : 'Target / exit *'));
+
+  stopLossHint = computed(() =>
+    this.isShort() ? 'Stop above entry — price rises against the short' : 'Stop below entry — price falls against the long'
+  );
+
   scaleInHint = computed(() =>
     this.isShort()
       ? 'Add scale-in levels at higher prices if the stock rallies against your short.'
@@ -245,6 +261,10 @@ export class TradePlanFormComponent implements OnInit {
     if (segment === 'delivery') {
       this.form.direction = 'long';
     }
+  }
+
+  setDirection(direction: TradeDirection): void {
+    this.form.direction = direction;
   }
 
   onSymbolQuery(value: string): void {

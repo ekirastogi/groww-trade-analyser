@@ -38,6 +38,17 @@ export interface CopyUnfinishedResult {
   sourceDate: string;
 }
 
+/** Sentinel trade_date for trades in the date-independent open pool. */
+export const OPEN_TRADE_POOL_DATE = '__open__';
+export const OPEN_TRADES_PAGE_SIZE = 20;
+
+export interface OpenTradesPage {
+  trades: PlannedTrade[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 type PlannedTradePayload = {
   source?: TradePlanSource;
   estimatedStopLossPnL?: number | null;
@@ -49,6 +60,7 @@ type PlannedTradePayload = {
   entryLegs?: PlannedEntryLeg[] | null;
   updatedAt?: number;
   carriedFromDate?: string;
+  openedFromDate?: string;
 };
 
 function legsFromLegacy(
@@ -103,6 +115,7 @@ function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
     buyLegs,
     sellLegs,
     notes: camel['notes'] as string | undefined,
+    openedFromDate: payload.openedFromDate,
     createdAt: Number(camel['createdAt'] ?? 0),
     updatedAt: payload.updatedAt ?? Number(camel['createdAt'] ?? 0),
   };
@@ -127,6 +140,20 @@ export class TradePlanService {
     );
   }
 
+  watchOpenTrades(page: number, pageSize = OPEN_TRADES_PAGE_SIZE): Observable<OpenTradesPage> {
+    return this.auth.user$.pipe(
+      switchMap((user) => {
+        if (!user) return of({ trades: [], total: 0, page, pageSize });
+        return this.supabase.watchTable(
+          `planned_trades-open-${page}`,
+          () => this.fetchOpenTradesPage(page, pageSize),
+          undefined,
+          'planned_trades'
+        );
+      })
+    );
+  }
+
   private async fetchForDate(tradeDate: string): Promise<PlannedTrade[]> {
     const uid = await this.auth.getDataUserId();
     if (!uid) return [];
@@ -135,9 +162,32 @@ export class TradePlanService {
       .select('*')
       .eq('user_id', uid)
       .eq('trade_date', tradeDate)
+      .neq('status', 'open')
       .order('created_at', { ascending: true });
     if (error) throw error;
     return (data ?? []).map((row) => rowToPlannedTrade(row));
+  }
+
+  async fetchOpenTradesPage(page: number, pageSize = OPEN_TRADES_PAGE_SIZE): Promise<OpenTradesPage> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return { trades: [], total: 0, page, pageSize };
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, count, error } = await this.supabase.client
+      .from('planned_trades')
+      .select('*', { count: 'exact' })
+      .eq('user_id', uid)
+      .eq('status', 'open')
+      .eq('trade_date', OPEN_TRADE_POOL_DATE)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return {
+      trades: (data ?? []).map((row) => rowToPlannedTrade(row)),
+      total: count ?? 0,
+      page,
+      pageSize,
+    };
   }
 
   watchInMonth(year: number, month: number): Observable<PlannedTrade[]> {
@@ -200,7 +250,7 @@ export class TradePlanService {
       if (t.status === 'executed') {
         executedCount++;
         realizedPnL += t.realizedPnL ?? 0;
-      } else if (t.status === 'skipped') {
+      } else if (t.status === 'skipped' || t.status === 'open') {
         skippedCount++;
       }
     }
@@ -528,6 +578,89 @@ export class TradePlanService {
     if (error) throw error;
   }
 
+  async moveToOpen(id: string): Promise<void> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) throw new Error('Sign in to update trades');
+    const existing = await this.getById(id);
+    if (!existing) throw new Error('Trade not found');
+
+    const openedFromDate =
+      existing.tradeDate !== OPEN_TRADE_POOL_DATE
+        ? existing.tradeDate
+        : existing.openedFromDate;
+    const payload: PlannedTradePayload = {
+      source: existing.source,
+      estimatedStopLossPnL: existing.estimatedStopLossPnL ?? null,
+      executedQuantity: null,
+      executedBuyPrice: null,
+      executedSellPrice: null,
+      buyLegs: null,
+      sellLegs: null,
+      entryLegs: existing.entryLegs ?? null,
+      openedFromDate,
+      updatedAt: Date.now(),
+    };
+
+    const { error } = await this.supabase.client
+      .from('planned_trades')
+      .update(
+        objectToSnake({
+          status: 'open' as TradeExecutionStatus,
+          tradeDate: OPEN_TRADE_POOL_DATE,
+          realizedPnl: null,
+          executedAt: null,
+          payload,
+        })
+      )
+      .eq('id', id)
+      .eq('user_id', uid);
+    if (error) throw error;
+  }
+
+  async assignOpenTradeToDate(id: string, targetDate: string): Promise<void> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) throw new Error('Sign in to update trades');
+    const existing = await this.getById(id);
+    if (!existing || existing.status !== 'open') {
+      throw new Error('Trade is not in the open pool');
+    }
+
+    const targetTrades = await this.fetchForDate(targetDate);
+    const key = TradePlanService.tradeDuplicateKey(existing);
+    const duplicate = targetTrades.some(
+      (t) => t.status === 'planned' && TradePlanService.tradeDuplicateKey(t) === key
+    );
+    if (duplicate) {
+      throw new Error('A similar trade is already planned for that day');
+    }
+
+    const payload: PlannedTradePayload = {
+      source: existing.source,
+      estimatedStopLossPnL: existing.estimatedStopLossPnL ?? null,
+      executedQuantity: null,
+      executedBuyPrice: null,
+      executedSellPrice: null,
+      buyLegs: null,
+      sellLegs: null,
+      entryLegs: existing.entryLegs ?? null,
+      openedFromDate: existing.openedFromDate,
+      updatedAt: Date.now(),
+    };
+
+    const { error } = await this.supabase.client
+      .from('planned_trades')
+      .update(
+        objectToSnake({
+          tradeDate: targetDate,
+          status: 'planned' as TradeExecutionStatus,
+          payload,
+        })
+      )
+      .eq('id', id)
+      .eq('user_id', uid);
+    if (error) throw error;
+  }
+
   async getById(id: string): Promise<PlannedTrade | null> {
     const uid = await this.auth.getDataUserId();
     if (!uid) return null;
@@ -611,7 +744,7 @@ export class TradePlanService {
     ]);
     const existingKeys = new Set(targetTrades.map((t) => TradePlanService.tradeDuplicateKey(t)));
     const count = sourceTrades
-      .filter((t) => t.status === 'planned' || t.status === 'skipped')
+      .filter((t) => t.status === 'planned')
       .filter((t) => !existingKeys.has(TradePlanService.tradeDuplicateKey(t))).length;
     return { count, sourceDate };
   }
@@ -625,7 +758,7 @@ export class TradePlanService {
       this.fetchForDate(targetDate),
     ]);
     const existingKeys = new Set(targetTrades.map((t) => TradePlanService.tradeDuplicateKey(t)));
-    const unfinished = sourceTrades.filter((t) => t.status === 'planned' || t.status === 'skipped');
+    const unfinished = sourceTrades.filter((t) => t.status === 'planned');
 
     let copied = 0;
     let skippedDuplicates = 0;
