@@ -52,6 +52,19 @@ interface AutoTierTab {
   count: number;
 }
 
+interface StockDaySummary {
+  date: string;
+  label: string;
+  tradeCount: number;
+  quantity: number;
+  buyValue: number;
+  sellValue: number;
+  realisedPnL: number;
+  allocatedCharges: number;
+  netPnL: number;
+  trades: Trade[];
+}
+
 @Component({
   selector: 'app-watchlists',
   standalone: true,
@@ -103,6 +116,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   tierMode = signal<PnlTierMode>('cumulative');
   selectedAutoTierId = signal<string | null>(null);
   expandedStockKey = signal<string | null>(null);
+  expandedDayKey = signal<string | null>(null);
   selectedMarketCapTiers = signal<MarketCapTier[]>([]);
   mobileFiltersOpen = signal(false);
 
@@ -255,6 +269,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     this.activeTab.set(tab);
     this.selectedAutoTierId.set(null);
     this.expandedStockKey.set(null);
+    this.expandedDayKey.set(null);
     this.lazyTrades.clear();
     this.filterUrl.patchWatchlistQuery({
       [FILTER_QUERY_KEYS.side]: tab,
@@ -266,6 +281,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     this.tierMode.set(mode);
     this.selectedAutoTierId.set(null);
     this.expandedStockKey.set(null);
+    this.expandedDayKey.set(null);
     this.lazyTrades.clear();
     this.filterUrl.patchWatchlistQuery({
       [FILTER_QUERY_KEYS.bands]: mode === 'cumulative' ? null : mode,
@@ -281,6 +297,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     this.selectedMarketCapTiers.set(tiers);
     this.selectedAutoTierId.set(null);
     this.expandedStockKey.set(null);
+    this.expandedDayKey.set(null);
     this.lazyTrades.clear();
     this.filterUrl.patchWatchlistQuery({
       [FILTER_QUERY_KEYS.cap]: serializeMarketCapTiers(tiers),
@@ -290,6 +307,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   selectAutoTier(id: string): void {
     this.selectedAutoTierId.set(id);
     this.expandedStockKey.set(null);
+    this.expandedDayKey.set(null);
     this.lazyTrades.clear();
     this.filterUrl.patchWatchlistQuery({
       [FILTER_QUERY_KEYS.tier]: id === ALL_SUBTAB_ID ? null : id,
@@ -309,7 +327,43 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     const key = this.stockRowKey(stock);
     const expanding = this.expandedStockKey() !== key;
     this.expandedStockKey.set(expanding ? key : null);
+    this.expandedDayKey.set(null);
     if (expanding) void this.ensureStockTradesLoaded(stock);
+  }
+
+  daySummariesForStock(stock: StockSummary): StockDaySummary[] {
+    const byDay = new Map<string, Trade[]>();
+    for (const trade of this.tradesForStock(stock)) {
+      const date = trade.sellDate?.slice(0, 10) || 'unknown';
+      const list = byDay.get(date) ?? [];
+      list.push(trade);
+      byDay.set(date, list);
+    }
+    return [...byDay.entries()]
+      .map(([date, trades]) => this.buildDaySummary(date, trades))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  dayRowKey(stock: StockSummary, date: string): string {
+    return `${this.stockRowKey(stock)}|${date}`;
+  }
+
+  isDayExpanded(stock: StockSummary, date: string): boolean {
+    return this.expandedDayKey() === this.dayRowKey(stock, date);
+  }
+
+  toggleDayExpand(stock: StockSummary, date: string, event?: Event): void {
+    event?.stopPropagation();
+    const key = this.dayRowKey(stock, date);
+    this.expandedDayKey.set(this.expandedDayKey() === key ? null : key);
+  }
+
+  tradeNetPnL(trade: Trade): number {
+    return trade.netPnL ?? trade.realisedPnL - (trade.allocatedCharges ?? 0);
+  }
+
+  tradeAllocatedCharge(trade: Trade): number {
+    return trade.allocatedCharges ?? 0;
   }
 
   tradesForStock(stock: StockSummary): Trade[] {
@@ -378,6 +432,35 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
 
   private clientCode(): string | null {
     return this.state.activeClientCode() ?? this.state.report()?.summary.clientCode ?? null;
+  }
+
+  private buildDaySummary(date: string, trades: Trade[]): StockDaySummary {
+    let quantity = 0;
+    let buyValue = 0;
+    let sellValue = 0;
+    let realisedPnL = 0;
+    let allocatedCharges = 0;
+    let netPnL = 0;
+    for (const trade of trades) {
+      quantity += trade.quantity;
+      buyValue += trade.buyValue;
+      sellValue += trade.sellValue;
+      realisedPnL += trade.realisedPnL;
+      allocatedCharges += this.tradeAllocatedCharge(trade);
+      netPnL += this.tradeNetPnL(trade);
+    }
+    return {
+      date,
+      label: date === 'unknown' ? 'Unknown date' : formatDate(date),
+      tradeCount: trades.length,
+      quantity,
+      buyValue,
+      sellValue,
+      realisedPnL,
+      allocatedCharges,
+      netPnL,
+      trades,
+    };
   }
 
   private async ensureStockTradesLoaded(stock: StockSummary): Promise<void> {
