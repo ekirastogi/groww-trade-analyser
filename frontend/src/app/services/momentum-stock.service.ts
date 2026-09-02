@@ -49,9 +49,6 @@ export class MomentumStockService {
     if (!uid) throw new Error('Sign in to save momentum stocks');
     const symbol = input.symbol.toUpperCase().trim();
     if (!symbol) throw new Error('Symbol is required');
-    if (!input.targetPrice || input.targetPrice <= 0) {
-      throw new Error('Target price is required');
-    }
 
     const now = Date.now();
     const rowId = id ?? crypto.randomUUID();
@@ -61,8 +58,8 @@ export class MomentumStockService {
       symbol,
       stockName: input.stockName?.trim() || symbol,
       cmp: input.cmp ?? null,
-      entryPrice: input.entryPrice ?? input.cmp ?? null,
-      targetPrice: input.targetPrice,
+      entryPrice: input.entryPrice ?? null,
+      targetPrice: input.targetPrice ?? null,
       stopLoss: input.stopLoss ?? null,
       quantity: input.quantity && input.quantity > 0 ? input.quantity : 1,
       catalyst: input.catalyst ?? null,
@@ -70,6 +67,7 @@ export class MomentumStockService {
       notes: input.notes?.trim() ?? '',
       updatedAt: now,
       payload: { updatedAt: now },
+      ...(id ? {} : { createdAt: now }),
     });
 
     if (id) {
@@ -82,8 +80,7 @@ export class MomentumStockService {
       return rowId;
     }
 
-    const insertRow = { ...row, createdAt: now };
-    const { error } = await this.supabase.client.from('momentum_stocks').insert(insertRow);
+    const { error } = await this.supabase.client.from('momentum_stocks').insert(row);
     if (error) {
       if (error.code === '23505') throw new Error(`${symbol} is already on your momentum list`);
       throw error;

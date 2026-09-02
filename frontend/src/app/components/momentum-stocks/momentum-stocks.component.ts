@@ -214,14 +214,9 @@ export class MomentumStocksComponent implements OnInit {
 
   async saveStock(): Promise<void> {
     const symbol = this.form.symbol.trim().toUpperCase();
-    const targetPrice = parseFloat(this.form.targetPrice);
     const quantity = parseInt(this.form.quantity, 10);
     if (!symbol) {
       this.error.set('Symbol is required');
-      return;
-    }
-    if (!targetPrice || targetPrice <= 0) {
-      this.error.set('Target price is required');
       return;
     }
 
@@ -231,6 +226,7 @@ export class MomentumStocksComponent implements OnInit {
     try {
       const cmp = parseFloat(this.form.cmp);
       const entryPrice = parseFloat(this.form.entryPrice);
+      const targetPrice = parseFloat(this.form.targetPrice);
       const stopLoss = parseFloat(this.form.stopLoss);
       await this.momentumSvc.save(
         {
@@ -238,7 +234,7 @@ export class MomentumStocksComponent implements OnInit {
           stockName: this.form.name.trim() || symbol,
           cmp: Number.isFinite(cmp) && cmp > 0 ? cmp : undefined,
           entryPrice: Number.isFinite(entryPrice) && entryPrice > 0 ? entryPrice : undefined,
-          targetPrice,
+          targetPrice: Number.isFinite(targetPrice) && targetPrice > 0 ? targetPrice : undefined,
           stopLoss: Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : undefined,
           quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
           catalyst: this.form.catalyst,
@@ -268,6 +264,11 @@ export class MomentumStocksComponent implements OnInit {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  canCreateOpenPlan(stock: MomentumStock): boolean {
+    const entry = stock.entryPrice ?? stock.cmp;
+    return !!(entry && entry > 0 && stock.targetPrice && stock.targetPrice > 0);
   }
 
   async createOpenTradePlan(stock: MomentumStock): Promise<void> {
