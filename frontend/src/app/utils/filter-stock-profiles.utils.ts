@@ -8,14 +8,23 @@ import {
 } from '../models/trade.models';
 import { expandTradeTypes } from './trade-type-filter.utils';
 
+export function effectiveAnalysisDateRange(
+  reportRange: DateRange | undefined,
+  opts: AnalysisOptions
+): { startDate: string; endDate: string } {
+  return {
+    startDate: opts.startDate || reportRange?.min || '',
+    endDate: opts.endDate || reportRange?.max || '',
+  };
+}
+
 export function isFullReportDateRange(
   reportRange: DateRange,
   opts: AnalysisOptions
 ): boolean {
   if (!reportRange.min || !reportRange.max) return true;
-  const start = opts.startDate || reportRange.min;
-  const end = opts.endDate || reportRange.max;
-  return start === reportRange.min && end === reportRange.max;
+  const { startDate, endDate } = effectiveAnalysisDateRange(reportRange, opts);
+  return startDate === reportRange.min && endDate === reportRange.max;
 }
 
 export function profilesHaveTypeBreakdown(profiles: StockProfile[]): boolean {

@@ -96,6 +96,7 @@ export class DashboardComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.state.ensureLoadedFromFirebase();
+    await this.state.ensureTradesLoaded();
     this.clients.set(await this.clientSvc.listClients());
   }
 
@@ -367,7 +368,7 @@ export class DashboardComponent implements OnInit {
   periodTrades(period: string): Trade[] {
     const tab = this.activeTab();
     if (tab !== 'daily' && tab !== 'weekly' && tab !== 'monthly') return [];
-    return this.lazyTrades.tradesForKey(`period:${tab}:${period}`);
+    return this.lazyTrades.tradesForKey(this.lazyTrades.cacheKeyForPeriod(tab, period));
   }
 
   periodStockGroups(period: string) {
@@ -380,7 +381,7 @@ export class DashboardComponent implements OnInit {
   isPeriodTradesLoading(period: string): boolean {
     const tab = this.activeTab();
     if (tab !== 'daily' && tab !== 'weekly' && tab !== 'monthly') return false;
-    return this.lazyTrades.isLoading(`period:${tab}:${period}`);
+    return this.lazyTrades.isLoading(this.lazyTrades.cacheKeyForPeriod(tab, period));
   }
 
   periodTradeCount(period: string): number {

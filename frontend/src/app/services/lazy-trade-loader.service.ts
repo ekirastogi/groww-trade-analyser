@@ -1,15 +1,32 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { AnalysisOptions, Report, StockSummary, StoredTrade, Trade, TradeType } from '../models/trade.models';
+import { effect, inject, Injectable, signal } from '@angular/core';
+import { AnalysisOptions, Report, StockSummary, StoredTrade, Trade } from '../models/trade.models';
 import { TradeLedgerService } from './trade-ledger.service';
+import { ReportStateService } from './report-state.service';
 import { normalizeSymbol } from '../utils/upload-merge.utils';
 import { sortTradesBySellDateDesc, storedTradeToTrade } from '../utils/trade.utils';
-import { buildTradeTypeFilter, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
+import { tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
+import { effectiveAnalysisDateRange } from '../utils/filter-stock-profiles.utils';
 
 @Injectable({ providedIn: 'root' })
 export class LazyTradeLoaderService {
   private ledger = inject(TradeLedgerService);
+  private reportState = inject(ReportStateService);
   private lists = signal<Map<string, Trade[]>>(new Map());
   loadingKey = signal<string | null>(null);
+
+  constructor() {
+    let prevFilterKey = '';
+    effect(
+      () => {
+        const key = this.filterKey();
+        if (prevFilterKey && prevFilterKey !== key) {
+          this.clear();
+        }
+        prevFilterKey = key;
+      },
+      { allowSignalWrites: true }
+    );
+  }
 
   tradesForKey(key: string): Trade[] {
     return this.lists().get(key) ?? [];
@@ -24,7 +41,11 @@ export class LazyTradeLoaderService {
   }
 
   cacheKeyForStock(stock: StockSummary): string {
-    return `stock:${this.stockKey(stock)}`;
+    return `stock:${this.stockKey(stock)}:${this.filterKey()}`;
+  }
+
+  cacheKeyForPeriod(tab: 'daily' | 'weekly' | 'monthly', periodKey: string): string {
+    return `period:${tab}:${periodKey}:${this.filterKey()}`;
   }
 
   async loadForStock(
@@ -37,8 +58,10 @@ export class LazyTradeLoaderService {
     const cached = this.lists().get(key);
     if (cached) return cached;
 
+    const effective = this.effectiveFilters(report, filters);
+
     if (report?.trades?.length) {
-      const trades = this.filterTrades(report.trades, stock, filters);
+      const trades = this.filterTrades(report.trades, stock, effective);
       this.setCache(key, trades);
       return trades;
     }
@@ -46,8 +69,12 @@ export class LazyTradeLoaderService {
     this.loadingKey.set(key);
     try {
       const symbol = stock.symbol || normalizeSymbol(stock.stockName);
-      const rows = await this.ledger.getTradesForSymbol(clientCode, symbol, filters);
-      const trades = sortTradesBySellDateDesc(rows.map(storedTradeToTrade));
+      const rows = await this.ledger.getTradesForSymbol(clientCode, symbol, effective);
+      const trades = this.filterTrades(
+        rows.map(storedTradeToTrade),
+        stock,
+        effective
+      );
       this.setCache(key, trades);
       return trades;
     } finally {
@@ -62,15 +89,16 @@ export class LazyTradeLoaderService {
     report: Report | null,
     filters: AnalysisOptions
   ): Promise<Trade[]> {
-    const key = `period:${tab}:${periodKey}`;
+    const key = this.cacheKeyForPeriod(tab, periodKey);
     const cached = this.lists().get(key);
     if (cached) return cached;
 
-    const range = periodDateRange(periodKey, tab);
+    const periodRange = periodDateRange(periodKey, tab);
+    const effective = this.effectiveFilters(report, filters);
     const mergedFilters: AnalysisOptions = {
       ...filters,
-      startDate: range.start,
-      endDate: range.end,
+      startDate: intersectStart(periodRange.start, effective.startDate ?? ''),
+      endDate: intersectEnd(periodRange.end, effective.endDate ?? ''),
     };
 
     if (report?.trades?.length) {
@@ -81,7 +109,12 @@ export class LazyTradeLoaderService {
 
     this.loadingKey.set(key);
     try {
-      const rows = await this.ledger.getTradesForDateRange(clientCode, range.start, range.end, mergedFilters);
+      const rows = await this.ledger.getTradesForDateRange(
+        clientCode,
+        mergedFilters.startDate!,
+        mergedFilters.endDate!,
+        mergedFilters
+      );
       const trades = sortTradesBySellDateDesc(rows.map(storedTradeToTrade));
       this.setCache(key, trades);
       return trades;
@@ -93,6 +126,21 @@ export class LazyTradeLoaderService {
   clear(): void {
     this.lists.set(new Map());
     this.loadingKey.set(null);
+  }
+
+  private filterKey(): string {
+    const opts = this.reportState.analysisOptions();
+    const { startDate, endDate } = effectiveAnalysisDateRange(
+      this.reportState.report()?.dateRange,
+      opts
+    );
+    const types = (opts.tradeTypes ?? ['all']).join(',');
+    return `${startDate}|${endDate}|${types}`;
+  }
+
+  private effectiveFilters(report: Report | null, filters: AnalysisOptions): AnalysisOptions {
+    const { startDate, endDate } = effectiveAnalysisDateRange(report?.dateRange, filters);
+    return { ...filters, startDate, endDate };
   }
 
   private setCache(key: string, trades: Trade[]): void {
@@ -120,6 +168,16 @@ export class LazyTradeLoaderService {
       return true;
     });
   }
+}
+
+function intersectStart(periodStart: string, filterStart: string): string {
+  if (!filterStart) return periodStart;
+  return filterStart > periodStart ? filterStart : periodStart;
+}
+
+function intersectEnd(periodEnd: string, filterEnd: string): string {
+  if (!filterEnd) return periodEnd;
+  return filterEnd < periodEnd ? filterEnd : periodEnd;
 }
 
 export function periodDateRange(

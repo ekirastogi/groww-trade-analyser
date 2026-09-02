@@ -214,16 +214,15 @@
                                           @if (isDayExpanded(periodStockDayKey(row.period, group.key, day.date))) {
                                             <div class="border-t border-slate-100 bg-slate-50/50">
                                               <div class="overflow-x-auto">
-                                                <table class="data-table min-w-[640px]">
+                                                <table class="data-table min-w-[560px]">
                                                   <thead>
                                                     <tr>
                                                       <th class="w-8 text-center">#</th>
                                                       <th class="text-left">Type</th>
                                                       <th class="text-right">Qty</th>
                                                       <th class="text-right">Buy</th>
-                                                      <th class="text-right hidden sm:table-cell">Buy Value</th>
                                                       <th class="text-right">Sell</th>
-                                                      <th class="text-right hidden sm:table-cell">Sell Value</th>
+                                                      <th class="text-right hidden sm:table-cell">P&amp;L</th>
                                                       <th class="text-right hidden md:table-cell">Charges</th>
                                                       <th class="text-right">Net P&amp;L</th>
                                                     </tr>
@@ -240,12 +239,11 @@
                                                           <div class="text-xs text-slate-500">{{ formatDate(trade.buyDate) }}</div>
                                                           <div>{{ formatCurrency(trade.buyPrice) }}</div>
                                                         </td>
-                                                        <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.buyValue) }}</td>
                                                         <td class="text-right">
                                                           <div class="text-xs text-slate-500">{{ formatDate(trade.sellDate) }}</div>
                                                           <div>{{ formatCurrency(trade.sellPrice) }}</div>
                                                         </td>
-                                                        <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.sellValue) }}</td>
+                                                        <td class="text-right hidden sm:table-cell" [class]="pnlClass(trade.realisedPnL)">{{ formatCurrency(trade.realisedPnL) }}</td>
                                                         <td class="text-right hidden text-red-600 md:table-cell">{{ formatCurrency(tradeAllocatedCharge(trade)) }}</td>
                                                         <td class="text-right font-medium" [class]="pnlClass(tradeNetPnL(trade))">{{ formatCurrency(tradeNetPnL(trade)) }}</td>
                                                       </tr>
@@ -559,16 +557,15 @@
                                   @if (isDayExpanded(perStockDayKey(stock, day.date))) {
                                     <div class="border-t border-slate-100 bg-slate-50/50">
                                       <div class="overflow-x-auto">
-                                        <table class="data-table min-w-[640px]">
+                                        <table class="data-table min-w-[560px]">
                                           <thead>
                                             <tr>
                                               <th class="w-8 text-center">#</th>
                                               <th class="text-left">Type</th>
                                               <th class="text-right">Qty</th>
                                               <th class="text-right">Buy</th>
-                                              <th class="text-right hidden sm:table-cell">Buy Value</th>
                                               <th class="text-right">Sell</th>
-                                              <th class="text-right hidden sm:table-cell">Sell Value</th>
+                                              <th class="text-right hidden sm:table-cell">P&amp;L</th>
                                               <th class="text-right hidden md:table-cell">Charges</th>
                                               <th class="text-right">Net P&amp;L</th>
                                             </tr>
@@ -585,12 +582,11 @@
                                                   <div class="text-xs text-slate-500">{{ formatDate(trade.buyDate) }}</div>
                                                   <div>{{ formatCurrency(trade.buyPrice) }}</div>
                                                 </td>
-                                                <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.buyValue) }}</td>
                                                 <td class="text-right">
                                                   <div class="text-xs text-slate-500">{{ formatDate(trade.sellDate) }}</div>
                                                   <div>{{ formatCurrency(trade.sellPrice) }}</div>
                                                 </td>
-                                                <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.sellValue) }}</td>
+                                                <td class="text-right hidden sm:table-cell" [class]="pnlClass(trade.realisedPnL)">{{ formatCurrency(trade.realisedPnL) }}</td>
                                                 <td class="text-right hidden text-red-600 md:table-cell">{{ formatCurrency(tradeAllocatedCharge(trade)) }}</td>
                                                 <td class="text-right font-medium" [class]="pnlClass(tradeNetPnL(trade))">{{ formatCurrency(tradeNetPnL(trade)) }}</td>
                                               </tr>
