@@ -18,7 +18,7 @@ import { addDaysIso, previousTradingDayOnOrBefore } from '../utils/trade-plan-da
 export interface CreatePlannedTradeInput {
   symbol: string;
   stockName?: string;
-  tradeDate: string;
+  tradeDate?: string;
   segment: TradeSegment;
   direction: TradeDirection;
   quantity: number;
@@ -30,6 +30,9 @@ export interface CreatePlannedTradeInput {
   source?: TradePlanSource;
   notes?: string;
   carriedFromDate?: string;
+  /** When 'open', trade goes to the date-independent open pool. */
+  pool?: 'dated' | 'open';
+  momentumId?: string;
 }
 
 export interface CopyUnfinishedResult {
@@ -495,13 +498,19 @@ export class TradePlanService {
 
     const now = Date.now();
     const id = crypto.randomUUID();
+    const inOpenPool = input.pool === 'open';
+    const tradeDate = inOpenPool ? OPEN_TRADE_POOL_DATE : (input.tradeDate ?? '');
+    if (!inOpenPool && !tradeDate) {
+      throw new Error('Trade date is required');
+    }
+    const status: TradeExecutionStatus = inOpenPool ? 'open' : 'planned';
 
     const row = objectToSnake({
       id,
       userId: uid,
       symbol: input.symbol.toUpperCase(),
       stockName: input.stockName ?? input.symbol.toUpperCase(),
-      tradeDate: input.tradeDate,
+      tradeDate,
       segment,
       direction,
       quantity: summary.totalQuantity,
@@ -509,7 +518,7 @@ export class TradePlanService {
       entryPrice: summary.avgEntryPrice,
       targetPrice: input.targetPrice,
       stopLoss: input.stopLoss ?? null,
-      status: 'planned' as TradeExecutionStatus,
+      status,
       estimatedPnl: summary.estimatedPnL,
       realizedPnl: null,
       notes: input.notes ?? '',
@@ -523,6 +532,7 @@ export class TradePlanService {
         entryLegs,
         updatedAt: now,
         carriedFromDate: input.carriedFromDate,
+        momentumStockId: input.momentumId,
       },
     });
     const { error } = await this.supabase.client.from('planned_trades').insert(row);

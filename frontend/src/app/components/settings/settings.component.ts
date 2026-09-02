@@ -226,6 +226,7 @@ export class SettingsComponent {
           result?.watchlistsRemoved ? `${result.watchlistsRemoved} watchlist(s)` : null,
           result?.registryStocksRemoved ? `${result.registryStocksRemoved} registry stock(s)` : null,
           result?.plannedTradesRemoved ? `${result.plannedTradesRemoved} planned trade(s)` : null,
+          result?.momentumStocksRemoved ? `${result.momentumStocksRemoved} momentum stock(s)` : null,
           result?.levelsRemoved ? `${result.levelsRemoved} stock level(s)` : null,
           this.resetLocalCache() ? 'local P&L cache' : null,
         ].filter(Boolean);

@@ -14,6 +14,7 @@ import { ClientAccountService } from './client-account.service';
 import { ParserService } from './parser.service';
 import { RegistryStockService } from './registry-stock.service';
 import { TradePlanService } from './trade-plan.service';
+import { MomentumStockService } from './momentum-stock.service';
 import { WatchlistService } from './watchlist.service';
 import { objectToSnake, numField, rowToCamel, SupabaseService } from './supabase.service';
 import {
@@ -56,6 +57,7 @@ export interface ResetDataResult {
   watchlistsRemoved: number;
   registryStocksRemoved: number;
   plannedTradesRemoved: number;
+  momentumStocksRemoved: number;
   levelsRemoved: number;
 }
 
@@ -250,6 +252,7 @@ export class TradeLedgerService {
   private parser = inject(ParserService);
   private registry = inject(RegistryStockService);
   private tradePlans = inject(TradePlanService);
+  private momentumStocks = inject(MomentumStockService);
   private watchlists = inject(WatchlistService);
   /** null = unknown; false = `by_trade_type` column not on remote DB yet. */
   private stockProfilesSupportByTradeType: boolean | null = null;
@@ -428,6 +431,7 @@ export class TradeLedgerService {
       watchlistsRemoved: 0,
       registryStocksRemoved: 0,
       plannedTradesRemoved: 0,
+      momentumStocksRemoved: 0,
       levelsRemoved: 0,
     };
 
@@ -450,6 +454,7 @@ export class TradeLedgerService {
 
     if (options.tradePlans) {
       result.plannedTradesRemoved = await this.tradePlans.deleteAll();
+      result.momentumStocksRemoved = await this.momentumStocks.deleteAll();
     }
 
     if (options.stockLevels) {

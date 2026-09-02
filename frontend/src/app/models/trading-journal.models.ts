@@ -21,7 +21,7 @@ export interface RegistryStock {
 
 export type TradeSegment = 'intraday' | 'delivery';
 export type TradeDirection = 'long' | 'short';
-export type TradePlanSource = 'manual' | 'auto';
+export type TradePlanSource = 'manual' | 'auto' | 'momentum';
 export type TradeExecutionStatus = 'planned' | 'executed' | 'skipped' | 'open';
 
 export interface ExecutionLeg {
@@ -75,4 +75,28 @@ export interface DayTradeSummary {
   realizedPnL: number;
   executedCount: number;
   skippedCount: number;
+}
+
+export type MomentumCatalyst =
+  | 'earnings_beat'
+  | 'guidance_raise'
+  | 'result_surprise'
+  | 'sector_momentum'
+  | 'breakout'
+  | 'other';
+
+export interface MomentumStock {
+  id: string;
+  symbol: string;
+  stockName?: string;
+  cmp?: number;
+  entryPrice?: number;
+  targetPrice?: number;
+  stopLoss?: number;
+  quantity: number;
+  catalyst?: MomentumCatalyst;
+  resultDate?: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
 }

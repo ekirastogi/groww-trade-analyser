@@ -1,0 +1,190 @@
+<div class="mx-auto max-w-6xl space-y-4">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <p class="text-sm text-slate-600">
+        Track post-results momentum candidates. Set CMP and targets, then push to open trade plans when ready.
+      </p>
+      <p class="mt-1 text-xs text-slate-500">{{ stocks().length }} stock{{ stocks().length === 1 ? '' : 's' }} on watch</p>
+    </div>
+    <button type="button" class="btn-primary text-sm" (click)="openAddForm()" [disabled]="busy()">
+      + Add momentum stock
+    </button>
+  </div>
+
+  @if (error()) {
+    <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>
+  }
+  @if (success()) {
+    <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ success() }}</div>
+  }
+
+  @if (showForm()) {
+    <div class="card p-4 sm:p-5">
+      <div class="mb-4 flex items-center justify-between gap-2">
+        <h3 class="text-base font-bold text-slate-900">{{ editingId() ? 'Edit momentum stock' : 'Add momentum stock' }}</h3>
+        <button type="button" class="btn-ghost text-sm" (click)="cancelForm()">Cancel</button>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="block text-sm sm:col-span-2">
+          <span class="text-slate-600">Symbol</span>
+          <input
+            class="input-field mt-1.5"
+            list="momentum-symbol-options"
+            [ngModel]="symbolQuery()"
+            (ngModelChange)="onSymbolQuery($event)"
+            placeholder="e.g. RELIANCE"
+          />
+          <datalist id="momentum-symbol-options">
+            @for (opt of symbolOptions(); track opt.symbol) {
+              <option [value]="opt.symbol">{{ opt.name }}</option>
+            }
+          </datalist>
+        </label>
+
+        <label class="block text-sm sm:col-span-2">
+          <span class="text-slate-600">Company name</span>
+          <input class="input-field mt-1.5" [(ngModel)]="form.name" placeholder="Optional" />
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-slate-600">CMP</span>
+          <input class="input-field mt-1.5" type="number" step="0.01" [(ngModel)]="form.cmp" placeholder="Current price" />
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-slate-600">Entry price</span>
+          <input class="input-field mt-1.5" type="number" step="0.01" [(ngModel)]="form.entryPrice" placeholder="Buy level" />
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-slate-600">Target price</span>
+          <input class="input-field mt-1.5" type="number" step="0.01" [(ngModel)]="form.targetPrice" placeholder="Required" />
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-slate-600">Stop loss</span>
+          <input class="input-field mt-1.5" type="number" step="0.01" [(ngModel)]="form.stopLoss" placeholder="Optional" />
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-slate-600">Quantity</span>
+          <input class="input-field mt-1.5" type="number" min="1" [(ngModel)]="form.quantity" />
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-slate-600">Catalyst</span>
+          <select class="input-field mt-1.5" [(ngModel)]="form.catalyst">
+            @for (c of catalystOptions; track c.id) {
+              <option [value]="c.id">{{ c.label }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-slate-600">Result / event date</span>
+          <input class="input-field mt-1.5" type="date" [(ngModel)]="form.resultDate" />
+        </label>
+
+        <label class="block text-sm sm:col-span-2">
+          <span class="text-slate-600">Thesis / notes</span>
+          <textarea class="input-field mt-1.5 min-h-[4.5rem]" [(ngModel)]="form.notes" placeholder="Why this stock may run after results…"></textarea>
+        </label>
+      </div>
+
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button type="button" class="btn-primary" [disabled]="busy()" (click)="saveStock()">
+          {{ busy() ? 'Saving…' : editingId() ? 'Save changes' : 'Add to list' }}
+        </button>
+      </div>
+    </div>
+  }
+
+  <div class="flex flex-wrap items-center gap-2">
+    <input
+      class="input-field max-w-xs flex-1"
+      type="search"
+      placeholder="Search symbol or notes"
+      [ngModel]="searchQuery()"
+      (ngModelChange)="searchQuery.set($event)"
+    />
+    <a routerLink="/trade-plans" fragment="open" class="btn-secondary text-xs">View open plans →</a>
+  </div>
+
+  @if (filteredStocks().length) {
+    <div class="grid gap-3">
+      @for (stock of filteredStocks(); track stock.id) {
+        <article class="card p-4">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-lg font-bold text-slate-900">{{ stock.stockName || stock.symbol }}</h3>
+                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                  {{ catalystLabel(stock.catalyst) }}
+                </span>
+              </div>
+              <p class="text-sm font-medium text-slate-500">{{ stock.symbol }}</p>
+              @if (stock.resultDate) {
+                <p class="mt-1 text-xs text-slate-500">Event date: {{ stock.resultDate }}</p>
+              }
+              @if (stock.notes) {
+                <p class="mt-2 text-sm text-slate-600">{{ stock.notes }}</p>
+              }
+
+              <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div class="rounded-lg bg-slate-50 px-2.5 py-2">
+                  <p class="text-[10px] font-semibold uppercase text-slate-400">CMP</p>
+                  <p class="text-sm font-bold tabular-nums">{{ stock.cmp != null ? fmt(stock.cmp) : '—' }}</p>
+                </div>
+                <div class="rounded-lg bg-slate-50 px-2.5 py-2">
+                  <p class="text-[10px] font-semibold uppercase text-slate-400">Entry</p>
+                  <p class="text-sm font-bold tabular-nums">{{ stock.entryPrice != null ? fmt(stock.entryPrice) : '—' }}</p>
+                </div>
+                <div class="rounded-lg bg-emerald-50 px-2.5 py-2">
+                  <p class="text-[10px] font-semibold uppercase text-emerald-600">Target</p>
+                  <p class="text-sm font-bold tabular-nums text-emerald-700">{{ stock.targetPrice != null ? fmt(stock.targetPrice) : '—' }}</p>
+                </div>
+                <div class="rounded-lg bg-red-50 px-2.5 py-2">
+                  <p class="text-[10px] font-semibold uppercase text-red-500">SL</p>
+                  <p class="text-sm font-bold tabular-nums text-red-600">{{ stock.stopLoss != null ? fmt(stock.stopLoss) : '—' }}</p>
+                </div>
+              </div>
+
+              <div class="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                <span>{{ stock.quantity }} qty</span>
+                @if (upsidePct(stock); as pct) {
+                  <span [class]="pnlClass(pct)">Upside {{ fmtPct(pct) }}</span>
+                }
+                @if (estPnL(stock); as pnl) {
+                  <span [class]="pnlClass(pnl)">Est. P&L {{ fmt(pnl) }}</span>
+                }
+              </div>
+            </div>
+
+            <div class="flex shrink-0 flex-wrap gap-2 lg:flex-col lg:items-stretch">
+              <button type="button" class="btn-primary text-xs" [disabled]="busy()" (click)="createOpenTradePlan(stock)">
+                Add to open plan
+              </button>
+              <button type="button" class="btn-secondary text-xs" [disabled]="busy()" (click)="refreshCmp(stock)">
+                Refresh CMP
+              </button>
+              <a [routerLink]="['/stock', stock.symbol]" class="btn-secondary text-center text-xs">Market data</a>
+              <button type="button" class="btn-secondary text-xs" [disabled]="busy()" (click)="openEditForm(stock)">
+                Edit
+              </button>
+              <button type="button" class="btn-secondary text-xs text-red-600" [disabled]="busy()" (click)="removeStock(stock)">
+                Remove
+              </button>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  } @else {
+    <div class="card px-6 py-10 text-center">
+      <p class="text-base font-medium text-slate-700">No momentum stocks yet</p>
+      <p class="mt-1 text-sm text-slate-500">Add stocks you want to watch after strong financial results or guidance.</p>
+      <button type="button" class="btn-primary mt-4" (click)="openAddForm()">+ Add momentum stock</button>
+    </div>
+  }
+</div>
