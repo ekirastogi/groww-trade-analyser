@@ -118,10 +118,12 @@ if [[ -d "$ROOT/functions" ]]; then
     npm install
     npm run build
   )
-  (
+  if ! (
     cd "$ROOT"
     firebase deploy --only functions --project kairo-trade
-  )
+  ); then
+    printf '\n▸ Cloud Functions deploy failed. Hosting is live. Enable Blaze billing for kairo-trade, then run:\n  firebase deploy --only functions --project kairo-trade\n'
+  fi
 fi
 
 log "Done"

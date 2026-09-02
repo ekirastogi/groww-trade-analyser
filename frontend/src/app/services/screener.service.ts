@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Functions, httpsCallable } from '@angular/fire/functions';
+import { FirebaseError } from 'firebase/app';
 import { RegistryFinancialTable } from '../models/trading-journal.models';
 
 export interface ScreenerSnapshot {
@@ -48,7 +49,17 @@ export class ScreenerService {
       this.functions,
       'fetchScreenerStock'
     );
-    const result = await callable({ symbol });
-    return result.data;
+    try {
+      const result = await callable({ symbol });
+      return result.data;
+    } catch (err) {
+      const code = err instanceof FirebaseError ? err.code : '';
+      if (code === 'functions/not-found' || code === 'functions/unavailable' || code === 'functions/internal') {
+        throw new Error(
+          'Screener Cloud Function is not deployed. Upgrade Firebase project kairo-trade to the Blaze plan, then run firebase deploy --only functions.'
+        );
+      }
+      throw err instanceof Error ? err : new Error('Screener fetch failed');
+    }
   }
 }
