@@ -11,7 +11,7 @@
     --safe-area-left: env(safe-area-inset-left, 0px);
     --safe-area-right: env(safe-area-inset-right, 0px);
     --safe-area-top-effective: var(--safe-area-top);
-    --app-header-body-height: 2.75rem;
+    --app-header-body-height: 3.25rem;
     --app-shell-top-offset: calc(var(--safe-area-top-effective) + var(--app-header-body-height));
     --app-top-offset: var(--app-shell-top-offset);
     --mobile-tab-height: calc(3.625rem + var(--safe-area-bottom));
@@ -159,27 +159,36 @@
     top: var(--app-top-offset);
   }
 
-  .app-top-bar {
-    padding-top: var(--safe-area-top-effective);
-    padding-left: max(0.75rem, var(--safe-area-left));
-    padding-right: max(0.75rem, var(--safe-area-right));
-    min-height: var(--app-shell-top-offset);
+  .app-safe-area-top {
+    display: block;
+    width: 100%;
+    flex-shrink: 0;
+    height: var(--safe-area-top-effective);
+    min-height: var(--safe-area-top-effective);
+    pointer-events: none;
+  }
 
+  .app-top-bar {
     @media (max-width: 1023px) {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
-      z-index: 60;
+      z-index: 50;
+      background: rgba(255, 255, 255, 0.95);
     }
 
     @media (min-width: 1024px) {
       position: sticky;
       top: 0;
       z-index: 30;
-      min-height: auto;
-      padding-top: 0;
     }
+  }
+
+  .app-top-bar-inner {
+    min-height: var(--app-header-body-height);
+    padding-left: max(0.75rem, var(--safe-area-left));
+    padding-right: max(0.75rem, var(--safe-area-right));
 
     @media (min-width: 640px) {
       padding-left: max(1.25rem, var(--safe-area-left));
@@ -193,13 +202,36 @@
     }
   }
 
+  .app-content-column-menu-open {
+    @media (max-width: 1023px) {
+      padding-top: 0;
+    }
+  }
+
+  .app-main-content {
+    @media (max-width: 1023px) {
+      min-height: calc(100dvh - var(--app-shell-top-offset) - var(--mobile-tab-height));
+    }
+  }
+
   .app-sidebar {
-    padding-top: var(--safe-area-top-effective);
+    z-index: 40;
     padding-bottom: var(--safe-area-bottom);
     padding-left: var(--safe-area-left);
+
+    @media (min-width: 1024px) {
+      z-index: 50;
+      padding-top: 0;
+      padding-left: 0;
+    }
+  }
+
+  .app-sidebar-open {
+    z-index: 70;
   }
 
   .app-sidebar-backdrop {
+    z-index: 65;
     top: 0;
     right: 0;
     bottom: 0;

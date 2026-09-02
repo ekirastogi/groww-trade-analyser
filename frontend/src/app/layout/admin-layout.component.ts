@@ -164,6 +164,12 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     this.applySafeAreaInsets();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('orientationchange', this.onSafeAreaChange);
+      window.visualViewport?.addEventListener('resize', this.onSafeAreaChange);
+      requestAnimationFrame(() => this.applySafeAreaInsets());
+      setTimeout(() => this.applySafeAreaInsets(), 100);
+    }
     this.syncPageHeader();
     this.navSub = this.router.events
       .pipe(filter((event) => event instanceof NavigationEnd))
@@ -183,7 +189,15 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.navSub?.unsubscribe();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('orientationchange', this.onSafeAreaChange);
+      window.visualViewport?.removeEventListener('resize', this.onSafeAreaChange);
+    }
   }
+
+  private onSafeAreaChange = (): void => {
+    this.applySafeAreaInsets();
+  };
 
   private syncPageHeader(): void {
     let child = this.route.firstChild;
@@ -210,28 +224,33 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     const root = document.documentElement;
     const probe = document.createElement('div');
     probe.style.cssText =
-      'position:fixed;top:0;left:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;';
+      'position:fixed;top:0;left:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);visibility:hidden;pointer-events:none;';
     document.body.appendChild(probe);
     const computed = getComputedStyle(probe);
     const top = parseFloat(computed.paddingTop) || 0;
     const bottom = parseFloat(computed.paddingBottom) || 0;
+    const left = parseFloat(computed.paddingLeft) || 0;
+    const right = parseFloat(computed.paddingRight) || 0;
     probe.remove();
 
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isMobile = window.innerWidth < 1024;
-    const topFallback = isMobile && (isStandalone || top === 0) ? 52 : 0;
+    const topFallback = isMobile && isIOS ? 59 : isMobile ? 20 : 0;
     const effectiveTop = Math.max(top, topFallback);
 
     root.style.setProperty('--safe-area-top', `${top}px`);
     root.style.setProperty('--safe-area-bottom', `${bottom}px`);
+    root.style.setProperty('--safe-area-left', `${left}px`);
+    root.style.setProperty('--safe-area-right', `${right}px`);
     root.style.setProperty('--safe-area-top-effective', `${effectiveTop}px`);
     root.style.setProperty(
       '--app-shell-top-offset',
       `calc(${effectiveTop}px + var(--app-header-body-height))`
     );
     root.style.setProperty('--app-top-offset', `calc(${effectiveTop}px + var(--app-header-body-height))`);
+    root.classList.toggle('ios-mobile', isMobile && isIOS);
   }
 
   toggleSidebar(): void {
