@@ -174,7 +174,7 @@
                                   </div>
                                   <div class="shrink-0 text-right">
                                     <div class="text-xs text-slate-400">Net P&amp;L</div>
-                                    <div class="text-sm font-semibold" [class]="pnlClass(group.netPnL)">{{ formatCurrency(group.netPnL) }}</div>
+                                    <div class="text-sm font-semibold" [class]="pnlClass(groupNetPnL(group))">{{ formatCurrency(groupNetPnL(group)) }}</div>
                                   </div>
                                   <svg class="h-4 w-4 shrink-0 text-slate-400 transition" [class.rotate-180]="isStockExpanded(row.period, group.key)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                 </button>
