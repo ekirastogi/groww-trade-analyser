@@ -163,6 +163,7 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   ];
 
   async ngOnInit(): Promise<void> {
+    this.applySafeAreaInsets();
     this.syncPageHeader();
     this.navSub = this.router.events
       .pipe(filter((event) => event instanceof NavigationEnd))
@@ -201,6 +202,36 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
     if (mobile && !wasMobile) {
       this.sidebarOpen.set(false);
     }
+    this.applySafeAreaInsets();
+  }
+
+  private applySafeAreaInsets(): void {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const probe = document.createElement('div');
+    probe.style.cssText =
+      'position:fixed;top:0;left:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;';
+    document.body.appendChild(probe);
+    const computed = getComputedStyle(probe);
+    const top = parseFloat(computed.paddingTop) || 0;
+    const bottom = parseFloat(computed.paddingBottom) || 0;
+    probe.remove();
+
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    const isMobile = window.innerWidth < 1024;
+    const topFallback = isMobile && (isStandalone || top === 0) ? 52 : 0;
+    const effectiveTop = Math.max(top, topFallback);
+
+    root.style.setProperty('--safe-area-top', `${top}px`);
+    root.style.setProperty('--safe-area-bottom', `${bottom}px`);
+    root.style.setProperty('--safe-area-top-effective', `${effectiveTop}px`);
+    root.style.setProperty(
+      '--app-shell-top-offset',
+      `calc(${effectiveTop}px + var(--app-header-body-height))`
+    );
+    root.style.setProperty('--app-top-offset', `calc(${effectiveTop}px + var(--app-header-body-height))`);
   }
 
   toggleSidebar(): void {

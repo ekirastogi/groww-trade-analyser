@@ -27,6 +27,9 @@
             "inlineStyleLanguage": "scss",
             "assets": [
               "src/favicon.ico",
+              "src/apple-touch-icon.png",
+              "src/icon-192.png",
+              "src/icon-512.png",
               "src/assets",
               "src/manifest.webmanifest"
             ],
@@ -94,6 +97,9 @@
             "inlineStyleLanguage": "scss",
             "assets": [
               "src/favicon.ico",
+              "src/apple-touch-icon.png",
+              "src/icon-192.png",
+              "src/icon-512.png",
               "src/assets",
               "src/manifest.webmanifest"
             ],
