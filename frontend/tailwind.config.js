@@ -35,7 +35,11 @@ module.exports = {
         'kairo-mesh': 'radial-gradient(at 40% 20%, rgb(45 212 191 / 0.14) 0px, transparent 50%), radial-gradient(at 80% 0%, rgb(56 189 248 / 0.12) 0px, transparent 50%), radial-gradient(at 0% 50%, rgb(20 184 166 / 0.08) 0px, transparent 50%)',
       },
       padding: {
-        safe: 'env(safe-area-inset-bottom)',
+        safe: 'env(safe-area-inset-bottom, 0px)',
+        'safe-top': 'env(safe-area-inset-top, 0px)',
+        'safe-bottom': 'env(safe-area-inset-bottom, 0px)',
+        'safe-left': 'env(safe-area-inset-left, 0px)',
+        'safe-right': 'env(safe-area-inset-right, 0px)',
       },
     },
   },
