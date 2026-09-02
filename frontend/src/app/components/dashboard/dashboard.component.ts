@@ -117,7 +117,7 @@ export class DashboardComponent implements OnInit {
   readonly stockFilterColumns = STOCK_FILTER_COLUMNS;
   readonly exampleStockScenarios = EXAMPLE_STOCK_SCENARIOS;
 
-  readonly periodColumns = [
+  readonly periodColumns: { key: PeriodColumnKey; label: string }[] = [
     { key: 'period', label: 'Period' },
     { key: 'tradeCount', label: 'Trades' },
     { key: 'totalBuyValue', label: 'Buy Value' },
@@ -160,7 +160,7 @@ export class DashboardComponent implements OnInit {
   chargeRatio = computed(() => this.analysis()?.summary.chargeRatio ?? 0);
 
   visiblePeriodColumnList = computed(() =>
-    this.periodColumns.filter((col) => this.visiblePeriodColumns().has(col.key as PeriodColumnKey))
+    this.periodColumns.filter((col) => this.visiblePeriodColumns().has(col.key))
   );
 
   analysis = computed(() => this.state.analysis());

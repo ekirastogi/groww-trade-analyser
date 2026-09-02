@@ -9,6 +9,7 @@ export interface StockTradeGroup {
   totalBuyValue: number;
   totalSellValue: number;
   totalPnL: number;
+  netPnL: number;
   trades: Trade[];
 }
 
@@ -28,6 +29,7 @@ export function groupTradesByStock(trades: Trade[]): StockTradeGroup[] {
         totalBuyValue: 0,
         totalSellValue: 0,
         totalPnL: 0,
+        netPnL: 0,
         trades: [],
       };
       map.set(key, group);
@@ -37,6 +39,7 @@ export function groupTradesByStock(trades: Trade[]): StockTradeGroup[] {
     group.totalBuyValue += t.buyValue;
     group.totalSellValue += t.sellValue;
     group.totalPnL += t.realisedPnL;
+    group.netPnL += t.netPnL ?? t.realisedPnL - (t.allocatedCharges ?? 0);
     group.trades.push(t);
   }
 
