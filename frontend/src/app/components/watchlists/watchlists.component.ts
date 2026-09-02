@@ -77,6 +77,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
       .pipe(filter((event) => event instanceof NavigationEnd))
       .subscribe(() => this.syncWatchlistFromUrl());
     await this.state.ensureLoadedFromFirebase();
+    await this.state.ensureTradesLoaded();
   }
 
   ngOnDestroy(): void {
@@ -101,7 +102,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   readonly allSubtabId = ALL_SUBTAB_ID;
 
   activeTab = signal<WatchlistTab>('losing');
-  tierMode = signal<PnlTierMode>('cumulative');
+  tierMode = signal<PnlTierMode>('band');
   selectedAutoTierId = signal<string | null>(null);
   expandedStockKey = signal<string | null>(null);
   expandedDayKey = signal<string | null>(null);
@@ -350,7 +351,20 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   }
 
   tradesForStock(stock: StockSummary): Trade[] {
-    return this.lazyTrades.tradesForKey(this.lazyTrades.cacheKeyForStock(stock));
+    const cached = this.lazyTrades.tradesForKey(this.lazyTrades.cacheKeyForStock(stock));
+    if (cached.length) return cached;
+
+    const report = this.state.report();
+    const filtered = this.state.analysis()?.filteredTrades;
+    if (filtered?.length) {
+      return this.lazyTrades.filterTradesForStock(
+        filtered,
+        stock,
+        report,
+        this.state.analysisOptions()
+      );
+    }
+    return [];
   }
 
   isStockTradesLoading(stock: StockSummary): boolean {

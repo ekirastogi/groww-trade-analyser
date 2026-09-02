@@ -358,7 +358,20 @@ export class DashboardComponent implements OnInit {
   }
 
   tradesForStock(stock: StockSummary): Trade[] {
-    return this.lazyTrades.tradesForKey(this.lazyTrades.cacheKeyForStock(stock));
+    const cached = this.lazyTrades.tradesForKey(this.lazyTrades.cacheKeyForStock(stock));
+    if (cached.length) return cached;
+
+    const report = this.state.report();
+    const filtered = this.analysis()?.filteredTrades;
+    if (filtered?.length) {
+      return this.lazyTrades.filterTradesForStock(
+        filtered,
+        stock,
+        report,
+        this.state.analysisOptions()
+      );
+    }
+    return [];
   }
 
   isStockTradesLoading(stock: StockSummary): boolean {

@@ -6,6 +6,7 @@ import { normalizeSymbol } from '../utils/upload-merge.utils';
 import { sortTradesBySellDateDesc, storedTradeToTrade } from '../utils/trade.utils';
 import { tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
 import { effectiveAnalysisDateRange } from '../utils/filter-stock-profiles.utils';
+import { tradeDateKey } from '../utils/trade-date.utils';
 
 @Injectable({ providedIn: 'root' })
 export class LazyTradeLoaderService {
@@ -26,6 +27,19 @@ export class LazyTradeLoaderService {
       },
       { allowSignalWrites: true }
     );
+
+    let prevTradesLoaded = false;
+    effect(
+      () => {
+        const report = this.reportState.report();
+        const tradesLoaded = !!(report?.tradesLoaded && (report?.trades?.length ?? 0) > 0);
+        if (tradesLoaded && !prevTradesLoaded) {
+          this.clear();
+        }
+        prevTradesLoaded = tradesLoaded;
+      },
+      { allowSignalWrites: true }
+    );
   }
 
   tradesForKey(key: string): Trade[] {
@@ -36,16 +50,25 @@ export class LazyTradeLoaderService {
     return this.loadingKey() === key;
   }
 
-  stockKey(stock: StockSummary): string {
-    return stock.isin || stock.stockName;
+  stockSymbol(stock: StockSummary): string {
+    return (stock.symbol || normalizeSymbol(stock.stockName)).toUpperCase();
   }
 
   cacheKeyForStock(stock: StockSummary): string {
-    return `stock:${this.stockKey(stock)}:${this.filterKey()}`;
+    return `stock:${this.stockSymbol(stock)}:${this.filterKey()}`;
   }
 
   cacheKeyForPeriod(tab: 'daily' | 'weekly' | 'monthly', periodKey: string): string {
     return `period:${tab}:${periodKey}:${this.filterKey()}`;
+  }
+
+  filterTradesForStock(
+    trades: Trade[],
+    stock: StockSummary,
+    report: Report | null,
+    filters: AnalysisOptions
+  ): Trade[] {
+    return this.filterTrades(trades, stock, this.effectiveFilters(report, filters));
   }
 
   async loadForStock(
@@ -151,19 +174,29 @@ export class LazyTradeLoaderService {
     });
   }
 
+  private tradeSymbol(trade: Trade): string {
+    const stored = trade as StoredTrade;
+    if (stored.symbol) return stored.symbol.toUpperCase();
+    return normalizeSymbol(trade.stockName).toUpperCase();
+  }
+
+  private tradeMatchesStock(trade: Trade, stock: StockSummary): boolean {
+    return this.tradeSymbol(trade) === this.stockSymbol(stock);
+  }
+
   private filterTrades(trades: Trade[], stock: StockSummary, filters: AnalysisOptions): Trade[] {
-    const stockKey = this.stockKey(stock);
     return sortTradesBySellDateDesc(
-      this.filterTradesByOptions(trades, filters).filter(
-        (trade) => (trade.isin || trade.stockName) === stockKey
+      this.filterTradesByOptions(trades, filters).filter((trade) =>
+        this.tradeMatchesStock(trade, stock)
       )
     );
   }
 
   private filterTradesByOptions(trades: Trade[], filters: AnalysisOptions): Trade[] {
     return trades.filter((trade) => {
-      if (filters.startDate && trade.sellDate < filters.startDate) return false;
-      if (filters.endDate && trade.sellDate > filters.endDate) return false;
+      const sellDate = tradeDateKey(trade.sellDate);
+      if (filters.startDate && sellDate < filters.startDate) return false;
+      if (filters.endDate && sellDate > filters.endDate) return false;
       if (!tradeMatchesTypeFilter(trade, filters.tradeTypes)) return false;
       return true;
     });

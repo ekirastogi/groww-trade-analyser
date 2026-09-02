@@ -25,7 +25,7 @@ import {
   enrichTradeWithCharges,
   normalizeSymbol,
 } from '../utils/upload-merge.utils';
-import { expandTradeTypes, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
+import { expandTradeTypes, effectiveTradeType, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
 import { profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
 import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
 
@@ -981,9 +981,10 @@ export class TradeLedgerService {
       } else breakEvenTrades++;
       if (t.sellDate < first) first = t.sellDate;
       if (t.sellDate > last) last = t.sellDate;
-      const list = byType.get(t.tradeType) ?? [];
+      const effectiveType = effectiveTradeType(t);
+      const list = byType.get(effectiveType) ?? [];
       list.push(t);
-      byType.set(t.tradeType, list);
+      byType.set(effectiveType, list);
     }
 
     const tradeCount = trades.length;

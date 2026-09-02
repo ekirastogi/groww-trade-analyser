@@ -1,5 +1,6 @@
 import { Trade } from '../models/trade.models';
 import { formatDate } from './format.utils';
+import { tradeDateKey } from './trade-date.utils';
 
 export interface TradeDaySummary {
   date: string;
@@ -21,7 +22,7 @@ export function summariseTradesByDay(
 ): TradeDaySummary[] {
   const byDay = new Map<string, Trade[]>();
   for (const trade of trades) {
-    const date = trade.sellDate?.slice(0, 10) || 'unknown';
+    const date = tradeDateKey(trade.sellDate) || 'unknown';
     const list = byDay.get(date) ?? [];
     list.push(trade);
     byDay.set(date, list);

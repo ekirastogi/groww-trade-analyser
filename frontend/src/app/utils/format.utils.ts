@@ -30,7 +30,9 @@ export function pnlBadgeClass(value: number): string {
 
 export function formatDate(iso: string): string {
   if (!iso) return '';
-  const d = new Date(iso + 'T00:00:00');
+  const dateKey = iso.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? iso.slice(0, 10);
+  if (!dateKey) return '';
+  const d = new Date(dateKey + 'T00:00:00');
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 

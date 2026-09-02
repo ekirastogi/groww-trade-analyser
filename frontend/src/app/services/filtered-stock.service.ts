@@ -27,6 +27,11 @@ export class FilteredStockService {
     const opts = this.state.analysisOptions();
     if (!report) return [];
 
+    // When individual trades are in memory, use the same filtered aggregates as dashboard/analytics.
+    if (report.trades.length > 0) {
+      return this.state.analysis()?.stocks ?? [];
+    }
+
     const profiles = report.stockProfiles ?? [];
     const canUseProfiles =
       profiles.length > 0 &&

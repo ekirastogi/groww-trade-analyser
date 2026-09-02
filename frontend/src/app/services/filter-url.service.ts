@@ -42,18 +42,27 @@ export class FilterUrlService {
     const paramMap = this.router.routerState.snapshot.root.queryParamMap;
     const defaults = defaultTradeTypesForRoute(path);
     const report = this.state.report();
+    const isWatchlist = path.includes('/watchlists');
 
     const needsDefaultTypes = routeNeedsDefaultTypes(path, paramMap.has(FILTER_QUERY_KEYS.types));
+    const needsDefaultBands = isWatchlist && !paramMap.has(FILTER_QUERY_KEYS.bands);
 
-    if (needsDefaultTypes) {
-      if (report) {
+    if (needsDefaultTypes || needsDefaultBands) {
+      const patch: Record<string, string | null> = {};
+      if (needsDefaultTypes) {
+        patch[FILTER_QUERY_KEYS.types] = serializeTradeTypes(defaults);
+      }
+      if (needsDefaultBands) {
+        patch[FILTER_QUERY_KEYS.bands] = 'band';
+      }
+      if (needsDefaultTypes && report) {
         this.applyParsedFilters(
           readGlobalFilters(paramMap, defaults),
           report.dateRange.min,
           report.dateRange.max
         );
       }
-      this.replaceQuery({ [FILTER_QUERY_KEYS.types]: serializeTradeTypes(defaults) }, true);
+      this.replaceQuery(patch, true);
       return;
     }
 
