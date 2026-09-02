@@ -112,9 +112,9 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
 
   readonly tierStockColumns = [
     { key: 'stockName', label: 'Stock', align: 'left' as const, mobile: true },
-    { key: 'realisedPnL', label: 'P&L', align: 'right' as const, mobile: true },
+    { key: 'realisedPnL', label: 'P&L', align: 'right' as const, mobile: false },
     { key: 'allocatedCharges', label: 'Charges', align: 'right' as const, mobile: false },
-    { key: 'netPnL', label: 'Net P&L', align: 'right' as const, mobile: false },
+    { key: 'netPnL', label: 'Net P&L', align: 'right' as const, mobile: true },
   ];
 
   autoTierTabs = computed((): AutoTierTab[] => {

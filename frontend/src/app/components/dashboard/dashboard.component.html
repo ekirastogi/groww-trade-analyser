@@ -26,27 +26,31 @@
   }
 } @else {
   @if (analysis(); as data) {
-    <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
-      <span class="font-semibold text-slate-700">{{ state.report()!.summary.clientName }}</span>
-      <span class="text-slate-300">|</span>
-      <span><span class="text-slate-500">Net P&L</span> <span class="font-bold tabular-nums" [class]="pnlClass(data.summary.netPnL)">{{ formatCurrency(data.summary.netPnL) }}</span></span>
-      <span><span class="text-slate-500">P&L</span> <span class="font-semibold tabular-nums" [class]="pnlClass(data.summary.realisedPnL)">{{ formatCurrency(data.summary.realisedPnL) }}</span></span>
-      <span><span class="text-slate-500">Charges</span> <a routerLink="/charges" class="font-semibold tabular-nums text-red-600 hover:underline">{{ formatCurrency(data.summary.allocatedCharges) }}</a></span>
-      <span><span class="text-slate-500">Win</span> <span class="font-semibold tabular-nums">{{ data.summary.winRate | number:'1.0-0' }}%</span> <span class="text-slate-400">({{ data.summary.winningTrades }}W/{{ data.summary.losingTrades }}L)</span></span>
-      <span class="text-slate-400">{{ state.report()!.stockSummary.length }} stocks · {{ data.summary.tradeCount }} trades</span>
+    <div class="mb-2 grid gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs sm:flex sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
+      <span class="font-semibold text-slate-700 sm:shrink-0">{{ state.report()!.summary.clientName }}</span>
+      <span class="hidden text-slate-300 sm:inline">|</span>
+      <div class="grid grid-cols-2 gap-x-3 gap-y-1 sm:contents">
+        <span><span class="text-slate-500">Net P&L</span> <span class="font-bold tabular-nums" [class]="pnlClass(data.summary.netPnL)">{{ formatCurrency(data.summary.netPnL) }}</span></span>
+        <span><span class="text-slate-500">P&L</span> <span class="font-semibold tabular-nums" [class]="pnlClass(data.summary.realisedPnL)">{{ formatCurrency(data.summary.realisedPnL) }}</span></span>
+        <span><span class="text-slate-500">Charges</span> <a routerLink="/charges" class="font-semibold tabular-nums text-red-600 hover:underline">{{ formatCurrency(data.summary.allocatedCharges) }}</a></span>
+        <span><span class="text-slate-500">Win</span> <span class="font-semibold tabular-nums">{{ data.summary.winRate | number:'1.0-0' }}%</span> <span class="text-slate-400">({{ data.summary.winningTrades }}W/{{ data.summary.losingTrades }}L)</span></span>
+      </div>
+      <span class="col-span-full text-slate-400 sm:col-auto">{{ state.report()!.stockSummary.length }} stocks · {{ data.summary.tradeCount }} trades</span>
     </div>
 
-    <div class="mb-2 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+    <div class="mb-2 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 sm:flex-row sm:flex-wrap sm:items-end">
       <app-trade-type-filter [compact]="true" />
-      <label class="text-[10px] font-medium text-slate-500">
-        From
-        <input type="date" class="input-field mt-0.5 block py-1 text-xs" [ngModel]="state.startDate()" (ngModelChange)="onDateFilterChange('start', $event)" />
-      </label>
-      <label class="text-[10px] font-medium text-slate-500">
-        To
-        <input type="date" class="input-field mt-0.5 block py-1 text-xs" [ngModel]="state.endDate()" (ngModelChange)="onDateFilterChange('end', $event)" />
-      </label>
-      <button type="button" class="btn-ghost px-2 py-1 text-xs" (click)="resetDateFilters()">Reset dates</button>
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="text-[10px] font-medium text-slate-500">
+          From
+          <input type="date" class="input-field mt-0.5 block py-1 text-xs" [ngModel]="state.startDate()" (ngModelChange)="onDateFilterChange('start', $event)" />
+        </label>
+        <label class="text-[10px] font-medium text-slate-500">
+          To
+          <input type="date" class="input-field mt-0.5 block py-1 text-xs" [ngModel]="state.endDate()" (ngModelChange)="onDateFilterChange('end', $event)" />
+        </label>
+        <button type="button" class="btn-ghost px-2 py-1 text-xs" (click)="resetDateFilters()">Reset dates</button>
+      </div>
     </div>
 
     <div class="card overflow-hidden">
@@ -105,7 +109,7 @@
                 <tr>
                   <th class="w-10 text-center">#</th>
                   @for (col of visiblePeriodColumnList(); track col.key) {
-                    <th [class]="col.key === 'period' ? 'text-left w-auto' : 'text-right'">
+                    <th [class]="(col.key === 'period' ? 'text-left w-auto' : 'text-right') + ' ' + periodColumnResponsiveClass(col.key)">
                       <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key, $event)">
                         {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
                       </button>
@@ -123,7 +127,7 @@
                   >
                     <td class="text-center text-slate-400">{{ i + 1 }}</td>
                     @for (col of visiblePeriodColumnList(); track col.key) {
-                      <td [class]="periodCellClass(col.key, row)">
+                      <td [class]="periodCellClass(col.key, row) + ' ' + periodColumnResponsiveClass(col.key)">
                         @switch (col.key) {
                           @case ('period') { <span class="block truncate font-semibold text-slate-900" [title]="row.label">{{ row.label }}</span> }
                           @case ('tradeCount') { {{ row.tradeCount }} }
@@ -168,9 +172,9 @@
                                     <div class="truncate text-sm font-semibold text-slate-900">{{ group.stockName }}</div>
                                     <div class="text-xs text-slate-400">{{ group.tradeCount }} trades · Qty {{ group.totalQuantity | number }}</div>
                                   </div>
-                                  <div class="hidden shrink-0 text-right sm:block">
-                                    <div class="text-xs text-slate-400">P&amp;L</div>
-                                    <div class="text-sm font-semibold" [class]="pnlClass(group.totalPnL)">{{ formatCurrency(group.totalPnL) }}</div>
+                                  <div class="shrink-0 text-right">
+                                    <div class="text-xs text-slate-400">Net P&amp;L</div>
+                                    <div class="text-sm font-semibold" [class]="pnlClass(group.netPnL ?? group.totalPnL)">{{ formatCurrency(group.netPnL ?? group.totalPnL) }}</div>
                                   </div>
                                   <svg class="h-4 w-4 shrink-0 text-slate-400 transition" [class.rotate-180]="isStockExpanded(row.period, group.key)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                 </button>
@@ -239,8 +243,8 @@
 
         @if (activeTab() === 'stocks') {
           <div class="space-y-2 border-b border-slate-100 px-3 py-2 sm:px-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="relative min-w-[12rem] flex-1 max-w-xs">
+            <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <div class="relative min-w-0 flex-1 sm:max-w-xs">
               <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
               </svg>
@@ -281,12 +285,12 @@
                 <svg class="h-3.5 w-3.5 transition" [class.rotate-180]="stockScenarioPanelOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
               </button>
 
-              <span class="text-xs text-slate-500">
+              <span class="text-xs text-slate-500 sm:shrink-0">
                 Showing {{ stockScenarioStats().shown }} of {{ stockScenarioStats().total }} stocks
               </span>
 
-              <div class="ml-auto flex flex-wrap items-center gap-2">
-                <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Sort</span>
+              <div class="flex flex-wrap items-center gap-2 sm:ml-auto">
+                <span class="hidden text-xs font-semibold uppercase tracking-wide text-slate-500 sm:inline">Sort</span>
                 <select
                   class="input-field w-auto min-w-[120px] py-1.5 text-xs"
                   [ngModel]="sortColumn()"
@@ -441,7 +445,7 @@
                 <tr>
                   <th class="w-10 text-center">#</th>
                   @for (col of visibleStockColumnList(); track col.key) {
-                    <th [class]="col.key === 'stockName' ? 'text-left w-auto' : 'text-right'">
+                    <th [class]="(col.key === 'stockName' ? 'text-left w-auto' : 'text-right') + ' ' + stockColumnResponsiveClass(col.key)">
                       <button type="button" class="sort-btn" [class.sort-btn-active]="isSortedColumn(col.key)" (click)="toggleSort(col.key)">
                         {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
                       </button>
@@ -459,7 +463,7 @@
                   >
                     <td class="text-center text-slate-400">{{ i + 1 }}</td>
                     @for (col of visibleStockColumnList(); track col.key) {
-                      <td [class]="col.key === 'stockName' ? 'col-name' : stockColumnCellClass(col.key, stock)">
+                      <td [class]="(col.key === 'stockName' ? 'col-name' : stockColumnCellClass(col.key, stock)) + ' ' + stockColumnResponsiveClass(col.key)">
                         @switch (col.key) {
                           @case ('stockName') {
                             <span class="block truncate font-semibold text-slate-900" [title]="stock.stockName">{{ stock.stockName }}</span>
@@ -569,7 +573,7 @@
                   <tr class="bg-slate-50">
                     <td class="text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Total</td>
                     @for (col of visibleStockColumnList(); track col.key) {
-                      <td [class]="col.key === 'stockName' ? 'col-name font-semibold text-slate-900' : stockTotalsCellClass(col.key, totals)">
+                      <td [class]="(col.key === 'stockName' ? 'col-name font-semibold text-slate-900' : stockTotalsCellClass(col.key, totals)) + ' ' + stockColumnResponsiveClass(col.key)">
                         @switch (col.key) {
                           @case ('stockName') {
                             {{ totals.stockCount }} {{ totals.stockCount === 1 ? 'stock' : 'stocks' }}

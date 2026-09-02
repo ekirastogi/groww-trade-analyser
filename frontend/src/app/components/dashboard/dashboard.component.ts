@@ -563,6 +563,18 @@ export class DashboardComponent implements OnInit {
     });
   }
 
+  stockColumnResponsiveClass(key: StockColumnKey): string {
+    if (key === 'stockName' || key === 'netPnL') return '';
+    if (key === 'tradeCount' || key === 'realisedPnL') return 'hidden sm:table-cell';
+    return 'hidden lg:table-cell';
+  }
+
+  periodColumnResponsiveClass(key: PeriodColumnKey): string {
+    if (key === 'period' || key === 'netPnL') return '';
+    if (key === 'tradeCount' || key === 'realisedPnL' || key === 'winRate') return 'hidden sm:table-cell';
+    return 'hidden md:table-cell';
+  }
+
   stockColumnCellClass(key: StockColumnKey, stock: StockSummary): string {
     const base = 'text-right tabular-nums';
     switch (key) {
