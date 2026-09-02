@@ -21,7 +21,7 @@ import {
   formatPct,
   pnlClass,
 } from '../../utils/format.utils';
-import { groupTradesByStock } from '../../utils/trade.utils';
+import { groupTradesByStock, StockTradeGroup } from '../../utils/trade.utils';
 import {
   StockFilterColumn,
   StockFilterRule,
@@ -367,6 +367,10 @@ export class DashboardComponent implements OnInit {
 
   tradeNetPnL(trade: Trade): number {
     return trade.netPnL ?? trade.realisedPnL - this.tradeAllocatedCharge(trade);
+  }
+
+  groupNetPnL(group: StockTradeGroup): number {
+    return group.trades.reduce((sum, trade) => sum + this.tradeNetPnL(trade), 0);
   }
 
   tradeRealisedPnLPct(trade: Trade): number {

@@ -1,0 +1,24 @@
+{
+  "name": "Kairo — Right moment",
+  "short_name": "Kairo",
+  "description": "Personal trading workstation for signals, analytics, and portfolio intelligence.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0c1222",
+  "theme_color": "#0c1222",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/brand/kairo-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

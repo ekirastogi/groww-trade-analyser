@@ -213,7 +213,7 @@
             {{ carryForwardBusy() ? 'Copying…' : label }}
           </button>
         }
-        <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="btn-primary text-sm">
+        <a routerLink="/trade-plans/new" [fragment]="planDateFragment()" class="btn-primary text-sm">
           + Add plan
         </a>
       </div>
@@ -444,7 +444,7 @@
       <p class="text-base font-medium text-slate-700">No trades planned for this session</p>
       <p class="mt-1 text-sm text-slate-500">Add your first setup for {{ dateHeading() }}.</p>
       @if (canAddPlan()) {
-        <a routerLink="/trade-plans/new" [queryParams]="{ date: tradeDate() }" class="btn-primary mt-4 inline-flex">
+        <a routerLink="/trade-plans/new" [fragment]="planDateFragment()" class="btn-primary mt-4 inline-flex">
           + Add trade plan
         </a>
       }

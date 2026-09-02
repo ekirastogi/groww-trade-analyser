@@ -1,7 +1,7 @@
-import { Component, computed, effect, HostListener, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, HostListener, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, of, switchMap } from 'rxjs';
 import { OPEN_TRADES_PAGE_SIZE, TradePlanService } from '../../services/trade-plan.service';
@@ -18,6 +18,10 @@ import {
   todayIso,
   upcomingPlanDates,
 } from '../../utils/trade-plan-date.utils';
+import {
+  parseTradePlanHash,
+  replaceTradePlanHash,
+} from '../../utils/trade-plan-hash.utils';
 
 type SortKey = 'symbol' | 'estimatedPnL' | 'realizedPnL';
 
@@ -124,11 +128,10 @@ interface PriceLevel {
     }
   `,
 })
-export class TradePlansComponent implements OnInit {
+export class TradePlansComponent implements OnInit, OnDestroy {
   private planSvc = inject(TradePlanService);
   private registrySvc = inject(RegistryStockService);
   private route = inject(ActivatedRoute);
-  private router = inject(Router);
 
   tradeDate = signal(normalizePlanViewDate(todayIso()));
   calendarOpen = signal(false);
@@ -149,6 +152,7 @@ export class TradePlansComponent implements OnInit {
   assignTargetDate = signal('');
   assignError = signal<string | null>(null);
   assignBusy = signal(false);
+  private hashChangeHandler = () => this.applyFromHash(false);
 
   upcomingTabs = computed(() =>
     upcomingPlanDates().map((iso) => ({ iso, label: planDateTabLabel(iso) }))
@@ -193,6 +197,8 @@ export class TradePlansComponent implements OnInit {
     const to = Math.min(total, (page + 1) * OPEN_TRADES_PAGE_SIZE);
     return `${from}–${to} of ${total}`;
   });
+
+  planDateFragment = computed(() => `date=${this.tradeDate()}`);
 
   registry = toSignal(this.registrySvc.watchAll(), { initialValue: [] });
 
@@ -289,27 +295,40 @@ export class TradePlansComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    const view = this.route.snapshot.queryParamMap.get('view');
-    if (view === 'open') {
-      this.selectOpenTab(false);
+    this.applyFromHash(false);
+    window.addEventListener('hashchange', this.hashChangeHandler);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('hashchange', this.hashChangeHandler);
+  }
+
+  private applyFromHash(syncHash = false): void {
+    const legacyView = this.route.snapshot.queryParamMap.get('view');
+    const legacyDate = this.route.snapshot.queryParamMap.get('date');
+    const parsed = parseTradePlanHash(window.location.hash);
+
+    if (legacyView === 'open' || parsed.view === 'open') {
+      this.viewMode.set('open');
+      this.calendarOpen.set(false);
+      this.openPage.set(0);
+      if (syncHash || legacyView === 'open') replaceTradePlanHash('open');
       return;
     }
-    const date = this.route.snapshot.queryParamMap.get('date');
-    if (date) this.setTradeDate(normalizePlanViewDate(date), false);
+
+    this.viewMode.set('date');
+    const date = legacyDate || parsed.date;
+    if (date) {
+      this.tradeDate.set(normalizePlanViewDate(date));
+      if (syncHash || legacyDate) replaceTradePlanHash('date', this.tradeDate());
+    }
   }
 
   selectOpenTab(syncRoute = true): void {
     this.viewMode.set('open');
     this.calendarOpen.set(false);
     this.openPage.set(0);
-    if (syncRoute) {
-      void this.router.navigate([], {
-        relativeTo: this.route,
-        queryParams: { view: 'open', date: null },
-        queryParamsHandling: 'merge',
-        replaceUrl: true,
-      });
-    }
+    if (syncRoute) replaceTradePlanHash('open');
   }
 
   selectTab(iso: string): void {
@@ -383,14 +402,7 @@ export class TradePlansComponent implements OnInit {
   private setTradeDate(iso: string, syncRoute = true): void {
     this.viewMode.set('date');
     this.tradeDate.set(iso);
-    if (syncRoute) {
-      void this.router.navigate([], {
-        relativeTo: this.route,
-        queryParams: { date: iso, view: null },
-        queryParamsHandling: 'merge',
-        replaceUrl: true,
-      });
-    }
+    if (syncRoute) replaceTradePlanHash('date', iso);
   }
 
   setOpenPage(page: number): void {

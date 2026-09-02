@@ -1,6 +1,6 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <a routerLink="/trade-plans" [queryParams]="{ date: tradeDate() }" class="text-sm text-kairo-600 hover:underline">← Back to plan</a>
+    <a routerLink="/trade-plans" [fragment]="'date=' + tradeDate()" class="text-sm text-kairo-600 hover:underline">← Back to plan</a>
     <h2 class="text-lg font-semibold text-slate-900">{{ isEditing() ? 'Edit trade plan' : 'Add trade plan' }}</h2>
   </div>
 
@@ -206,7 +206,7 @@
         <button type="button" class="btn-primary" [disabled]="busy()" (click)="save()">
           {{ isEditing() ? (busy() ? 'Saving…' : 'Save changes') : 'Add to plan' }}
         </button>
-        <a routerLink="/trade-plans" [queryParams]="{ date: tradeDate() }" class="btn-secondary">Cancel</a>
+        <a routerLink="/trade-plans" [fragment]="'date=' + tradeDate()" class="btn-secondary">Cancel</a>
       </div>
     </div>
   }

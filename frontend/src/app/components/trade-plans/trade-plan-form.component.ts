@@ -15,6 +15,7 @@ import {
   todayIso,
   upcomingPlanDates,
 } from '../../utils/trade-plan-date.utils';
+import { parseTradePlanHash } from '../../utils/trade-plan-hash.utils';
 
 interface EntryLegRow {
   price: string;
@@ -204,7 +205,10 @@ export class TradePlanFormComponent implements OnInit {
       await this.loadForEdit(editId);
       return;
     }
-    const date = clampToUpcomingPlanDate(this.route.snapshot.queryParamMap.get('date'));
+    const hashDate = parseTradePlanHash(window.location.hash).date;
+    const date = clampToUpcomingPlanDate(
+      hashDate || this.route.snapshot.queryParamMap.get('date')
+    );
     this.tradeDate.set(date);
     const symbol = this.route.snapshot.queryParamMap.get('symbol');
     if (symbol) await this.pickSymbol(symbol);
@@ -398,7 +402,7 @@ export class TradePlanFormComponent implements OnInit {
       } else {
         await this.planSvc.create({ ...payload, source: 'manual' });
       }
-      await this.router.navigate(['/trade-plans'], { queryParams: { date: this.tradeDate() } });
+      await this.router.navigate(['/trade-plans'], { fragment: `date=${this.tradeDate()}` });
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : editId ? 'Failed to update trade' : 'Failed to add trade');
     } finally {
