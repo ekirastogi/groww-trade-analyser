@@ -111,19 +111,4 @@ log "Deploying frontend to Firebase"
   npm run deploy
 )
 
-if [[ -d "$ROOT/functions" ]]; then
-  log "Deploying Cloud Functions"
-  (
-    cd "$ROOT/functions"
-    npm install
-    npm run build
-  )
-  if ! (
-    cd "$ROOT"
-    firebase deploy --only functions --project kairo-trade
-  ); then
-    printf '\n▸ Cloud Functions deploy failed. Hosting is live. Enable Blaze billing for kairo-trade, then run:\n  firebase deploy --only functions --project kairo-trade\n'
-  fi
-fi
-
 log "Done"

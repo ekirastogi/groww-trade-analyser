@@ -1,8 +1,3 @@
-export interface RegistryFinancialTable {
-  headers: string[];
-  rows: Array<{ label: string; values: string[] }>;
-}
-
 export interface RegistryStock {
   symbol: string;
   name: string;
@@ -21,35 +16,6 @@ export interface RegistryStock {
   supports: number[];
   resistances: number[];
   notes?: string;
-  bookValue?: number;
-  dividendYield?: number;
-  roce?: number;
-  roe?: number;
-  faceValue?: number;
-  highLow?: string;
-  salesGrowth3y?: number;
-  salesGrowth5y?: number;
-  salesGrowth10y?: number;
-  salesGrowthTtm?: number;
-  profitGrowth3y?: number;
-  profitGrowth5y?: number;
-  profitGrowth10y?: number;
-  profitGrowthTtm?: number;
-  stockCagr1y?: number;
-  stockCagr3y?: number;
-  stockCagr5y?: number;
-  stockCagr10y?: number;
-  promoterHolding?: number;
-  fiiHolding?: number;
-  diiHolding?: number;
-  publicHolding?: number;
-  governmentHolding?: number;
-  otherHolding?: number;
-  quarterlyResults?: RegistryFinancialTable;
-  profitLoss?: RegistryFinancialTable;
-  shareholding?: RegistryFinancialTable;
-  screenerUrl?: string;
-  screenerFetchedAt?: number;
   updatedAt: number;
 }
 

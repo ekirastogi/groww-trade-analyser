@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RegistryStockService } from '../../services/registry-stock.service';
 import { WorkerJobService } from '../../services/worker-job.service';
-import { ScreenerService, ScreenerSnapshot } from '../../services/screener.service';
 import { RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency } from '../../utils/format.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
@@ -14,12 +13,7 @@ type RegistryColumnKey =
   | 'currentPrice'
   | 'marketCap'
   | 'pe'
-  | 'salesGrowth3y'
-  | 'profitGrowth3y'
-  | 'stockCagr3y'
-  | 'promoterHolding'
-  | 'fiiHolding'
-  | 'screenerFetchedAt'
+  | 'rsi'
   | 'updatedAt';
 
 @Component({
@@ -31,7 +25,6 @@ type RegistryColumnKey =
 export class StockRegistryComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
   private workerJobs = inject(WorkerJobService);
-  private screener = inject(ScreenerService);
 
   stocks = signal<RegistryStock[]>([]);
   stockCount = signal(0);
@@ -49,22 +42,15 @@ export class StockRegistryComponent implements OnInit {
   success = signal<string | null>(null);
   busy = signal(false);
   seedBusy = signal(false);
-  fetchingSymbol = signal<string | null>(null);
-  expandedSymbol = signal<string | null>(null);
   symbolQuery = signal('');
 
   readonly columns: { key: RegistryColumnKey; label: string; align?: 'left' | 'right' }[] = [
     { key: 'symbol', label: 'Symbol' },
     { key: 'name', label: 'Name' },
     { key: 'currentPrice', label: 'Price', align: 'right' },
-    { key: 'marketCap', label: 'Mkt cap (Cr)', align: 'right' },
+    { key: 'marketCap', label: 'Mkt cap', align: 'right' },
     { key: 'pe', label: 'P/E', align: 'right' },
-    { key: 'salesGrowth3y', label: 'Sales 3Y', align: 'right' },
-    { key: 'profitGrowth3y', label: 'Profit 3Y', align: 'right' },
-    { key: 'stockCagr3y', label: 'CAGR 3Y', align: 'right' },
-    { key: 'promoterHolding', label: 'Promoter %', align: 'right' },
-    { key: 'fiiHolding', label: 'FII %', align: 'right' },
-    { key: 'screenerFetchedAt', label: 'Screener fetched', align: 'right' },
+    { key: 'rsi', label: 'RSI', align: 'right' },
     { key: 'updatedAt', label: 'Updated', align: 'right' },
   ];
 
@@ -158,6 +144,7 @@ export class StockRegistryComponent implements OnInit {
 
       this.stocks.set(finalStocks);
       this.stockCount.set(finalCount);
+      this.currentPage.set(1);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
     } finally {
@@ -211,18 +198,8 @@ export class StockRegistryComponent implements OnInit {
         return stock.marketCap ?? 0;
       case 'pe':
         return stock.pe ?? 0;
-      case 'salesGrowth3y':
-        return stock.salesGrowth3y ?? 0;
-      case 'profitGrowth3y':
-        return stock.profitGrowth3y ?? 0;
-      case 'stockCagr3y':
-        return stock.stockCagr3y ?? 0;
-      case 'promoterHolding':
-        return stock.promoterHolding ?? 0;
-      case 'fiiHolding':
-        return stock.fiiHolding ?? 0;
-      case 'screenerFetchedAt':
-        return stock.screenerFetchedAt ?? 0;
+      case 'rsi':
+        return stock.rsi ?? 0;
       case 'updatedAt':
         return stock.updatedAt ?? 0;
       default:
@@ -232,89 +209,11 @@ export class StockRegistryComponent implements OnInit {
 
   formatUpdated(ts: number | undefined): string {
     if (!ts) return '—';
-    return new Date(ts).toLocaleString('en-IN', {
+    return new Date(ts).toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
     });
-  }
-
-  formatPct(value: number | undefined): string {
-    if (value == null || Number.isNaN(value)) return '—';
-    return `${value}%`;
-  }
-
-  toggleDetails(symbol: string): void {
-    this.expandedSymbol.set(this.expandedSymbol() === symbol ? null : symbol);
-  }
-
-  private applyScreener(stock: RegistryStock, data: ScreenerSnapshot): RegistryStock {
-    return {
-      ...stock,
-      name: data.name || stock.name,
-      currentPrice: data.currentPrice ?? stock.currentPrice,
-      marketCap: data.marketCap ?? stock.marketCap,
-      pe: data.pe ?? stock.pe,
-      bookValue: data.bookValue,
-      dividendYield: data.dividendYield,
-      roce: data.roce,
-      roe: data.roe,
-      faceValue: data.faceValue,
-      highLow: data.highLow,
-      salesGrowth3y: data.salesGrowth3y,
-      salesGrowth5y: data.salesGrowth5y,
-      salesGrowth10y: data.salesGrowth10y,
-      salesGrowthTtm: data.salesGrowthTtm,
-      profitGrowth3y: data.profitGrowth3y,
-      profitGrowth5y: data.profitGrowth5y,
-      profitGrowth10y: data.profitGrowth10y,
-      profitGrowthTtm: data.profitGrowthTtm,
-      stockCagr1y: data.stockCagr1y,
-      stockCagr3y: data.stockCagr3y,
-      stockCagr5y: data.stockCagr5y,
-      stockCagr10y: data.stockCagr10y,
-      promoterHolding: data.promoterHolding,
-      fiiHolding: data.fiiHolding,
-      diiHolding: data.diiHolding,
-      publicHolding: data.publicHolding,
-      governmentHolding: data.governmentHolding,
-      otherHolding: data.otherHolding,
-      quarterlyResults: data.quarterlyResults,
-      profitLoss: data.profitLoss,
-      shareholding: data.shareholding,
-      screenerUrl: data.url,
-      screenerFetchedAt: data.fetchedAt,
-    };
-  }
-
-  async fetchScreenerForEdit(): Promise<void> {
-    const symbol = this.editingSymbol();
-    if (!symbol) return;
-    const stock = this.stocks().find((s) => s.symbol === symbol);
-    if (!stock) {
-      this.error.set('Save the stock first, then fetch Screener data.');
-      return;
-    }
-    await this.fetchScreener(stock);
-  }
-
-  async fetchScreener(stock: RegistryStock): Promise<void> {
-    this.error.set(null);
-    this.success.set(null);
-    this.fetchingSymbol.set(stock.symbol);
-    try {
-      const data = await this.screener.fetchStock(stock.symbol);
-      await this.registrySvc.save(this.applyScreener(stock, data));
-      this.success.set(`Fetched Screener data for ${stock.symbol}.`);
-      this.expandedSymbol.set(stock.symbol);
-      await this.reload();
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Screener fetch failed');
-    } finally {
-      this.fetchingSymbol.set(null);
-    }
   }
 
   resetForm(): void {

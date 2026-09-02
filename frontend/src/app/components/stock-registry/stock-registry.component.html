@@ -10,8 +10,7 @@
     <div>
       <p class="text-sm font-medium text-slate-900">{{ stockCount() }} stocks in your registry</p>
       <p class="mt-0.5 text-xs text-slate-500">
-        Your personal stock book. Use <strong>Fetch Screener</strong> on a row for fundamentals, growth, and shareholding from
-        <a class="underline" href="https://www.screener.in/" target="_blank" rel="noopener">screener.in</a>.
+        Your personal stock book. NSE/BSE import adds names only — use <strong>Refresh market data</strong> after worker ingest for CMP, market cap, and indicators.
       </p>
     </div>
     <div class="flex flex-wrap gap-2">
@@ -130,17 +129,7 @@
         <button type="button" class="btn-primary" [disabled]="busy()" (click)="save()">
           {{ editingSymbol() ? 'Update' : 'Add stock' }}
         </button>
-          <button type="button" class="btn-secondary" [disabled]="busy()" (click)="closeAddForm()">Cancel</button>
-          @if (editingSymbol()) {
-            <button
-              type="button"
-              class="btn-secondary"
-              [disabled]="!!fetchingSymbol()"
-              (click)="fetchScreenerForEdit()"
-            >
-              {{ fetchingSymbol() === editingSymbol() ? 'Fetching Screener…' : 'Fetch Screener' }}
-            </button>
-          }
+        <button type="button" class="btn-secondary" (click)="closeAddForm()">Cancel</button>
       </div>
     </div>
   }
@@ -176,7 +165,7 @@
       <div class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">No stocks match your search.</div>
     } @else {
       <div class="overflow-x-auto">
-        <table class="stock-table min-w-[1400px]">
+        <table class="stock-table min-w-[900px]">
           <thead>
             <tr>
               <th class="w-10 text-center">#</th>
@@ -206,139 +195,15 @@
                 <td class="text-right tabular-nums">{{ formatPrice(s.currentPrice) }}</td>
                 <td class="text-right tabular-nums text-slate-600">{{ s.marketCap ?? '—' }}</td>
                 <td class="text-right tabular-nums">{{ s.pe ?? '—' }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.salesGrowth3y) }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.profitGrowth3y) }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.stockCagr3y) }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.promoterHolding) }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.fiiHolding) }}</td>
-                <td class="text-right text-xs text-slate-500">{{ formatUpdated(s.screenerFetchedAt) }}</td>
+                <td class="text-right tabular-nums">{{ s.rsi ?? '—' }}</td>
                 <td class="text-right text-xs text-slate-500">{{ formatUpdated(s.updatedAt) }}</td>
                 <td class="text-xs text-emerald-700">{{ s.supports.join(', ') || '—' }}</td>
                 <td class="text-xs text-red-600">{{ s.resistances.join(', ') || '—' }}</td>
                 <td class="whitespace-nowrap">
-                  <button
-                    type="button"
-                    class="text-xs text-kairo-600 hover:underline"
-                    [disabled]="fetchingSymbol() === s.symbol"
-                    (click)="fetchScreener(s)"
-                  >
-                    {{ fetchingSymbol() === s.symbol ? 'Fetching…' : 'Fetch Screener' }}
-                  </button>
-                  <button type="button" class="ml-2 text-xs text-slate-600 hover:underline" (click)="toggleDetails(s.symbol)">
-                    {{ expandedSymbol() === s.symbol ? 'Hide' : 'Details' }}
-                  </button>
-                  <button type="button" class="ml-2 text-xs text-kairo-600 hover:underline" (click)="edit(s)">Edit</button>
+                  <button type="button" class="text-xs text-kairo-600 hover:underline" (click)="edit(s)">Edit</button>
                   <button type="button" class="ml-2 text-xs text-red-500 hover:underline" (click)="remove(s.symbol)">Delete</button>
                 </td>
               </tr>
-              @if (expandedSymbol() === s.symbol) {
-                <tr>
-                  <td [attr.colspan]="columns.length + 4" class="bg-slate-50 px-4 py-4">
-                    <div class="grid gap-4 lg:grid-cols-3">
-                      <div>
-                        <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Fundamentals</p>
-                        <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                          <dt class="text-slate-500">High / Low</dt>
-                          <dd>{{ s.highLow || '—' }}</dd>
-                          <dt class="text-slate-500">Book value</dt>
-                          <dd>{{ s.bookValue ?? '—' }}</dd>
-                          <dt class="text-slate-500">Div yield</dt>
-                          <dd>{{ formatPct(s.dividendYield) }}</dd>
-                          <dt class="text-slate-500">ROCE</dt>
-                          <dd>{{ formatPct(s.roce) }}</dd>
-                          <dt class="text-slate-500">ROE</dt>
-                          <dd>{{ formatPct(s.roe) }}</dd>
-                          <dt class="text-slate-500">Face value</dt>
-                          <dd>{{ s.faceValue ?? '—' }}</dd>
-                          <dt class="text-slate-500">Last fetched</dt>
-                          <dd>{{ formatUpdated(s.screenerFetchedAt) }}</dd>
-                        </dl>
-                        @if (s.screenerUrl) {
-                          <a class="mt-2 inline-block text-xs text-kairo-600 underline" [href]="s.screenerUrl" target="_blank" rel="noopener">Open on Screener</a>
-                        }
-                      </div>
-                      <div>
-                        <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Compound growth</p>
-                        <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                          <dt class="text-slate-500">Sales 10Y / 5Y / 3Y / TTM</dt>
-                          <dd>{{ formatPct(s.salesGrowth10y) }} / {{ formatPct(s.salesGrowth5y) }} / {{ formatPct(s.salesGrowth3y) }} / {{ formatPct(s.salesGrowthTtm) }}</dd>
-                          <dt class="text-slate-500">Profit 10Y / 5Y / 3Y / TTM</dt>
-                          <dd>{{ formatPct(s.profitGrowth10y) }} / {{ formatPct(s.profitGrowth5y) }} / {{ formatPct(s.profitGrowth3y) }} / {{ formatPct(s.profitGrowthTtm) }}</dd>
-                          <dt class="text-slate-500">Stock CAGR 10Y / 5Y / 3Y / 1Y</dt>
-                          <dd>{{ formatPct(s.stockCagr10y) }} / {{ formatPct(s.stockCagr5y) }} / {{ formatPct(s.stockCagr3y) }} / {{ formatPct(s.stockCagr1y) }}</dd>
-                        </dl>
-                      </div>
-                      <div>
-                        <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Shareholding (latest)</p>
-                        <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                          <dt class="text-slate-500">Promoters</dt>
-                          <dd>{{ formatPct(s.promoterHolding) }}</dd>
-                          <dt class="text-slate-500">FIIs</dt>
-                          <dd>{{ formatPct(s.fiiHolding) }}</dd>
-                          <dt class="text-slate-500">DIIs</dt>
-                          <dd>{{ formatPct(s.diiHolding) }}</dd>
-                          <dt class="text-slate-500">Public</dt>
-                          <dd>{{ formatPct(s.publicHolding) }}</dd>
-                          <dt class="text-slate-500">Government</dt>
-                          <dd>{{ formatPct(s.governmentHolding) }}</dd>
-                          <dt class="text-slate-500">Others</dt>
-                          <dd>{{ formatPct(s.otherHolding) }}</dd>
-                        </dl>
-                      </div>
-                    </div>
-                    @if (s.profitLoss?.rows?.length) {
-                      <p class="mb-1 mt-4 text-xs font-semibold uppercase text-slate-500">Profit &amp; loss (annual)</p>
-                      <div class="overflow-x-auto">
-                        <table class="min-w-full text-xs">
-                          <thead>
-                            <tr>
-                              <th class="px-1 py-1 text-left">Item</th>
-                              @for (h of s.profitLoss!.headers.slice(-6); track h) {
-                                <th class="px-1 py-1 text-right">{{ h }}</th>
-                              }
-                            </tr>
-                          </thead>
-                          <tbody>
-                            @for (row of s.profitLoss!.rows.slice(0, 8); track row.label) {
-                              <tr>
-                                <td class="px-1 py-1">{{ row.label }}</td>
-                                @for (v of row.values.slice(-6); track $index) {
-                                  <td class="px-1 py-1 text-right tabular-nums">{{ v }}</td>
-                                }
-                              </tr>
-                            }
-                          </tbody>
-                        </table>
-                      </div>
-                    }
-                    @if (s.quarterlyResults?.rows?.length) {
-                      <p class="mb-1 mt-4 text-xs font-semibold uppercase text-slate-500">Quarterly results</p>
-                      <div class="overflow-x-auto">
-                        <table class="min-w-full text-xs">
-                          <thead>
-                            <tr>
-                              <th class="px-1 py-1 text-left">Item</th>
-                              @for (h of s.quarterlyResults!.headers.slice(-6); track h) {
-                                <th class="px-1 py-1 text-right">{{ h }}</th>
-                              }
-                            </tr>
-                          </thead>
-                          <tbody>
-                            @for (row of s.quarterlyResults!.rows.slice(0, 8); track row.label) {
-                              <tr>
-                                <td class="px-1 py-1">{{ row.label }}</td>
-                                @for (v of row.values.slice(-6); track $index) {
-                                  <td class="px-1 py-1 text-right tabular-nums">{{ v }}</td>
-                                }
-                              </tr>
-                            }
-                          </tbody>
-                        </table>
-                      </div>
-                    }
-                  </td>
-                </tr>
-              }
             }
           </tbody>
         </table>

@@ -3,13 +3,6 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "screener",
-      "ignore": ["node_modules", ".git", "firebase-debug.log", "*.local"]
-    }
-  ],
   "hosting": {
     "public": "frontend/dist/frontend/browser",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
