@@ -83,7 +83,8 @@ if [[ "$DEPLOY_ONLY" == false ]]; then
     backend/bin \
     frontend/dist \
     frontend/node_modules \
-    frontend/.angular
+    frontend/.angular \
+    functions
 
   if git diff --cached --quiet; then
     log "Nothing to commit"
