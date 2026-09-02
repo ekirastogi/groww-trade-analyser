@@ -181,48 +181,82 @@
 
                                 <!-- Trade details -->
                                 @if (isStockExpanded(row.period, group.key)) {
-                                  <div class="border-t border-slate-100 bg-slate-50/50">
-                                    <div class="overflow-x-auto">
-                                      <table class="data-table min-w-[600px]">
-                                        <thead>
-                                          <tr>
-                                            <th class="w-8 text-center">#</th>
-                                            <th class="text-left">Date</th>
-                                            <th>Type</th>
-                                            <th>Qty</th>
-                                            <th>Buy</th>
-                                            <th class="hidden sm:table-cell">Buy Value</th>
-                                            <th>Sell</th>
-                                            <th class="hidden sm:table-cell">Sell Value</th>
-                                            <th>P&amp;L</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          @for (trade of group.trades; track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
-                                            <tr>
-                                              <td class="text-center text-slate-400">{{ ti + 1 }}</td>
-                                              <td class="whitespace-nowrap text-xs text-slate-600">{{ formatDate(trade.sellDate) }}</td>
-                                              <td>
-                                                <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                                  {{ tradeTypeLabel(trade.tradeType) }}
-                                                </span>
-                                              </td>
-                                              <td>{{ trade.quantity | number }}</td>
-                                              <td>
-                                                <div class="text-xs">{{ formatDate(trade.buyDate) }}</div>
-                                                <div class="text-slate-500">{{ formatCurrency(trade.buyPrice) }}</div>
-                                              </td>
-                                              <td class="hidden sm:table-cell">{{ formatCurrency(trade.buyValue) }}</td>
-                                              <td>
-                                                <div class="text-xs">{{ formatDate(trade.sellDate) }}</div>
-                                                <div class="text-slate-500">{{ formatCurrency(trade.sellPrice) }}</div>
-                                              </td>
-                                              <td class="hidden sm:table-cell">{{ formatCurrency(trade.sellValue) }}</td>
-                                              <td class="font-medium" [class]="pnlClass(trade.realisedPnL)">{{ formatCurrency(trade.realisedPnL) }}</td>
-                                            </tr>
+                                  <div class="border-t border-slate-100 bg-slate-50/50 px-3 py-3 sm:px-4">
+                                    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      {{ daySummariesForTrades(group.trades).length }} trading {{ daySummariesForTrades(group.trades).length === 1 ? 'day' : 'days' }}
+                                    </div>
+                                    <div class="space-y-2">
+                                      @for (day of daySummariesForTrades(group.trades); track day.date) {
+                                        <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                          <button
+                                            type="button"
+                                            class="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-50"
+                                            (click)="toggleDayExpand(periodStockDayKey(row.period, group.key, day.date), $event)"
+                                          >
+                                            <div class="min-w-0 flex-1">
+                                              <div class="text-sm font-semibold text-slate-900">{{ day.label }}</div>
+                                              <div class="text-xs text-slate-400">{{ day.tradeCount }} {{ day.tradeCount === 1 ? 'trade' : 'trades' }} · Qty {{ day.quantity | number }}</div>
+                                            </div>
+                                            <div class="hidden shrink-0 text-right sm:block">
+                                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L</div>
+                                              <div class="text-sm font-bold tabular-nums" [class]="pnlClass(day.realisedPnL)">{{ formatCurrency(day.realisedPnL) }}</div>
+                                            </div>
+                                            <div class="hidden shrink-0 text-right md:block">
+                                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Charges</div>
+                                              <div class="text-sm font-bold tabular-nums text-red-600">{{ formatCurrency(day.allocatedCharges) }}</div>
+                                            </div>
+                                            <div class="shrink-0 text-right">
+                                              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Net P&amp;L</div>
+                                              <div class="text-sm font-bold tabular-nums" [class]="pnlClass(day.netPnL)">{{ formatCurrency(day.netPnL) }}</div>
+                                            </div>
+                                            <svg class="h-4 w-4 shrink-0 text-slate-400 transition" [class.rotate-180]="isDayExpanded(periodStockDayKey(row.period, group.key, day.date))" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                          </button>
+                                          @if (isDayExpanded(periodStockDayKey(row.period, group.key, day.date))) {
+                                            <div class="border-t border-slate-100 bg-slate-50/50">
+                                              <div class="overflow-x-auto">
+                                                <table class="data-table min-w-[640px]">
+                                                  <thead>
+                                                    <tr>
+                                                      <th class="w-8 text-center">#</th>
+                                                      <th class="text-left">Type</th>
+                                                      <th class="text-right">Qty</th>
+                                                      <th class="text-right">Buy</th>
+                                                      <th class="text-right hidden sm:table-cell">Buy Value</th>
+                                                      <th class="text-right">Sell</th>
+                                                      <th class="text-right hidden sm:table-cell">Sell Value</th>
+                                                      <th class="text-right hidden md:table-cell">Charges</th>
+                                                      <th class="text-right">Net P&amp;L</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    @for (trade of day.trades; track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
+                                                      <tr>
+                                                        <td class="text-center text-slate-400">{{ ti + 1 }}</td>
+                                                        <td>
+                                                          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ tradeTypeLabel(trade.tradeType) }}</span>
+                                                        </td>
+                                                        <td class="text-right">{{ trade.quantity | number }}</td>
+                                                        <td class="text-right">
+                                                          <div class="text-xs text-slate-500">{{ formatDate(trade.buyDate) }}</div>
+                                                          <div>{{ formatCurrency(trade.buyPrice) }}</div>
+                                                        </td>
+                                                        <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.buyValue) }}</td>
+                                                        <td class="text-right">
+                                                          <div class="text-xs text-slate-500">{{ formatDate(trade.sellDate) }}</div>
+                                                          <div>{{ formatCurrency(trade.sellPrice) }}</div>
+                                                        </td>
+                                                        <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.sellValue) }}</td>
+                                                        <td class="text-right hidden text-red-600 md:table-cell">{{ formatCurrency(tradeAllocatedCharge(trade)) }}</td>
+                                                        <td class="text-right font-medium" [class]="pnlClass(tradeNetPnL(trade))">{{ formatCurrency(tradeNetPnL(trade)) }}</td>
+                                                      </tr>
+                                                    }
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            </div>
                                           }
-                                        </tbody>
-                                      </table>
+                                        </div>
+                                      }
                                     </div>
                                   </div>
                                 }
@@ -492,66 +526,88 @@
                             @if (isStockTradesLoading(stock)) {
                               Loading trades…
                             } @else {
-                              {{ tradesForStock(stock).length }} trades
+                              {{ daySummariesForTrades(tradesForStock(stock)).length }} trading {{ daySummariesForTrades(tradesForStock(stock)).length === 1 ? 'day' : 'days' }} · {{ tradesForStock(stock).length }} trades
                             }
                           </div>
-                          <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                            @if (visibleTradeDetailColumns().length) {
-                              <table class="data-table min-w-[480px]">
-                                <thead>
-                                  <tr>
-                                    <th class="w-8 text-center">#</th>
-                                    <th class="text-left">Date</th>
-                                    @for (col of visibleTradeDetailColumns(); track col.key) {
-                                      <th [class]="col.key === 'tradeCount' ? 'text-left' : 'text-right'">
-                                        {{ tradeDetailColumnLabel(col.key) }}
-                                      </th>
-                                    }
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  @for (trade of tradesForStock(stock); track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
-                                    <tr>
-                                      <td class="text-center text-slate-400">{{ ti + 1 }}</td>
-                                      <td class="whitespace-nowrap text-xs text-slate-600">{{ formatDate(trade.sellDate) }}</td>
-                                      @for (col of visibleTradeDetailColumns(); track col.key) {
-                                        <td [class]="col.key === 'tradeCount' ? '' : tradeDetailCellClass(col.key, trade)">
-                                          @switch (col.key) {
-                                            @case ('tradeCount') {
-                                              <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                                {{ tradeTypeLabel(trade.tradeType) }}
-                                              </span>
+                          @if (!isStockTradesLoading(stock)) {
+                            <div class="space-y-2">
+                              @for (day of daySummariesForTrades(tradesForStock(stock)); track day.date) {
+                                <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                  <button
+                                    type="button"
+                                    class="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-50 sm:px-4"
+                                    (click)="toggleDayExpand(perStockDayKey(stock, day.date), $event)"
+                                  >
+                                    <div class="min-w-0 flex-1">
+                                      <div class="text-sm font-semibold text-slate-900">{{ day.label }}</div>
+                                      <div class="text-xs text-slate-400">{{ day.tradeCount }} {{ day.tradeCount === 1 ? 'trade' : 'trades' }} · Qty {{ day.quantity | number }}</div>
+                                    </div>
+                                    <div class="hidden shrink-0 text-right sm:block">
+                                      <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L</div>
+                                      <div class="text-sm font-bold tabular-nums" [class]="pnlClass(day.realisedPnL)">{{ formatCurrency(day.realisedPnL) }}</div>
+                                    </div>
+                                    <div class="hidden shrink-0 text-right md:block">
+                                      <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Charges</div>
+                                      <div class="text-sm font-bold tabular-nums text-red-600">{{ formatCurrency(day.allocatedCharges) }}</div>
+                                    </div>
+                                    <div class="shrink-0 text-right">
+                                      <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Net P&amp;L</div>
+                                      <div class="text-sm font-bold tabular-nums" [class]="pnlClass(day.netPnL)">{{ formatCurrency(day.netPnL) }}</div>
+                                    </div>
+                                    <svg class="h-4 w-4 shrink-0 text-slate-400 transition" [class.rotate-180]="isDayExpanded(perStockDayKey(stock, day.date))" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                  </button>
+                                  @if (isDayExpanded(perStockDayKey(stock, day.date))) {
+                                    <div class="border-t border-slate-100 bg-slate-50/50">
+                                      <div class="overflow-x-auto">
+                                        <table class="data-table min-w-[640px]">
+                                          <thead>
+                                            <tr>
+                                              <th class="w-8 text-center">#</th>
+                                              <th class="text-left">Type</th>
+                                              <th class="text-right">Qty</th>
+                                              <th class="text-right">Buy</th>
+                                              <th class="text-right hidden sm:table-cell">Buy Value</th>
+                                              <th class="text-right">Sell</th>
+                                              <th class="text-right hidden sm:table-cell">Sell Value</th>
+                                              <th class="text-right hidden md:table-cell">Charges</th>
+                                              <th class="text-right">Net P&amp;L</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            @for (trade of day.trades; track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
+                                              <tr>
+                                                <td class="text-center text-slate-400">{{ ti + 1 }}</td>
+                                                <td>
+                                                  <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ tradeTypeLabel(trade.tradeType) }}</span>
+                                                </td>
+                                                <td class="text-right">{{ trade.quantity | number }}</td>
+                                                <td class="text-right">
+                                                  <div class="text-xs text-slate-500">{{ formatDate(trade.buyDate) }}</div>
+                                                  <div>{{ formatCurrency(trade.buyPrice) }}</div>
+                                                </td>
+                                                <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.buyValue) }}</td>
+                                                <td class="text-right">
+                                                  <div class="text-xs text-slate-500">{{ formatDate(trade.sellDate) }}</div>
+                                                  <div>{{ formatCurrency(trade.sellPrice) }}</div>
+                                                </td>
+                                                <td class="text-right hidden sm:table-cell">{{ formatCurrency(trade.sellValue) }}</td>
+                                                <td class="text-right hidden text-red-600 md:table-cell">{{ formatCurrency(tradeAllocatedCharge(trade)) }}</td>
+                                                <td class="text-right font-medium" [class]="pnlClass(tradeNetPnL(trade))">{{ formatCurrency(tradeNetPnL(trade)) }}</td>
+                                              </tr>
                                             }
-                                            @case ('quantity') { {{ trade.quantity | number }} }
-                                            @case ('buyValue') {
-                                              <div class="text-right">
-                                                <div class="text-xs">{{ formatDate(trade.buyDate) }}</div>
-                                                <div>{{ formatCurrency(trade.buyValue) }}</div>
-                                              </div>
-                                            }
-                                            @case ('sellValue') {
-                                              <div class="text-right">
-                                                <div class="text-xs">{{ formatDate(trade.sellDate) }}</div>
-                                                <div>{{ formatCurrency(trade.sellValue) }}</div>
-                                              </div>
-                                            }
-                                            @case ('realisedPnL') { {{ formatCurrency(trade.realisedPnL) }} }
-                                            @case ('realisedPnLPct') { {{ formatPct(tradeRealisedPnLPct(trade)) }} }
-                                            @case ('allocatedCharges') { {{ formatCurrency(tradeAllocatedCharge(trade)) }} }
-                                            @case ('netPnL') { {{ formatCurrency(tradeNetPnL(trade)) }} }
-                                          }
-                                        </td>
-                                      }
-                                    </tr>
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
                                   }
-                                </tbody>
-                              </table>
-                            } @else {
-                              <p class="px-4 py-6 text-center text-sm text-slate-400">
-                                Select more columns to see trade details
-                              </p>
-                            }
-                          </div>
+                                </div>
+                              } @empty {
+                                <div class="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">
+                                  No trades found for this stock.
+                                </div>
+                              }
+                            </div>
+                          }
                         </div>
                       </td>
                     </tr>

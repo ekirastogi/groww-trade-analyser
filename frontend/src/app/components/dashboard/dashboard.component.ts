@@ -22,6 +22,7 @@ import {
   pnlClass,
 } from '../../utils/format.utils';
 import { groupTradesByStock, StockTradeGroup } from '../../utils/trade.utils';
+import { summariseTradesByDay, TradeDaySummary } from '../../utils/trade-day-summary.utils';
 import {
   StockFilterColumn,
   StockFilterRule,
@@ -104,6 +105,7 @@ export class DashboardComponent implements OnInit {
   expandedPeriod = signal<string | null>(null);
   expandedStock = signal<string | null>(null);
   expandedPerStock = signal<string | null>(null);
+  expandedDayKey = signal<string | null>(null);
   stockColumnsPanelOpen = signal(false);
   stockScenarioPanelOpen = signal(false);
   periodColumnsPanelOpen = signal(false);
@@ -276,6 +278,7 @@ export class DashboardComponent implements OnInit {
     this.expandedPeriod.set(null);
     this.expandedStock.set(null);
     this.expandedPerStock.set(null);
+    this.expandedDayKey.set(null);
     this.lazyTrades.clear();
     this.resetSortForTab(tab);
   }
@@ -284,16 +287,20 @@ export class DashboardComponent implements OnInit {
     if (this.expandedPeriod() === period) {
       this.expandedPeriod.set(null);
       this.expandedStock.set(null);
+      this.expandedDayKey.set(null);
       return;
     }
     this.expandedPeriod.set(period);
     this.expandedStock.set(null);
+    this.expandedDayKey.set(null);
     void this.ensurePeriodTradesLoaded(period);
   }
 
   toggleStockExpand(accKey: string, event: Event): void {
     event.stopPropagation();
-    this.expandedStock.set(this.expandedStock() === accKey ? null : accKey);
+    const expanding = this.expandedStock() !== accKey;
+    this.expandedStock.set(expanding ? accKey : null);
+    this.expandedDayKey.set(null);
   }
 
   stockAccordionKey(period: string, stockKey: string): string {
@@ -316,7 +323,33 @@ export class DashboardComponent implements OnInit {
     const key = this.stockRowKey(stock);
     const expanding = this.expandedPerStock() !== key;
     this.expandedPerStock.set(expanding ? key : null);
+    this.expandedDayKey.set(null);
     if (expanding) void this.ensureStockTradesLoaded(stock);
+  }
+
+  daySummariesForTrades(trades: Trade[]): TradeDaySummary[] {
+    return summariseTradesByDay(
+      trades,
+      (trade) => this.tradeAllocatedCharge(trade),
+      (trade) => this.tradeNetPnL(trade)
+    );
+  }
+
+  perStockDayKey(stock: StockSummary, date: string): string {
+    return `per-stock::${this.stockRowKey(stock)}|${date}`;
+  }
+
+  periodStockDayKey(period: string, stockKey: string, date: string): string {
+    return `${period}::${stockKey}|${date}`;
+  }
+
+  isDayExpanded(dayKey: string): boolean {
+    return this.expandedDayKey() === dayKey;
+  }
+
+  toggleDayExpand(dayKey: string, event?: Event): void {
+    event?.stopPropagation();
+    this.expandedDayKey.set(this.expandedDayKey() === dayKey ? null : dayKey);
   }
 
   isPerStockExpanded(stock: StockSummary): boolean {

@@ -26,6 +26,7 @@ import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { MarketCapFilterComponent } from '../shared/market-cap-filter/market-cap-filter.component';
 import { MARKET_CAP_LABELS, MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
+import { summariseTradesByDay, TradeDaySummary } from '../../utils/trade-day-summary.utils';
 import { FILTER_QUERY_KEYS, readWatchlistFilters, serializeMarketCapTiers } from '../../utils/filter-url.utils';
 
 const ALL_SUBTAB_ID = '__all__';
@@ -50,19 +51,6 @@ interface AutoTierTab {
   shortLabel: string;
   fullLabel: string;
   count: number;
-}
-
-interface StockDaySummary {
-  date: string;
-  label: string;
-  tradeCount: number;
-  quantity: number;
-  buyValue: number;
-  sellValue: number;
-  realisedPnL: number;
-  allocatedCharges: number;
-  netPnL: number;
-  trades: Trade[];
 }
 
 @Component({
@@ -331,17 +319,12 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     if (expanding) void this.ensureStockTradesLoaded(stock);
   }
 
-  daySummariesForStock(stock: StockSummary): StockDaySummary[] {
-    const byDay = new Map<string, Trade[]>();
-    for (const trade of this.tradesForStock(stock)) {
-      const date = trade.sellDate?.slice(0, 10) || 'unknown';
-      const list = byDay.get(date) ?? [];
-      list.push(trade);
-      byDay.set(date, list);
-    }
-    return [...byDay.entries()]
-      .map(([date, trades]) => this.buildDaySummary(date, trades))
-      .sort((a, b) => b.date.localeCompare(a.date));
+  daySummariesForStock(stock: StockSummary): TradeDaySummary[] {
+    return summariseTradesByDay(
+      this.tradesForStock(stock),
+      (trade) => this.tradeAllocatedCharge(trade),
+      (trade) => this.tradeNetPnL(trade)
+    );
   }
 
   dayRowKey(stock: StockSummary, date: string): string {
@@ -432,35 +415,6 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
 
   private clientCode(): string | null {
     return this.state.activeClientCode() ?? this.state.report()?.summary.clientCode ?? null;
-  }
-
-  private buildDaySummary(date: string, trades: Trade[]): StockDaySummary {
-    let quantity = 0;
-    let buyValue = 0;
-    let sellValue = 0;
-    let realisedPnL = 0;
-    let allocatedCharges = 0;
-    let netPnL = 0;
-    for (const trade of trades) {
-      quantity += trade.quantity;
-      buyValue += trade.buyValue;
-      sellValue += trade.sellValue;
-      realisedPnL += trade.realisedPnL;
-      allocatedCharges += this.tradeAllocatedCharge(trade);
-      netPnL += this.tradeNetPnL(trade);
-    }
-    return {
-      date,
-      label: date === 'unknown' ? 'Unknown date' : formatDate(date),
-      tradeCount: trades.length,
-      quantity,
-      buyValue,
-      sellValue,
-      realisedPnL,
-      allocatedCharges,
-      netPnL,
-      trades,
-    };
   }
 
   private async ensureStockTradesLoaded(stock: StockSummary): Promise<void> {
