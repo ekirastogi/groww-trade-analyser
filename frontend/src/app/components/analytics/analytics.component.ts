@@ -87,6 +87,12 @@ type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
     .heat-cell {
       @apply flex min-h-[2.75rem] flex-col items-center justify-center rounded-lg border border-slate-200/80 px-1 py-1.5 text-center transition;
     }
+    .overview-calendar-cell {
+      @apply min-h-[4.5rem] px-1.5 py-2 sm:min-h-[5.5rem] sm:px-2 sm:py-2.5;
+    }
+    .overview-weekday-cell {
+      @apply min-h-[5.5rem] px-2 py-3 sm:min-h-[6.5rem] sm:px-3 sm:py-4;
+    }
     .heat-neutral { @apply bg-slate-50 text-slate-400; }
     .heat-pos-soft { @apply bg-emerald-50 text-emerald-700; }
     .heat-pos-mid { @apply bg-emerald-100 text-emerald-800; }

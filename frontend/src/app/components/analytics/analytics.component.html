@@ -80,48 +80,52 @@
 
       <!-- OVERVIEW -->
       @if (activeTab() === 'overview') {
-        <div class="grid gap-4 xl:grid-cols-12">
-          <div class="xl:col-span-8">
-            <app-chart-card
-              [config]="cumulativeChartConfig()"
-              title="Equity curve"
-              subtitle="Cumulative net P&amp;L over your trading history"
-              size="lg"
-            />
-          </div>
-          <div class="grid gap-3 sm:grid-cols-2 xl:col-span-4 xl:grid-cols-1">
-            <div class="insight-card insight-card-best">
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Best weekday</p>
-              <p class="mt-1 text-lg font-bold text-slate-900">{{ bestWeekday()?.label || '—' }}</p>
-              <p class="text-sm font-semibold text-emerald-600">{{ bestWeekday() ? formatCurrency(bestWeekday()!.netPnL) : 'Not enough data' }}</p>
-            </div>
-            <div class="insight-card insight-card-worst">
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-red-700">Worst weekday</p>
-              <p class="mt-1 text-lg font-bold text-slate-900">{{ worstWeekday()?.label || '—' }}</p>
-              <p class="text-sm font-semibold text-red-600">{{ worstWeekday() ? formatCurrency(worstWeekday()!.netPnL) : 'Not enough data' }}</p>
-            </div>
-            <div class="insight-card insight-card-best">
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Best calendar day</p>
-              <p class="mt-1 text-lg font-bold text-slate-900">{{ bestDayOfMonth() ? 'Day ' + bestDayOfMonth()!.label : '—' }}</p>
-              <p class="text-sm font-semibold text-emerald-600">{{ bestDayOfMonth() ? formatCurrency(bestDayOfMonth()!.netPnL) : 'Not enough data' }}</p>
-            </div>
-            <div class="insight-card insight-card-worst">
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-red-700">Worst calendar day</p>
-              <p class="mt-1 text-lg font-bold text-slate-900">{{ worstDayOfMonth() ? 'Day ' + worstDayOfMonth()!.label : '—' }}</p>
-              <p class="text-sm font-semibold text-red-600">{{ worstDayOfMonth() ? formatCurrency(worstDayOfMonth()!.netPnL) : 'Not enough data' }}</p>
-            </div>
+        <app-chart-card
+          [config]="cumulativeChartConfig()"
+          title="Equity curve"
+          subtitle="Cumulative net P&amp;L over your trading history"
+          size="lg"
+        />
+
+        <div class="card p-4 sm:p-5">
+          <h3 class="text-sm font-semibold text-slate-900">Calendar day heatmap</h3>
+          <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L aggregated by date of month (1–31)</p>
+          <div class="mt-5 grid grid-cols-7 gap-2 sm:grid-cols-10 sm:gap-2.5 lg:grid-cols-11 lg:gap-3">
+            @for (bucket of dayOfMonthBuckets(); track bucket.key) {
+              <div
+                class="heat-cell overview-calendar-cell"
+                [class]="bucket.tradeCount ? heatClass(bucket.netPnL, dayOfMonthMaxAbs()) : 'heat-neutral opacity-40'"
+                [title]="bucket.tradeCount ? bucket.label + ': ' + formatCurrency(bucket.netPnL) : 'No trades'"
+              >
+                <span class="text-xs font-bold sm:text-sm">{{ bucket.label }}</span>
+                @if (bucket.tradeCount) {
+                  <span class="mt-1 text-[10px] font-semibold tabular-nums leading-tight sm:text-xs">{{ formatCurrency(bucket.netPnL) }}</span>
+                }
+              </div>
+            }
           </div>
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-2">
-          <app-chart-card [config]="weekdayChartConfig()" title="P&amp;L by weekday" subtitle="Which days of the week work best for you" />
-          <app-chart-card [config]="pnlDistributionChartConfig()" title="Trade outcome distribution" subtitle="How your trades cluster by profit and loss size" />
+        <div class="card p-4 sm:p-5">
+          <h3 class="text-sm font-semibold text-slate-900">Weekday heatmap</h3>
+          <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L and trade count for each weekday</p>
+          <div class="mt-5 grid grid-cols-7 gap-2 sm:gap-3">
+            @for (bucket of weekdayBuckets(); track bucket.key) {
+              <div class="heat-cell overview-weekday-cell" [class]="heatClass(bucket.netPnL, weekdayMaxAbs())">
+                <span class="text-xs font-bold uppercase sm:text-sm">{{ bucket.label }}</span>
+                <span class="mt-1 text-xs font-semibold tabular-nums sm:text-sm">{{ bucket.tradeCount ? formatCurrency(bucket.netPnL) : '—' }}</span>
+                <span class="text-[10px] text-slate-500 sm:text-xs">{{ bucket.tradeCount }}t</span>
+              </div>
+            }
+          </div>
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-2">
-          <app-chart-card [config]="topStocksChartConfig()" title="Top stocks" subtitle="Highest net P&amp;L contributors" />
-          <app-chart-card [config]="bottomStocksChartConfig()" title="Bottom stocks" subtitle="Biggest net P&amp;L drag" />
-        </div>
+        <app-chart-card
+          [config]="dailyNetPnLChartConfig()"
+          title="Daily net P&amp;L"
+          subtitle="Day-by-day profit and loss with cumulative curve"
+          size="lg"
+        />
       }
 
       <!-- DAILY -->
