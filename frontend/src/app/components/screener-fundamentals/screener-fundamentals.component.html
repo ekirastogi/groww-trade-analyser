@@ -104,45 +104,47 @@
               <div class="screener-price-card">
                 @if (price.rangeHigh && price.rangeLow && price.current) {
                   <div class="screener-price-range">
-                    <div class="screener-price-markers">
-                      <div class="screener-price-marker screener-price-marker-low">
-                        <span class="screener-price-marker-tag">52W Low</span>
-                        <svg class="screener-map-pin" viewBox="0 0 24 24" aria-hidden="true">
-                          <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
-                        </svg>
-                        <span class="screener-price-marker-value">{{ formatPriceValue(price.rangeLow) }}</span>
+                    <div class="screener-price-chart-inset">
+                      <div class="screener-price-markers">
+                        <div class="screener-price-marker screener-price-marker-low">
+                          <span class="screener-price-marker-tag">52W Low</span>
+                          <svg class="screener-map-pin" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+                          </svg>
+                          <span class="screener-price-marker-value">{{ formatPriceValue(price.rangeLow) }}</span>
+                        </div>
+                        <div class="screener-price-marker screener-price-marker-current" [style.left.%]="priceRangeDisplayPct()">
+                          <span class="screener-price-marker-tag">Current</span>
+                          <svg class="screener-map-pin screener-map-pin-current" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+                          </svg>
+                          <span class="screener-price-marker-value">{{ formatPriceValue(price.current) }}</span>
+                        </div>
+                        <div class="screener-price-marker screener-price-marker-high">
+                          <span class="screener-price-marker-tag">52W High</span>
+                          <svg class="screener-map-pin" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+                          </svg>
+                          <span class="screener-price-marker-value">{{ formatPriceValue(price.rangeHigh) }}</span>
+                        </div>
                       </div>
-                      <div class="screener-price-marker screener-price-marker-current" [style.left.%]="priceRangePct()">
-                        <span class="screener-price-marker-tag">Current</span>
-                        <svg class="screener-map-pin screener-map-pin-current" viewBox="0 0 24 24" aria-hidden="true">
-                          <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
-                        </svg>
-                        <span class="screener-price-marker-value">{{ formatPriceValue(price.current) }}</span>
-                      </div>
-                      <div class="screener-price-marker screener-price-marker-high">
-                        <span class="screener-price-marker-tag">52W High</span>
-                        <svg class="screener-map-pin" viewBox="0 0 24 24" aria-hidden="true">
-                          <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
-                        </svg>
-                        <span class="screener-price-marker-value">{{ formatPriceValue(price.rangeHigh) }}</span>
-                      </div>
-                    </div>
 
-                    <div class="screener-price-track">
-                      <div class="screener-price-seg-green" [style.width.%]="priceRangePct()"></div>
-                      <div class="screener-price-seg-red" [style.width.%]="100 - priceRangePct()"></div>
-                    </div>
-
-                    <div class="screener-price-stats">
-                      <div class="screener-price-stat-seg" [style.width.%]="priceRangePct()">
-                        @if (pctAboveLow(price) != null) {
-                          <span class="screener-price-stat-up">+{{ pctAboveLow(price) | number:'1.1-1' }}% above low</span>
-                        }
+                      <div class="screener-price-track screener-price-track-inset">
+                        <div class="screener-price-seg-green" [style.width.%]="priceRangeRawPct()"></div>
+                        <div class="screener-price-seg-red" [style.width.%]="100 - priceRangeRawPct()"></div>
                       </div>
-                      <div class="screener-price-stat-seg" [style.width.%]="100 - priceRangePct()">
-                        @if (pctBelowHigh(price) != null) {
-                          <span class="screener-price-stat-down">{{ pctBelowHigh(price) | number:'1.1-1' }}% below high</span>
-                        }
+
+                      <div class="screener-price-stats screener-price-stats-inset">
+                        <div class="screener-price-stat-seg" [style.width.%]="priceRangeRawPct()">
+                          @if (pctAboveLow(price) != null) {
+                            <span class="screener-price-stat-up">+{{ pctAboveLow(price) | number:'1.1-1' }}% above low</span>
+                          }
+                        </div>
+                        <div class="screener-price-stat-seg" [style.width.%]="100 - priceRangeRawPct()">
+                          @if (pctBelowHigh(price) != null) {
+                            <span class="screener-price-stat-down">{{ pctBelowHigh(price) | number:'1.1-1' }}% below high</span>
+                          }
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -154,59 +156,47 @@
             </section>
           }
 
-          @if (analysis().growthTable.length) {
+          @if (analysis().quarterlyCharts.length) {
             <section class="screener-analysis-section">
-              <h3 class="screener-analysis-heading">Growth snapshot — latest quarter</h3>
+              <h3 class="screener-analysis-heading">Quarterly trend — last 5 quarters</h3>
               <p class="screener-divergence-note">{{ analysis().divergenceNote }}</p>
-              <div class="screener-growth-bars-grid">
-                @for (row of analysis().growthTable; track row.metric) {
-                  <article class="screener-growth-bar-card">
-                    <div class="screener-growth-bar-head">
-                      <span class="screener-growth-bar-metric">{{ row.metric }}</span>
-                      <span class="screener-growth-bar-latest">{{ row.latest }}</span>
-                    </div>
+              <app-chart-card
+                [config]="quarterlyGroupedChart()"
+                [heightPx]="300"
+                emptyMessage="No quarterly data to chart yet"
+              />
 
-                    <div class="screener-growth-bar-group">
-                      <div class="screener-growth-bar-label-row">
-                        <span>QoQ</span>
-                        <span [class]="growthCellClass(row.qoq, row.unit)">{{ formatGrowthCell(row, 'qoq') }}</span>
-                      </div>
-                      <div class="screener-growth-bar-track">
-                        <div class="screener-growth-bar-half screener-growth-bar-half-neg">
-                          @if (row.qoq != null && row.qoq < 0) {
-                            <div class="screener-growth-bar-fill screener-growth-bar-fill-down" [style.width.%]="growthBarWidth(row.qoq)"></div>
-                          }
-                        </div>
-                        <div class="screener-growth-bar-axis" aria-hidden="true"></div>
-                        <div class="screener-growth-bar-half screener-growth-bar-half-pos">
-                          @if (row.qoq != null && row.qoq > 0) {
-                            <div class="screener-growth-bar-fill screener-growth-bar-fill-up" [style.width.%]="growthBarWidth(row.qoq)"></div>
-                          }
-                        </div>
-                      </div>
+              <div class="screener-quarter-summary-grid">
+                @for (chart of quarterlyMetricSummaries(); track chart.metric) {
+                  <article class="screener-quarter-summary-card">
+                    <div class="screener-quarter-summary-top">
+                      <span class="screener-quarter-chart-title">{{ chart.metric }}</span>
+                      @if (latestBar(chart); as bar) {
+                        <span class="screener-quarter-summary-value">{{ bar.displayValue }}</span>
+                      }
                     </div>
-
-                    <div class="screener-growth-bar-group">
-                      <div class="screener-growth-bar-label-row">
-                        <span>YoY</span>
-                        <span [class]="growthCellClass(row.yoy, row.unit)">{{ formatGrowthCell(row, 'yoy') }}</span>
+                    @if (latestBar(chart); as bar) {
+                      <div class="screener-quarter-summary-chips">
+                        <span
+                          class="screener-quarter-chip"
+                          [class.screener-growth-up]="bar.qoqPct != null && trendDirection(bar.qoqPct) === 'up'"
+                          [class.screener-growth-down]="bar.qoqPct != null && trendDirection(bar.qoqPct) === 'down'"
+                          [class.screener-quarter-chip-muted]="bar.qoqPct == null"
+                        >
+                          QoQ {{ bar.qoqPct != null ? formatAnalysisChange(bar.qoqPct, chart.unit) : '—' }}
+                        </span>
+                        <span
+                          class="screener-quarter-chip"
+                          [class.screener-growth-up]="bar.yoyPct != null && trendDirection(bar.yoyPct) === 'up'"
+                          [class.screener-growth-down]="bar.yoyPct != null && trendDirection(bar.yoyPct) === 'down'"
+                          [class.screener-quarter-chip-muted]="bar.yoyPct == null"
+                        >
+                          YoY {{ bar.yoyPct != null ? formatAnalysisChange(bar.yoyPct, chart.unit) : '—' }}
+                        </span>
+                        <span class="screener-quarter-bar-period">{{ bar.shortLabel }}</span>
                       </div>
-                      <div class="screener-growth-bar-track">
-                        <div class="screener-growth-bar-half screener-growth-bar-half-neg">
-                          @if (row.yoy != null && row.yoy < 0) {
-                            <div class="screener-growth-bar-fill screener-growth-bar-fill-down" [style.width.%]="growthBarWidth(row.yoy)"></div>
-                          }
-                        </div>
-                        <div class="screener-growth-bar-axis" aria-hidden="true"></div>
-                        <div class="screener-growth-bar-half screener-growth-bar-half-pos">
-                          @if (row.yoy != null && row.yoy > 0) {
-                            <div class="screener-growth-bar-fill screener-growth-bar-fill-up" [style.width.%]="growthBarWidth(row.yoy)"></div>
-                          }
-                        </div>
-                      </div>
-                    </div>
-
-                    <p class="screener-growth-bar-explain">{{ growthMetricSummary(row) }}</p>
+                    }
+                    <p class="screener-growth-bar-explain">{{ chart.summary }}</p>
                   </article>
                 }
               </div>

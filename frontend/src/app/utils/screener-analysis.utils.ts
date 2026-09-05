@@ -66,6 +66,25 @@ export interface AnalysisVerdict {
   downsidePct: number | null;
 }
 
+export interface QuarterlyMetricChart {
+  metric: string;
+  unit: 'currency' | 'percent';
+  bars: QuarterBar[];
+  summary: string;
+}
+
+export interface QuarterBar {
+  period: string;
+  shortLabel: string;
+  value: number | null;
+  displayValue: string;
+  qoqPct: number | null;
+  yoyPct: number | null;
+  barHeightPct: number;
+  isLatest: boolean;
+  hasData: boolean;
+}
+
 export interface StockFundamentalAnalysis {
   hasQuarterly: boolean;
   hasShareholding: boolean;
@@ -75,6 +94,7 @@ export interface StockFundamentalAnalysis {
   holdings: HoldingAnalysis[];
   compoundGrowth: CompoundGrowthRow[];
   growthTable: GrowthComparisonRow[];
+  quarterlyCharts: QuarterlyMetricChart[];
   pricePosition: PricePosition | null;
   divergenceNote: string;
   verdicts: AnalysisVerdict[];
@@ -99,6 +119,7 @@ export function buildStockAnalysis(stock: RegistryStock): StockFundamentalAnalys
   }
 
   const growthTable = buildGrowthTable(sales, netProfit, opm);
+  const quarterlyCharts = buildQuarterlyCharts(sales, netProfit, opm);
   const pricePosition = buildPricePosition(stock.currentPrice, stock.highLow);
   const divergenceNote = buildDivergenceNote(sales, netProfit, opm);
   const verdicts = buildVerdicts(sales, netProfit, opm, pricePosition, holdings, divergenceNote);
@@ -112,6 +133,7 @@ export function buildStockAnalysis(stock: RegistryStock): StockFundamentalAnalys
     holdings,
     compoundGrowth: buildCompoundGrowthRows(stock),
     growthTable,
+    quarterlyCharts,
     pricePosition,
     divergenceNote,
     verdicts,
@@ -158,6 +180,93 @@ function buildGrowthTable(
     });
   }
   return rows;
+}
+
+const QUARTER_BAR_COUNT = 5;
+
+function buildQuarterlyCharts(
+  sales: MetricAnalysis | null,
+  profit: MetricAnalysis | null,
+  opm: MetricAnalysis | null
+): QuarterlyMetricChart[] {
+  const charts: QuarterlyMetricChart[] = [];
+  if (sales) charts.push(buildQuarterlyMetricChart(sales, 'Sales'));
+  if (profit) charts.push(buildQuarterlyMetricChart(profit, 'Net profit (PAT)'));
+  if (opm) charts.push(buildQuarterlyMetricChart(opm, 'OPM'));
+  return charts;
+}
+
+function buildQuarterlyMetricChart(metric: MetricAnalysis, title: string): QuarterlyMetricChart {
+  const all = metric.series;
+  const start = Math.max(0, all.length - QUARTER_BAR_COUNT);
+  const window = all.slice(start);
+  const padCount = QUARTER_BAR_COUNT - window.length;
+
+  const slots: Array<{ period: string; value: number; dataIdx: number } | null> = [];
+  for (let i = 0; i < padCount; i++) slots.push(null);
+  window.forEach((point, offset) => {
+    slots.push({ period: point.period, value: point.value, dataIdx: start + offset });
+  });
+
+  const values = slots.filter((s): s is NonNullable<typeof s> => s != null).map((s) => s.value);
+  const maxVal = values.length ? Math.max(...values) : 1;
+
+  const bars: QuarterBar[] = slots.map((slot) => {
+    if (!slot) {
+      return {
+        period: '—',
+        shortLabel: '—',
+        value: null,
+        displayValue: '—',
+        qoqPct: null,
+        yoyPct: null,
+        barHeightPct: 0,
+        isLatest: false,
+        hasData: false,
+      };
+    }
+
+    const prev = slot.dataIdx > 0 ? all[slot.dataIdx - 1]?.value ?? null : null;
+    const yoyBase = slot.dataIdx >= 4 ? all[slot.dataIdx - 4]?.value ?? null : null;
+
+    return {
+      period: slot.period,
+      shortLabel: shortPeriodLabel(slot.period),
+      value: slot.value,
+      displayValue: formatMetricValue(slot.value, metric.unit),
+      qoqPct: pctChange(slot.value, prev, metric.unit),
+      yoyPct: pctChange(slot.value, yoyBase, metric.unit),
+      barHeightPct: maxVal > 0 ? Math.max((slot.value / maxVal) * 100, 4) : 0,
+      isLatest: slot.dataIdx === all.length - 1,
+      hasData: true,
+    };
+  });
+
+  const row = {
+    metric: title,
+    latest: formatMetricValue(metric.latest, metric.unit),
+    qoq: metric.qoqChange,
+    yoy: metric.yoyChange,
+    unit: metric.unit,
+    atAth: metric.atAth,
+    belowAthPct: metric.belowAthPct,
+  };
+
+  return {
+    metric: title,
+    unit: metric.unit,
+    bars,
+    summary: growthMetricSummary(row),
+  };
+}
+
+function shortPeriodLabel(period: string): string {
+  const parts = period.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    const year = parts[1].length >= 2 ? parts[1].slice(-2) : parts[1];
+    return `${parts[0]} '${year}`;
+  }
+  return period;
 }
 
 function buildPricePosition(currentPrice: number | undefined, highLow?: string): PricePosition | null {
@@ -405,7 +514,7 @@ function analyzeMetric(
     cagr3y: cagr3y ?? null,
     cagr5y: cagr5y ?? null,
     cagr10y: cagr10y ?? null,
-    series: series.slice(-8),
+    series,
   };
 }
 
@@ -535,9 +644,29 @@ export function growthMetricSummary(row: GrowthComparisonRow): string {
   return `${row.metric} at ${row.latest}. ${qoqText}; ${yoyText}. ${ath}`.trim();
 }
 
-export function priceRangePosition(price: PricePosition | null): number {
+/** Horizontal inset (%) so 52W low/high markers and bar ends stay inside the card. */
+export const PRICE_RANGE_EDGE_INSET_PCT = 8;
+
+/** 0–100 position of current price between range low and high (for bar segment widths). */
+export function priceRangeRawPct(price: PricePosition | null): number {
   if (!price?.current || !price.rangeHigh || !price.rangeLow) return 50;
   const range = price.rangeHigh - price.rangeLow;
   if (range <= 0) return 50;
-  return ((price.current - price.rangeLow) / range) * 100;
+  const raw = ((price.current - price.rangeLow) / range) * 100;
+  return Math.min(100, Math.max(0, raw));
+}
+
+/** Marker position on the full chart width, with equal padding before low and after high. */
+export function priceRangeDisplayPct(
+  price: PricePosition | null,
+  insetPct = PRICE_RANGE_EDGE_INSET_PCT,
+): number {
+  const raw = priceRangeRawPct(price);
+  const inner = 100 - 2 * insetPct;
+  return insetPct + (raw / 100) * inner;
+}
+
+/** @deprecated Use priceRangeDisplayPct for markers and priceRangeRawPct for bar widths. */
+export function priceRangePosition(price: PricePosition | null): number {
+  return priceRangeDisplayPct(price);
 }

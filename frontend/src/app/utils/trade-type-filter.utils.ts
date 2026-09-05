@@ -8,9 +8,10 @@ const ROUTES_WITH_INTRADAY_DEFAULT = [
   '/watchlists',
   '/heatmap',
   '/charges',
+  '/analytics',
 ];
 
-const ROUTES_WITH_ALL_DEFAULT = ['/analytics'];
+const ROUTES_WITH_ALL_DEFAULT: string[] = [];
 
 export interface TradeTypeSource {
   tradeType: TradeType;

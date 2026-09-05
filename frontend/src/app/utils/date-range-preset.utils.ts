@@ -115,3 +115,27 @@ export function detectDateRangePreset(
   }
   return 'custom';
 }
+
+const ROUTES_WITH_YTD_DEFAULT = ['/analytics'];
+
+/** Default date range when the URL has no from/to params (route-specific). */
+export function defaultDateRangeForRoute(
+  url: string,
+  bounds: DateRangeBounds,
+  today = new Date()
+): DateRangeValue | null {
+  if (ROUTES_WITH_YTD_DEFAULT.some((route) => url.includes(route))) {
+    return rangeForPreset('year', bounds, today);
+  }
+  return null;
+}
+
+export function routeNeedsDefaultDateRange(
+  url: string,
+  hasFromParam: boolean,
+  hasToParam: boolean
+): boolean {
+  return (
+    ROUTES_WITH_YTD_DEFAULT.some((route) => url.includes(route)) && !hasFromParam && !hasToParam
+  );
+}

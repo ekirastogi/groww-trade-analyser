@@ -10,6 +10,10 @@ import {
   serializeTradeTypes,
 } from '../utils/filter-url.utils';
 import { routeNeedsDefaultTypes } from '../utils/trade-type-filter.utils';
+import {
+  defaultDateRangeForRoute,
+  routeNeedsDefaultDateRange,
+} from '../utils/date-range-preset.utils';
 
 @Injectable({ providedIn: 'root' })
 export class FilterUrlService {
@@ -20,7 +24,9 @@ export class FilterUrlService {
 
   constructor() {
     effect(() => {
-      if (this.started && this.state.report()) {
+      // Read the signal before any guard so the effect always tracks report loads.
+      const report = this.state.report();
+      if (this.started && report) {
         this.syncFromUrl();
       }
     });
@@ -46,8 +52,33 @@ export class FilterUrlService {
 
     const needsDefaultTypes = routeNeedsDefaultTypes(path, paramMap.has(FILTER_QUERY_KEYS.types));
     const needsDefaultBands = isWatchlist && !paramMap.has(FILTER_QUERY_KEYS.bands);
+    const needsDefaultDateRange =
+      !!report &&
+      routeNeedsDefaultDateRange(
+        path,
+        paramMap.has(FILTER_QUERY_KEYS.from),
+        paramMap.has(FILTER_QUERY_KEYS.to)
+      );
 
-    if (needsDefaultTypes || needsDefaultBands) {
+    const bounds = report ? { min: report.dateRange.min, max: report.dateRange.max } : null;
+    const dateDefaults = needsDefaultDateRange && bounds
+      ? defaultDateRangeForRoute(path, bounds)
+      : null;
+
+    if (report && bounds) {
+      const parsed = readGlobalFilters(paramMap, defaults);
+      this.applyParsedFilters(
+        {
+          ...parsed,
+          startDate: dateDefaults?.start ?? parsed.startDate,
+          endDate: dateDefaults?.end ?? parsed.endDate,
+        },
+        bounds.min,
+        bounds.max
+      );
+    }
+
+    if (needsDefaultTypes || needsDefaultBands || dateDefaults) {
       const patch: Record<string, string | null> = {};
       if (needsDefaultTypes) {
         patch[FILTER_QUERY_KEYS.types] = serializeTradeTypes(defaults);
@@ -55,21 +86,12 @@ export class FilterUrlService {
       if (needsDefaultBands) {
         patch[FILTER_QUERY_KEYS.bands] = 'band';
       }
-      if (needsDefaultTypes && report) {
-        this.applyParsedFilters(
-          readGlobalFilters(paramMap, defaults),
-          report.dateRange.min,
-          report.dateRange.max
-        );
+      if (dateDefaults) {
+        patch[FILTER_QUERY_KEYS.from] = dateDefaults.start;
+        patch[FILTER_QUERY_KEYS.to] = dateDefaults.end;
       }
       this.replaceQuery(patch, true);
-      return;
     }
-
-    if (!report) return;
-
-    const parsed = readGlobalFilters(paramMap, defaults);
-    this.applyParsedFilters(parsed, report.dateRange.min, report.dateRange.max);
   }
 
   updateTradeTypes(types: TradeType[]): void {
@@ -90,8 +112,8 @@ export class FilterUrlService {
     if (!report) return;
     this.state.applyFilters(start, end, types, chartPeriod, topStocks);
     this.replaceQuery({
-      [FILTER_QUERY_KEYS.from]: start !== report.dateRange.min ? start : null,
-      [FILTER_QUERY_KEYS.to]: end !== report.dateRange.max ? end : null,
+      [FILTER_QUERY_KEYS.from]: start,
+      [FILTER_QUERY_KEYS.to]: end,
       [FILTER_QUERY_KEYS.types]: serializeTradeTypes(types),
       [FILTER_QUERY_KEYS.chart]: chartPeriod && chartPeriod !== 'daily' ? chartPeriod : null,
       [FILTER_QUERY_KEYS.top]: topStocks && topStocks !== 10 ? String(topStocks) : null,
@@ -101,12 +123,17 @@ export class FilterUrlService {
   resetFilters(): void {
     const report = this.state.report();
     if (!report) return;
-    const defaults = defaultTradeTypesForRoute(this.router.url.split('?')[0]);
-    this.state.resetFilters(defaults);
+    const path = this.router.url.split('?')[0];
+    const defaults = defaultTradeTypesForRoute(path);
+    const bounds = { min: report.dateRange.min, max: report.dateRange.max };
+    const dateDefaults = defaultDateRangeForRoute(path, bounds);
+    const start = dateDefaults?.start ?? bounds.min;
+    const end = dateDefaults?.end ?? bounds.max;
+    this.state.applyFilters(start, end, defaults);
     this.replaceQuery({
       [FILTER_QUERY_KEYS.types]: serializeTradeTypes(defaults),
-      [FILTER_QUERY_KEYS.from]: null,
-      [FILTER_QUERY_KEYS.to]: null,
+      [FILTER_QUERY_KEYS.from]: start,
+      [FILTER_QUERY_KEYS.to]: end,
       [FILTER_QUERY_KEYS.chart]: null,
       [FILTER_QUERY_KEYS.top]: null,
     });
