@@ -18,16 +18,11 @@
 
   @if (!collapsible() || filtersExpanded()) {
     <div class="space-y-4 p-4">
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <label class="mb-1 block text-xs font-semibold text-slate-500">From</label>
-          <input type="date" class="input-field" [ngModel]="localStartDate()" (ngModelChange)="localStartDate.set($event)" />
-        </div>
-        <div>
-          <label class="mb-1 block text-xs font-semibold text-slate-500">To</label>
-          <input type="date" class="input-field" [ngModel]="localEndDate()" (ngModelChange)="localEndDate.set($event)" />
-        </div>
+      @if (showDateRange()) {
+        <app-date-range-filter variant="panel" />
+      }
 
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         @if (showChartFilters()) {
           <div>
             <label class="mb-1 block text-xs font-semibold text-slate-500">Chart Period</label>

@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
 import { formatCurrency } from '../../utils/format.utils';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
+import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
 
 type SortDir = 'asc' | 'desc';
@@ -11,7 +12,7 @@ type SortDir = 'asc' | 'desc';
 @Component({
   selector: 'app-charges',
   standalone: true,
-  imports: [CommonModule, RouterLink, FilterPanelComponent, ReportHistoryComponent],
+  imports: [CommonModule, RouterLink, FilterPanelComponent, DateRangeFilterComponent, ReportHistoryComponent],
   templateUrl: './charges.component.html',
 })
 export class ChargesComponent implements OnInit {

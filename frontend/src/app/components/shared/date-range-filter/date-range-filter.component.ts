@@ -57,8 +57,12 @@ export class DateRangeFilterComponent {
   onCustomDateChange(which: 'start' | 'end', value: string): void {
     const report = this.state.report();
     if (!report || !value) return;
-    const start = which === 'start' ? value : this.state.startDate();
-    const end = which === 'end' ? value : this.state.endDate();
+    let start = which === 'start' ? value : this.state.startDate();
+    let end = which === 'end' ? value : this.state.endDate();
+    if (start && end && start > end) {
+      if (which === 'start') end = start;
+      else start = end;
+    }
     this.filterUrl.updateDateRange(start, end, this.state.selectedTradeTypes());
   }
 }

@@ -30,6 +30,12 @@
     </div>
   } @else {
     <div class="watchlist-sticky-toolbar">
+      <div class="watchlist-filters">
+        <div class="min-w-0 flex-1 basis-full">
+          <app-date-range-filter />
+        </div>
+      </div>
+
       <button
         type="button"
         class="watchlist-filter-toggle lg:hidden"
@@ -50,10 +56,6 @@
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
           <app-trade-type-filter [compact]="true" />
-        </div>
-        <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
-        <div class="min-w-0 flex-1 basis-full">
-          <app-date-range-filter />
         </div>
         <div class="watchlist-filter-divider hidden h-5 w-px bg-slate-200 sm:block"></div>
         <div class="flex min-w-0 flex-wrap items-center gap-2">

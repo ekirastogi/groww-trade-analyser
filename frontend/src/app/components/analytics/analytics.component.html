@@ -15,11 +15,14 @@
 } @else {
   @if (analysis(); as data) {
     <div class="analytics-page space-y-5">
-      <div class="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-        <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
-        <app-trade-type-filter [compact]="true" />
+      <div class="flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
+          <app-trade-type-filter [compact]="true" />
+        </div>
+        <app-date-range-filter />
       </div>
-      <app-filter-panel class="block" [collapsible]="true" [showChartFilters]="true" (filtersChanged)="onFiltersChanged()" />
+      <app-filter-panel class="block" [collapsible]="true" [showChartFilters]="true" [showDateRange]="false" (filtersChanged)="onFiltersChanged()" />
 
       <!-- Hero KPI strip -->
       <div class="analytics-hero">

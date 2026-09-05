@@ -515,7 +515,7 @@
   }
 
   .date-range-preset {
-    @apply relative shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-center font-semibold text-slate-500 shadow-sm transition hover:border-kairo-400 hover:text-kairo-700;
+    @apply relative shrink-0 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-center font-semibold text-slate-500 shadow-sm transition hover:border-kairo-400 hover:text-kairo-700;
   }
 
   .date-range-preset-short {

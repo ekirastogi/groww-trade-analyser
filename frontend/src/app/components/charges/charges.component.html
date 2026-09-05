@@ -18,7 +18,11 @@
       <a routerLink="/" class="btn-secondary hidden sm:inline-flex">← Dashboard</a>
     </div>
 
-    <app-filter-panel class="mb-4 block sm:mb-5" [collapsible]="true" />
+    <div class="mb-4 rounded-xl border border-slate-200 bg-white px-3 py-2 sm:mb-5">
+      <app-date-range-filter />
+    </div>
+
+    <app-filter-panel class="mb-4 block sm:mb-5" [collapsible]="true" [showDateRange]="false" />
 
     <div class="mb-4 grid grid-cols-2 gap-3 sm:mb-6 lg:grid-cols-3">
       @for (stat of [
