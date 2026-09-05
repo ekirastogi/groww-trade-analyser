@@ -5,7 +5,6 @@ import { RouterLink } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
 import { LazyTradeLoaderService } from '../../services/lazy-trade-loader.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
-import { FilterUrlService } from '../../services/filter-url.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { ClientAccountService, ClientAccount } from '../../services/client-account.service';
 import {
@@ -38,6 +37,7 @@ import {
 } from '../../utils/stock-scenario.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
+import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 
 type PeriodColumnKey = 'period' | 'tradeCount' | 'totalBuyValue' | 'totalSellValue' | 'realisedPnL' | 'allocatedCharges' | 'netPnL' | 'winRate';
 
@@ -69,13 +69,12 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent],
+  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent, DateRangeFilterComponent],
   templateUrl: './dashboard.component.html',
 })
 export class DashboardComponent implements OnInit {
   readonly state = inject(ReportStateService);
   readonly filteredStocks = inject(FilteredStockService);
-  private filterUrl = inject(FilterUrlService);
   private pageShell = inject(PageShellService);
   private clientSvc = inject(ClientAccountService);
   readonly lazyTrades = inject(LazyTradeLoaderService);
@@ -261,18 +260,6 @@ export class DashboardComponent implements OnInit {
   async loadClient(clientCode: string): Promise<void> {
     await this.state.loadFromClient(clientCode);
     this.clients.set(await this.clientSvc.listClients());
-  }
-
-  onDateFilterChange(which: 'start' | 'end', value: string): void {
-    const report = this.state.report();
-    if (!report) return;
-    const start = which === 'start' ? value : this.state.startDate();
-    const end = which === 'end' ? value : this.state.endDate();
-    this.filterUrl.updateDateRange(start, end, this.state.selectedTradeTypes());
-  }
-
-  resetDateFilters(): void {
-    this.filterUrl.resetFilters();
   }
 
   setTab(tab: TabId): void {

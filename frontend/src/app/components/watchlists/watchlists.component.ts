@@ -24,6 +24,7 @@ import {
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
+import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 import { MarketCapFilterComponent } from '../shared/market-cap-filter/market-cap-filter.component';
 import { MARKET_CAP_LABELS, MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
 import { summariseTradesByDay, TradeDaySummary } from '../../utils/trade-day-summary.utils';
@@ -56,7 +57,7 @@ interface AutoTierTab {
 @Component({
   selector: 'app-watchlists',
   standalone: true,
-  imports: [CommonModule, RouterLink, TradeTypeFilterComponent, MarketCapFilterComponent],
+  imports: [CommonModule, RouterLink, TradeTypeFilterComponent, DateRangeFilterComponent, MarketCapFilterComponent],
   templateUrl: './watchlists.component.html',
 })
 export class WatchlistsComponent implements OnInit, OnDestroy {
@@ -154,7 +155,13 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     const band = this.tierMode() === 'band' ? 'Exclusive' : 'Cumulative';
     const caps = this.selectedMarketCapTiers();
     const cap = caps.length ? caps.map((tier) => MARKET_CAP_LABELS[tier]).join(', ') : 'All caps';
-    return `${trade} · ${band} · ${cap}`;
+    const report = this.state.report();
+    const dates =
+      report &&
+      (this.state.startDate() !== report.dateRange.min || this.state.endDate() !== report.dateRange.max)
+        ? `${this.formatDate(this.state.startDate())} – ${this.formatDate(this.state.endDate())}`
+        : 'Inception';
+    return `${dates} · ${trade} · ${band} · ${cap}`;
   });
 
   lossTierTabs = computed(() =>

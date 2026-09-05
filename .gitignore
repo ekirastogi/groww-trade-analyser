@@ -4,8 +4,8 @@ backend/bin/
 backend/groww-pnl-analyzer
 backend/*.exe
 
-# Cloud Functions (not used; ignore if recreated locally)
-functions/
+# Cloud Functions (Firebase; not used — ignore only repo-root functions/)
+/functions/
 
 # Firebase
 firebase-debug.log

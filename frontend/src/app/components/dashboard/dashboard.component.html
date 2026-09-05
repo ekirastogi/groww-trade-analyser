@@ -38,19 +38,9 @@
       <span class="col-span-full text-slate-400 sm:col-auto">{{ state.report()!.stockSummary.length }} stocks · {{ data.summary.tradeCount }} trades</span>
     </div>
 
-    <div class="mb-2 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 sm:flex-row sm:flex-wrap sm:items-end">
+    <div class="mb-2 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
       <app-trade-type-filter [compact]="true" />
-      <div class="flex flex-wrap items-end gap-2">
-        <label class="text-[10px] font-medium text-slate-500">
-          From
-          <input type="date" class="input-field mt-0.5 block py-1 text-xs" [ngModel]="state.startDate()" (ngModelChange)="onDateFilterChange('start', $event)" />
-        </label>
-        <label class="text-[10px] font-medium text-slate-500">
-          To
-          <input type="date" class="input-field mt-0.5 block py-1 text-xs" [ngModel]="state.endDate()" (ngModelChange)="onDateFilterChange('end', $event)" />
-        </label>
-        <button type="button" class="btn-ghost px-2 py-1 text-xs" (click)="resetDateFilters()">Reset dates</button>
-      </div>
+      <app-date-range-filter />
     </div>
 
     <div class="card overflow-hidden">
