@@ -6,6 +6,15 @@ export function formatCurrency(value: number): string {
   }).format(value);
 }
 
+export function formatPrice(value: number): string {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 function compactMagnitude(abs: number, divisor: number, suffix: string): string {
   const scaled = abs / divisor;
   const digits = scaled >= 10 ? 1 : 2;

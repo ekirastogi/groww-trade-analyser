@@ -55,9 +55,10 @@ export const routes: Routes = [
         pathMatch: 'full',
       },
       {
-        path: 'analytics',
-        component: AnalyticsComponent,
-        data: { title: 'Analytics', subtitle: 'Charts and performance breakdowns' },
+        path: 'utils',
+        loadComponent: () =>
+          import('./components/utils/utils.component').then((m) => m.UtilsComponent),
+        data: { title: 'Utils', subtitle: 'Trading calculators and helpers' },
       },
       {
         path: 'charges',

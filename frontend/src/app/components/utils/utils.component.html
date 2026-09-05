@@ -1,0 +1,22 @@
+<div class="utils-page space-y-4">
+  <div class="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1">
+    @for (tab of tabs; track tab.id) {
+      <button
+        type="button"
+        class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+        [class.bg-slate-900]="activeTab() === tab.id"
+        [class.text-white]="activeTab() === tab.id"
+        [class.shadow-sm]="activeTab() === tab.id"
+        [class.hover:bg-slate-900]="activeTab() === tab.id"
+        [class.hover:text-white]="activeTab() === tab.id"
+        (click)="setTab(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    }
+  </div>
+
+  @if (activeTab() === 'avg') {
+    <app-avg-calculator />
+  }
+</div>
