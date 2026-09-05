@@ -34,6 +34,7 @@ function mergeWithDefaults(stored: ChargeRates): ChargeRates {
     segments: {
       delivery: { ...DEFAULT_CHARGE_RATES.segments.delivery, ...stored?.segments?.delivery },
       intraday: { ...DEFAULT_CHARGE_RATES.segments.intraday, ...stored?.segments?.intraday },
+      mtf: { ...DEFAULT_CHARGE_RATES.segments.mtf, ...stored?.segments?.mtf },
     },
   };
 }

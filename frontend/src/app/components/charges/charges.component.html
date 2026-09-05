@@ -1,8 +1,21 @@
-@if (!state.hasReport()) {
+<div class="pill-tabs mb-4 sm:mb-5">
+  @for (t of tabs; track t.id) {
+    <button type="button" class="pill-tab" [class.pill-tab-active]="tab() === t.id" (click)="setTab(t.id)">
+      {{ t.label }}
+    </button>
+  }
+</div>
+
+@if (tab() === 'calculator') {
+  <app-charges-calculator />
+} @else if (!state.hasReport()) {
   <div class="card p-8 text-center sm:p-12">
     <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">💰</div>
     <h3 class="text-lg font-semibold text-slate-900">No report loaded</h3>
-    <p class="mt-2 text-sm text-slate-500">Upload a P&amp;L report on the dashboard or pick a recent upload below.</p>
+    <p class="mt-2 text-sm text-slate-500">
+      Upload a P&amp;L report on the dashboard or pick a recent upload below. To price a trade
+      before placing it, use the <strong>Trade calculator</strong> tab.
+    </p>
     <a routerLink="/" class="btn-primary mt-6 inline-flex">Go to Dashboard</a>
   </div>
   @if (state.hasHistory()) {

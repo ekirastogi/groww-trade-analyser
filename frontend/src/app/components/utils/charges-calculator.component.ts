@@ -4,7 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { TradeDirection } from '../../models/trading-journal.models';
 import { ChargeBreakdown, ChargeSegment } from '../../models/charges.models';
 import { ChargesService } from '../../services/charges.service';
-import { CHARGE_SEGMENTS, CHARGE_SEGMENT_LABELS } from '../../utils/charges.utils';
+import {
+  CHARGE_SEGMENTS,
+  CHARGE_SEGMENT_LABELS,
+  DEFAULT_MTF_FUNDED_PCT,
+} from '../../utils/charges.utils';
 import { formatCurrency, formatPctSigned, formatPrice, pnlClass } from '../../utils/format.utils';
 import { readJson, writeJson } from '../../utils/local-store.utils';
 
@@ -16,6 +20,8 @@ interface PersistedState {
   entryPrice: number;
   exitPrice: number;
   quantity: number;
+  holdingDays: number;
+  fundedPct: number;
 }
 
 const FALLBACK: PersistedState = {
@@ -24,6 +30,8 @@ const FALLBACK: PersistedState = {
   entryPrice: 0,
   exitPrice: 0,
   quantity: 0,
+  holdingDays: 1,
+  fundedPct: DEFAULT_MTF_FUNDED_PCT,
 };
 
 const CHARGE_ROWS: { key: keyof ChargeBreakdown; label: string }[] = [
@@ -34,7 +42,9 @@ const CHARGE_ROWS: { key: keyof ChargeBreakdown; label: string }[] = [
   { key: 'ipft', label: 'IPFT' },
   { key: 'stampDuty', label: 'Stamp duty' },
   { key: 'dpCharges', label: 'DP charges' },
+  { key: 'pledgeCharges', label: 'Pledge / unpledge' },
   { key: 'gst', label: 'GST' },
+  { key: 'interest', label: 'MTF interest' },
 ];
 
 @Component({
@@ -81,6 +91,8 @@ export class ChargesCalculatorComponent {
   entryPrice = signal<number>(this.persisted.entryPrice);
   exitPrice = signal<number>(this.persisted.exitPrice);
   quantity = signal<number>(this.persisted.quantity);
+  holdingDays = signal<number>(this.persisted.holdingDays);
+  fundedPct = signal<number>(this.persisted.fundedPct);
 
   readonly formatCurrency = formatCurrency;
   readonly formatPrice = formatPrice;
@@ -100,9 +112,22 @@ export class ChargesCalculatorComponent {
     entryPrice: this.entryPrice(),
     exitPrice: this.exitPrice(),
     quantity: this.quantity(),
+    holdingDays: this.holdingDays(),
+    fundedPct: this.fundedPct(),
   }));
 
+  isMtf = computed(() => this.segment() === 'mtf');
+
   ready = computed(() => this.entryPrice() > 0 && this.exitPrice() > 0 && this.quantity() > 0);
+
+  /** Only MTF is funded, so holding days and funded share are ignored elsewhere. */
+  private fundingInput = computed(() =>
+    this.isMtf() ? { holdingDays: this.holdingDays(), fundedPct: this.fundedPct() } : {}
+  );
+
+  fundedAmount = computed(() =>
+    this.isMtf() ? (this.entryPrice() * this.quantity() * this.fundedPct()) / 100 : 0
+  );
 
   result = computed(() => {
     if (!this.ready()) return null;
@@ -112,6 +137,7 @@ export class ChargesCalculatorComponent {
       quantity: this.quantity(),
       entryPrice: this.entryPrice(),
       exitPrice: this.exitPrice(),
+      ...this.fundingInput(),
     });
   });
 
@@ -122,6 +148,7 @@ export class ChargesCalculatorComponent {
       direction: this.direction(),
       quantity: this.quantity(),
       entryPrice: this.entryPrice(),
+      ...this.fundingInput(),
     });
   });
 
@@ -133,7 +160,10 @@ export class ChargesCalculatorComponent {
     this.direction.set(direction);
   }
 
-  setNumber(target: 'entryPrice' | 'exitPrice' | 'quantity', value: unknown): void {
+  setNumber(
+    target: 'entryPrice' | 'exitPrice' | 'quantity' | 'holdingDays' | 'fundedPct',
+    value: unknown
+  ): void {
     const parsed = Number(value);
     this[target].set(Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
   }

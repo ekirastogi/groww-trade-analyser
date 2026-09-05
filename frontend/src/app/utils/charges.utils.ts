@@ -1,3 +1,4 @@
+import { TradeSegment } from '../models/trading-journal.models';
 import {
   ChargeBreakdown,
   ChargeLegInput,
@@ -35,6 +36,25 @@ export const DEFAULT_CHARGE_RATES: ChargeRates = {
       dpDepositoryPerSell: 3.5,
       dpBrokerPerSell: 16.5,
       dpBrokerWaiverBelowValue: 100,
+      pledgePerBuy: 0,
+      unpledgePerSell: 0,
+      interestPctPerYear: 0,
+    },
+    mtf: {
+      brokeragePct: 0.1,
+      brokerageCap: 20,
+      brokerageMin: 5,
+      sttBuyPct: 0.1,
+      sttSellPct: 0.1,
+      stampDutyBuyPct: 0.015,
+      exchangeTxnPct: 0.00297,
+      ipftPct: 0.0001,
+      dpDepositoryPerSell: 3.5,
+      dpBrokerPerSell: 16.5,
+      dpBrokerWaiverBelowValue: 100,
+      pledgePerBuy: 20,
+      unpledgePerSell: 20,
+      interestPctPerYear: 14.95,
     },
     intraday: {
       brokeragePct: 0.1,
@@ -48,6 +68,9 @@ export const DEFAULT_CHARGE_RATES: ChargeRates = {
       dpDepositoryPerSell: 0,
       dpBrokerPerSell: 0,
       dpBrokerWaiverBelowValue: 0,
+      pledgePerBuy: 0,
+      unpledgePerSell: 0,
+      interestPctPerYear: 0,
     },
   },
 };
@@ -55,9 +78,13 @@ export const DEFAULT_CHARGE_RATES: ChargeRates = {
 export const CHARGE_SEGMENT_LABELS: Record<ChargeSegment, string> = {
   delivery: 'Delivery',
   intraday: 'Intraday',
+  mtf: 'MTF',
 };
 
-export const CHARGE_SEGMENTS: ChargeSegment[] = ['delivery', 'intraday'];
+export const CHARGE_SEGMENTS: ChargeSegment[] = ['delivery', 'intraday', 'mtf'];
+
+/** Default share of an MTF position funded by the broker (4x leverage). */
+export const DEFAULT_MTF_FUNDED_PCT = 75;
 
 /** Equity price tick on Indian exchanges. */
 export const PRICE_TICK = 0.05;
@@ -80,6 +107,8 @@ function emptyBreakdown(): ChargeBreakdown {
     ipft: 0,
     stampDuty: 0,
     dpCharges: 0,
+    pledgeCharges: 0,
+    interest: 0,
     gst: 0,
     total: 0,
   };
@@ -116,6 +145,23 @@ function calcDpCharge(turnover: number, segment: SegmentChargeRates): number {
   return segment.dpDepositoryPerSell + broker;
 }
 
+/**
+ * MTF funding interest: charged daily on the amount the broker funded, so it grows with
+ * how long the position is held. Zero for delivery and intraday.
+ */
+function calcFundingInterest(
+  entryValue: number,
+  input: { segment: ChargeSegment; holdingDays?: number; fundedPct?: number },
+  rates: ChargeRates
+): number {
+  const annualPct = rates.segments[input.segment]?.interestPctPerYear ?? 0;
+  const days = Math.max(0, input.holdingDays ?? 0);
+  if (annualPct <= 0 || days <= 0 || !(entryValue > 0)) return 0;
+  const fundedPct = Math.min(100, Math.max(0, input.fundedPct ?? DEFAULT_MTF_FUNDED_PCT));
+  const fundedAmount = pctOf(entryValue, fundedPct);
+  return pctOf(fundedAmount, annualPct) * (days / 365);
+}
+
 export function calcLegCharges(
   input: ChargeLegInput,
   rates: ChargeRates = DEFAULT_CHARGE_RATES
@@ -135,7 +181,11 @@ export function calcLegCharges(
   const sebi = pctOf(turnover, rates.sebiPct);
   const stampDuty = isBuy ? pctOf(turnover, segment.stampDutyBuyPct) : 0;
   const dpCharges = isBuy ? 0 : calcDpCharge(turnover, segment);
-  const gst = pctOf(brokerage + exchangeTxn + ipft + sebi + dpCharges, rates.gstPct);
+  const pledgeCharges = isBuy ? segment.pledgePerBuy : segment.unpledgePerSell;
+  const gst = pctOf(
+    brokerage + exchangeTxn + ipft + sebi + dpCharges + pledgeCharges,
+    rates.gstPct
+  );
 
   return {
     turnover,
@@ -146,8 +196,19 @@ export function calcLegCharges(
     ipft,
     stampDuty,
     dpCharges,
+    pledgeCharges,
+    interest: 0,
     gst,
-    total: brokerage + stt + exchangeTxn + ipft + sebi + stampDuty + dpCharges + gst,
+    total:
+      brokerage +
+      stt +
+      exchangeTxn +
+      ipft +
+      sebi +
+      stampDuty +
+      dpCharges +
+      pledgeCharges +
+      gst,
   };
 }
 
@@ -161,6 +222,8 @@ export function addBreakdowns(a: ChargeBreakdown, b: ChargeBreakdown): ChargeBre
     ipft: a.ipft + b.ipft,
     stampDuty: a.stampDuty + b.stampDuty,
     dpCharges: a.dpCharges + b.dpCharges,
+    pledgeCharges: a.pledgeCharges + b.pledgeCharges,
+    interest: a.interest + b.interest,
     gst: a.gst + b.gst,
     total: a.total + b.total,
   };
@@ -184,7 +247,13 @@ export function calcRoundTrip(
   const entryValue = entryLeg.turnover;
   const exitValue = exitLeg.turnover;
   const grossPnL = long ? exitValue - entryValue : entryValue - exitValue;
-  const combined = addBreakdowns(entryLeg, exitLeg);
+  const interest = calcFundingInterest(entryValue, input, rates);
+  const legs = addBreakdowns(entryLeg, exitLeg);
+  const combined: ChargeBreakdown = {
+    ...legs,
+    interest,
+    total: legs.total + interest,
+  };
   const netPnL = grossPnL - combined.total;
 
   return {
@@ -210,6 +279,8 @@ export function chargeItems(breakdown: ChargeBreakdown): ChargeItem[] {
     { label: 'IPFT charges', amount: breakdown.ipft },
     { label: 'Stamp duty', amount: breakdown.stampDuty },
     { label: 'DP charges', amount: breakdown.dpCharges },
+    { label: 'Pledge / unpledge', amount: breakdown.pledgeCharges },
+    { label: 'MTF interest', amount: breakdown.interest },
     { label: 'GST', amount: breakdown.gst },
   ].filter((item) => item.amount > 0);
 }
@@ -294,6 +365,11 @@ export function calcLadder(
   };
 }
 
+/** MTF positions are held in the delivery segment, so trade records store them as such. */
+export function tradeSegmentForCharge(segment: ChargeSegment): TradeSegment {
+  return segment === 'intraday' ? 'intraday' : 'delivery';
+}
+
 /**
  * Maps a statement trade type onto a rate-card segment. Returns null for rows the equity
  * card cannot price (F&O), so callers can fall back instead of billing them as equity.
@@ -304,8 +380,9 @@ export function chargeSegmentForTradeType(tradeType: TradeType): ChargeSegment |
     case 'same_day':
       return 'intraday';
     case 'delivery':
-    case 'mtf':
       return 'delivery';
+    case 'mtf':
+      return 'mtf';
     default:
       return null;
   }
@@ -335,6 +412,8 @@ function scaleBreakdown(b: ChargeBreakdown, factor: number): ChargeBreakdown {
     ipft: b.ipft * factor,
     stampDuty: b.stampDuty * factor,
     dpCharges: b.dpCharges * factor,
+    pledgeCharges: b.pledgeCharges * factor,
+    interest: b.interest * factor,
     gst: b.gst * factor,
     total: b.total * factor,
   };

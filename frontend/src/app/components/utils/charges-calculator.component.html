@@ -48,7 +48,10 @@
     <section class="card overflow-hidden">
       <div class="border-b border-slate-100 px-4 py-3">
         <h3 class="text-sm font-semibold text-slate-900">Trade</h3>
-        <p class="mt-0.5 text-xs text-slate-500">Brokerage, STT, exchange, SEBI, IPFT, stamp duty, DP and GST.</p>
+        <p class="mt-0.5 text-xs text-slate-500">
+          Brokerage, STT, exchange, SEBI, IPFT, stamp duty, DP and GST — plus pledge fees and
+          funding interest on MTF.
+        </p>
       </div>
 
       <div class="space-y-3 p-4">
@@ -106,6 +109,39 @@
               (ngModelChange)="setNumber('quantity', $event)"
             />
           </label>
+          @if (isMtf()) {
+            <label class="field-label">
+              Days held
+              <input
+                class="input-field mt-0.5 !py-2"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                placeholder="0"
+                [ngModel]="holdingDays() || null"
+                (ngModelChange)="setNumber('holdingDays', $event)"
+              />
+            </label>
+            <label class="field-label">
+              Funded by broker (%)
+              <input
+                class="input-field mt-0.5 !py-2"
+                type="number"
+                inputmode="decimal"
+                min="0"
+                max="100"
+                step="1"
+                placeholder="75"
+                [ngModel]="fundedPct() || null"
+                (ngModelChange)="setNumber('fundedPct', $event)"
+              />
+            </label>
+            <p class="text-xs text-slate-500 sm:col-span-2">
+              Interest runs at 14.95% a year on the
+              {{ formatCurrency(fundedAmount()) }} Groww funds, so it grows the longer you hold.
+            </p>
+          }
         </div>
       </div>
     </section>

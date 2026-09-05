@@ -1,6 +1,7 @@
 import { TradeDirection, TradeSegment } from './trading-journal.models';
 
-export type ChargeSegment = TradeSegment;
+/** MTF is priced like delivery, plus pledge fees and interest on the funded amount. */
+export type ChargeSegment = TradeSegment | 'mtf';
 export type ChargeSide = 'buy' | 'sell';
 
 export interface SegmentChargeRates {
@@ -25,6 +26,12 @@ export interface SegmentChargeRates {
   dpBrokerPerSell: number;
   /** Sell turnover below which the broker's share of the DP fee is waived. */
   dpBrokerWaiverBelowValue: number;
+  /** Flat pledge fee per buy order, before GST. MTF only. */
+  pledgePerBuy: number;
+  /** Flat unpledge fee per sell order, before GST. MTF only. */
+  unpledgePerSell: number;
+  /** Annual interest on the funded amount. MTF only. */
+  interestPctPerYear: number;
 }
 
 export interface ChargeRates {
@@ -54,6 +61,10 @@ export interface ChargeBreakdown {
   ipft: number;
   stampDuty: number;
   dpCharges: number;
+  /** Pledge and unpledge fees. MTF only. */
+  pledgeCharges: number;
+  /** MTF funding interest. Charged per position held, not per leg. */
+  interest: number;
   gst: number;
   total: number;
 }
@@ -64,6 +75,10 @@ export interface RoundTripInput {
   quantity: number;
   entryPrice: number;
   exitPrice: number;
+  /** Days the position is held. Drives MTF interest; ignored elsewhere. */
+  holdingDays?: number;
+  /** Percent of the position funded by the broker. Drives MTF interest. */
+  fundedPct?: number;
 }
 
 export interface RoundTripResult {

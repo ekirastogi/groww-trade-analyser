@@ -6,7 +6,12 @@ import { TradeDirection } from '../../models/trading-journal.models';
 import { ChargeSegment } from '../../models/charges.models';
 import { ChargesService } from '../../services/charges.service';
 import { TradePlanService } from '../../services/trade-plan.service';
-import { CHARGE_SEGMENTS, CHARGE_SEGMENT_LABELS, roundToTick } from '../../utils/charges.utils';
+import {
+  CHARGE_SEGMENTS,
+  CHARGE_SEGMENT_LABELS,
+  roundToTick,
+  tradeSegmentForCharge,
+} from '../../utils/charges.utils';
 import { formatCurrency, formatPctSigned, formatPrice, pnlClass } from '../../utils/format.utils';
 import { readJson, writeJson } from '../../utils/local-store.utils';
 
@@ -362,7 +367,7 @@ export class ProfitTargetComponent {
     try {
       await this.tradePlans.create({
         symbol,
-        segment: this.segment(),
+        segment: tradeSegmentForCharge(this.segment()),
         direction: this.direction(),
         quantity: this.quantity(),
         entryPrice: this.entryPrice(),

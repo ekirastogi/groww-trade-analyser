@@ -6,13 +6,25 @@ import { formatCurrency } from '../../utils/format.utils';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
+import { ChargesCalculatorComponent } from '../utils/charges-calculator.component';
+import { readJson, writeJson } from '../../utils/local-store.utils';
 
 type SortDir = 'asc' | 'desc';
+type ChargesTab = 'statement' | 'calculator';
+
+const TAB_STORAGE_KEY = 'kairo-charges-tab';
 
 @Component({
   selector: 'app-charges',
   standalone: true,
-  imports: [CommonModule, RouterLink, FilterPanelComponent, DateRangeFilterComponent, ReportHistoryComponent],
+  imports: [
+    CommonModule,
+    RouterLink,
+    FilterPanelComponent,
+    DateRangeFilterComponent,
+    ReportHistoryComponent,
+    ChargesCalculatorComponent,
+  ],
   templateUrl: './charges.component.html',
 })
 export class ChargesComponent implements OnInit {
@@ -21,6 +33,17 @@ export class ChargesComponent implements OnInit {
 
   sortColumn = signal('amount');
   sortDirection = signal<SortDir>('desc');
+
+  readonly tabs: { id: ChargesTab; label: string }[] = [
+    { id: 'statement', label: 'Statement charges' },
+    { id: 'calculator', label: 'Trade calculator' },
+  ];
+  tab = signal<ChargesTab>(readJson<ChargesTab>(TAB_STORAGE_KEY, 'statement'));
+
+  setTab(tab: ChargesTab): void {
+    this.tab.set(tab);
+    writeJson(TAB_STORAGE_KEY, tab);
+  }
 
   analysis = computed(() => this.state.analysis());
 
