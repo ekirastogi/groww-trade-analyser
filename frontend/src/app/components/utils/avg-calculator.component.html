@@ -2,7 +2,9 @@
   <div class="avg-hero">
     <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Position average</p>
+        <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          {{ symbol() || 'Position average' }}
+        </p>
         <p class="mt-1 text-2xl font-bold tabular-nums sm:text-3xl" [class]="summary().avgBuy != null ? 'text-white' : 'text-slate-500'">
           {{ summary().avgBuy != null ? formatPrice(summary().avgBuy!) : '—' }}
         </p>
@@ -44,13 +46,56 @@
     </div>
   </div>
 
+  <!-- Saved sheets: this browser only -->
+  <div class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
+    <span class="pl-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Saved here</span>
+    @for (sheet of sheets(); track sheet.id) {
+      <button
+        type="button"
+        class="sheet-chip"
+        [class.sheet-chip-active]="sheetId() === sheet.id"
+        (click)="loadSheet(sheet.id)"
+      >
+        {{ sheet.symbol }}
+        <span class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-600" (click)="deleteSheet(sheet.id, $event)" aria-label="Delete saved stock">
+          <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </span>
+      </button>
+    } @empty {
+      <span class="text-xs text-slate-500">Nothing saved yet — add a stock name and hit Save.</span>
+    }
+    <button type="button" class="ml-auto rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" (click)="newSheet()">
+      + New
+    </button>
+  </div>
+
   <div class="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
     <section class="card overflow-hidden">
       <div class="border-b border-slate-100 px-4 py-3">
-        <h3 class="text-sm font-semibold text-slate-900">Fills</h3>
+        <h3 class="text-sm font-semibold text-slate-900">Stock &amp; fills</h3>
         <p class="mt-0.5 text-xs text-slate-500">Add buy and sell lots with quantity. Average and P&amp;L update live.</p>
       </div>
       <div class="space-y-3 p-4">
+        <div class="flex flex-wrap items-end gap-2">
+          <label class="min-w-[9rem] flex-1 field-label">
+            Stock name
+            <input
+              class="input-field mt-0.5 !py-2 uppercase"
+              type="text"
+              placeholder="e.g. RELIANCE"
+              [ngModel]="symbol()"
+              (ngModelChange)="setSymbol($event)"
+            />
+          </label>
+          <div class="flex rounded-lg bg-slate-100 p-0.5">
+            @for (seg of segments; track seg) {
+              <button type="button" class="mini-toggle" [class.mini-toggle-active]="segment() === seg" (click)="setSegment(seg)">
+                {{ segmentLabels[seg] }}
+              </button>
+            }
+          </div>
+        </div>
+
         <div class="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
           <div class="flex rounded-full bg-white p-0.5 shadow-sm">
             <button
@@ -74,7 +119,7 @@
               Sell
             </button>
           </div>
-          <label class="min-w-[7.5rem] flex-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <label class="min-w-[7.5rem] flex-1 field-label">
             Price
             <input
               class="input-field mt-0.5 !py-2"
@@ -87,7 +132,7 @@
               (keydown)="onFillKeydown($event)"
             />
           </label>
-          <label class="min-w-[6rem] flex-[0.7] text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <label class="min-w-[6rem] flex-[0.7] field-label">
             Qty
             <input
               class="input-field mt-0.5 !py-2"
@@ -120,11 +165,11 @@
                 {{ fill.side }}
               </span>
               <div>
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Price</p>
+                <p class="field-label">Price</p>
                 <p class="text-sm font-semibold tabular-nums text-slate-900">{{ formatPrice(fill.price) }}</p>
               </div>
               <div>
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Qty · Value</p>
+                <p class="field-label">Qty · Value</p>
                 <p class="text-sm font-semibold tabular-nums text-slate-900">
                   {{ fill.quantity | number }} · {{ formatCurrency(fill.price * fill.quantity) }}
                 </p>
@@ -140,45 +185,57 @@
             </div>
           }
         </div>
+
+        <div class="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <button type="button" class="btn-secondary !px-3 !py-1.5 text-xs" [disabled]="!canSave()" (click)="saveSheet()">
+            {{ sheetId() ? 'Update saved' : 'Save' }}
+          </button>
+          <button type="button" class="btn-primary !px-3 !py-1.5 text-xs" [disabled]="!canAddToBook() || savingToBook()" (click)="addToTradeBook()">
+            {{ savingToBook() ? 'Adding…' : 'Add to trade book' }}
+          </button>
+          <a routerLink="/trade-plans" class="text-xs font-semibold text-kairo-700 hover:underline">Open trade book</a>
+          @if (notice()) {
+            <span class="text-xs text-slate-500">{{ notice() }}</span>
+          }
+        </div>
       </div>
     </section>
 
     <section class="card overflow-hidden">
       <div class="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
         <div>
-          <h3 class="text-sm font-semibold text-slate-900">Targets</h3>
-          <p class="mt-0.5 text-xs text-slate-500">{{ positionLabel() }} · net P&amp;L is after charges.</p>
+          <h3 class="text-sm font-semibold text-slate-900">Partial targets</h3>
+          <p class="mt-0.5 text-xs text-slate-500">{{ positionLabel() }} · sell in slices, net is after charges.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-1">
-          <div class="flex rounded-lg bg-slate-100 p-0.5">
-            @for (seg of segments; track seg) {
-              <button type="button" class="mini-toggle" [class.mini-toggle-active]="segment() === seg" (click)="setSegment(seg)">
-                {{ segmentLabels[seg] }}
-              </button>
-            }
-          </div>
-          <div class="flex rounded-lg bg-slate-100 p-0.5">
-            @for (ex of exchanges; track ex) {
-              <button type="button" class="mini-toggle" [class.mini-toggle-active]="exchange() === ex" (click)="setExchange(ex)">
-                {{ ex }}
-              </button>
-            }
-          </div>
-        </div>
+        @if (targets().length > 1) {
+          <button type="button" class="rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" (click)="splitEvenly()">
+            Split evenly
+          </button>
+        }
       </div>
 
       <div class="space-y-3 p-4">
-        @if (breakeven(); as be) {
+        @if (position()) {
           <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
             <div>
               <p class="field-label">Breakeven exit</p>
-              <p class="text-base font-bold tabular-nums text-slate-900">{{ formatPrice(be) }}</p>
+              <p class="text-base font-bold tabular-nums text-slate-900">{{ breakeven() != null ? formatPrice(breakeven()!) : '—' }}</p>
             </div>
-            <p class="text-right text-xs text-slate-500">
-              Capital {{ formatCurrency(capital()) }}<br />
-              covers all charges both ways
-            </p>
+            <div class="text-right">
+              <p class="field-label">Unallocated</p>
+              <p
+                class="text-base font-bold tabular-nums"
+                [class.text-slate-900]="unallocatedQty() === 0"
+                [class.text-amber-600]="unallocatedQty() > 0"
+                [class.text-red-600]="unallocatedQty() < 0"
+              >
+                {{ unallocatedQty() | number }}
+              </p>
+            </div>
           </div>
+          @if (unallocatedQty() < 0) {
+            <p class="text-xs text-red-600">Targets add up to more than the position. Trim a slice.</p>
+          }
         }
 
         <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
@@ -191,8 +248,8 @@
             </button>
           </div>
 
-          @if (targetMode() === 'price') {
-            <div class="flex items-end gap-2">
+          <div class="flex items-end gap-2">
+            @if (targetMode() === 'price') {
               <label class="min-w-0 flex-1 field-label">
                 Target price
                 <input
@@ -206,10 +263,7 @@
                   (keydown)="onTargetKeydown($event)"
                 />
               </label>
-              <button type="button" class="btn-secondary !px-4 !py-2 text-sm" (click)="addTarget()">Add</button>
-            </div>
-          } @else {
-            <div class="flex items-end gap-2">
+            } @else {
               <label class="min-w-0 flex-1 field-label">
                 Profit I want (net)
                 <input
@@ -217,7 +271,7 @@
                   type="number"
                   inputmode="decimal"
                   min="0"
-                  step="100"
+                  [step]="profitUnit() === 'pct' ? 0.5 : 100"
                   [placeholder]="profitUnit() === 'pct' ? '2' : '5000'"
                   [(ngModel)]="draftProfit"
                   (keydown)="onTargetKeydown($event)"
@@ -227,12 +281,30 @@
                 <button type="button" class="mini-toggle" [class.mini-toggle-active]="profitUnit() === 'inr'" (click)="setProfitUnit('inr')">₹</button>
                 <button type="button" class="mini-toggle" [class.mini-toggle-active]="profitUnit() === 'pct'" (click)="setProfitUnit('pct')">%</button>
               </div>
-              <button type="button" class="btn-primary !px-4 !py-2 text-sm" (click)="addProfitTarget()">Get price</button>
-            </div>
-            <p class="mt-2 text-[11px] text-slate-500">
-              Solves the exit price that leaves this much in hand after brokerage, STT, and all other charges.
-            </p>
-          }
+            }
+            <label class="w-24 field-label">
+              Qty
+              <input
+                class="input-field mt-0.5 !py-2"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                step="1"
+                [placeholder]="unallocatedQty() > 0 ? (unallocatedQty() | number) : 'all'"
+                [(ngModel)]="draftTargetQty"
+                (keydown)="onTargetKeydown($event)"
+              />
+            </label>
+            <button type="button" class="btn-secondary !px-3 !py-2 text-sm" (click)="submitTarget()">Add</button>
+          </div>
+
+          <p class="mt-2 text-[11px] text-slate-500">
+            @if (targetMode() === 'profit') {
+              Solves the exit price that leaves this much in hand for that many shares, after all charges.
+            } @else {
+              Leave quantity blank to use whatever is still unallocated.
+            }
+          </p>
 
           @if (targetError()) {
             <p class="mt-2 text-xs text-red-600">{{ targetError() }}</p>
@@ -240,52 +312,102 @@
         </div>
 
         <div class="space-y-2">
-          @for (target of targetViews(); track target.id; let i = $index) {
+          @for (row of targetRows(); track row.target.id; let i = $index) {
             <div class="target-row">
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-baseline gap-2">
                   <span class="rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">T{{ i + 1 }}</span>
-                  <span class="text-lg font-bold tabular-nums text-slate-900">{{ formatPrice(target.price) }}</span>
-                  @if (target.fromAvg; as vs) {
-                    <span class="text-xs font-semibold tabular-nums" [class]="pnlClass(vs.pct)">{{ formatPctSigned(vs.pct) }}</span>
+                  <span class="text-lg font-bold tabular-nums text-slate-900">{{ formatPrice(row.target.price) }}</span>
+                  @if (row.slice && row.slice.quantity > 0) {
+                    <span class="text-xs font-semibold tabular-nums" [class]="pnlClass(row.slice.movePct)">{{ formatPctSigned(row.slice.movePct) }}</span>
                   }
                 </div>
-                <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600" (click)="removeTarget(target.id)" aria-label="Remove target">
-                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
+                <div class="flex items-center gap-1">
+                  <input
+                    class="qty-input"
+                    type="number"
+                    inputmode="numeric"
+                    min="0"
+                    step="1"
+                    [ngModel]="row.target.quantity || null"
+                    (ngModelChange)="setTargetQty(row.target.id, $event)"
+                    aria-label="Quantity to exit at this target"
+                  />
+                  <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600" (click)="removeTarget(row.target.id)" aria-label="Remove target">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </div>
               </div>
 
-              @if (target.netPnL != null) {
-                <div class="mt-2.5 grid grid-cols-3 gap-2">
+              @if (row.slice && row.slice.quantity > 0 && row.slice.price > 0) {
+                <p class="mt-1.5 text-[11px] text-slate-500">
+                  {{ row.slice.quantity | number }} shares · {{ row.slice.sharePct | number: '1.0-0' }}% of position
+                </p>
+                <div class="mt-2 grid grid-cols-3 gap-2">
                   <div class="target-metric">
                     <p class="target-metric-label">Gross</p>
-                    <p class="target-metric-value" [class]="pnlClass(target.grossPnL ?? 0)">{{ formatCurrency(target.grossPnL ?? 0) }}</p>
+                    <p class="target-metric-value" [class]="pnlClass(row.slice.grossPnL)">{{ formatCurrency(row.slice.grossPnL) }}</p>
                   </div>
                   <div class="target-metric">
                     <p class="target-metric-label">Charges</p>
-                    <p class="target-metric-value text-red-600">−{{ formatCurrency(target.charges ?? 0) }}</p>
+                    <p class="target-metric-value text-red-600">−{{ formatPrice(row.slice.charges) }}</p>
                   </div>
                   <div class="target-metric bg-slate-900">
                     <p class="target-metric-label !text-slate-400">Net</p>
                     <p
                       class="target-metric-value"
-                      [class.text-emerald-300]="target.netPnL > 0"
-                      [class.text-red-300]="target.netPnL < 0"
-                      [class.text-slate-200]="target.netPnL === 0"
-                    >{{ formatCurrency(target.netPnL) }}</p>
+                      [class.text-emerald-300]="row.slice.netPnL > 0"
+                      [class.text-red-300]="row.slice.netPnL < 0"
+                      [class.text-slate-200]="row.slice.netPnL === 0"
+                    >{{ formatCurrency(row.slice.netPnL) }}</p>
                   </div>
                 </div>
               } @else {
-                <p class="mt-2 text-xs text-slate-500">Add fills to see P&amp;L and charges at this level.</p>
+                <p class="mt-2 text-xs text-slate-500">Set a quantity to see P&amp;L and charges for this slice.</p>
               }
             </div>
           } @empty {
             <div class="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
               <p class="text-sm font-medium text-slate-700">No targets</p>
-              <p class="mt-1 text-xs text-slate-500">Add an exit level, or ask for a profit amount and get the price you need.</p>
+              <p class="mt-1 text-xs text-slate-500">Sell in parts — add a price or a profit goal per slice.</p>
             </div>
           }
         </div>
+
+        @if (ladder(); as total) {
+          @if (total.allocatedQty > 0) {
+            <div class="rounded-xl border border-slate-900 bg-slate-900 p-3 text-white">
+              <div class="flex items-center justify-between">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Whole ladder</p>
+                <p class="text-[11px] text-slate-400">
+                  {{ total.allocatedQty | number }} shares · avg exit {{ formatPrice(total.avgExitPrice) }}
+                </p>
+              </div>
+              <div class="mt-2 grid grid-cols-3 gap-2">
+                <div>
+                  <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Gross</p>
+                  <p class="mt-0.5 text-sm font-bold tabular-nums">{{ formatCurrency(total.grossPnL) }}</p>
+                </div>
+                <div>
+                  <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Charges</p>
+                  <p class="mt-0.5 text-sm font-bold tabular-nums text-red-300">−{{ formatPrice(total.charges) }}</p>
+                </div>
+                <div>
+                  <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Net</p>
+                  <p
+                    class="mt-0.5 text-sm font-bold tabular-nums"
+                    [class.text-emerald-300]="total.netPnL > 0"
+                    [class.text-red-300]="total.netPnL < 0"
+                    [class.text-slate-200]="total.netPnL === 0"
+                  >
+                    {{ formatCurrency(total.netPnL) }}
+                    <span class="text-[11px] font-medium text-slate-400">({{ formatPctSigned(total.netPnLPct) }})</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          }
+        }
       </div>
     </section>
   </div>

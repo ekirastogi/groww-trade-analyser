@@ -6,92 +6,76 @@
     <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>
   }
 
-  <div class="card p-4">
-    <h2 class="text-sm font-semibold text-slate-900">Fetch from Screener</h2>
-    <p class="mt-1 text-xs text-slate-500">
-      Search any NSE/BSE symbol and fetch latest fundamentals from
-      <a class="underline" href="https://www.screener.in/" target="_blank" rel="noopener">screener.in</a>
-      on demand via Supabase Edge Function.
-    </p>
-    <div class="mt-3 flex flex-wrap items-end gap-2">
-      <label class="block min-w-[12rem] flex-1 text-sm">
-        <span class="text-slate-500">Symbol</span>
-        <input
-          class="input-field mt-1 w-full uppercase"
-          placeholder="e.g. MAZAGONDOCKSHIPBUIL"
-          [ngModel]="screenerSearchSymbol()"
-          (ngModelChange)="screenerSearchSymbol.set($event)"
-          (keyup.enter)="searchAndFetchScreener()"
-        />
-      </label>
-      <button
-        type="button"
-        class="btn-primary"
-        [disabled]="!!fetchingSymbol() || !screenerSearchSymbol().trim()"
-        (click)="searchAndFetchScreener()"
-      >
-        {{ fetchingSymbol() ? 'Fetching…' : 'Fetch Screener data' }}
-      </button>
-      @if (previewStock(); as preview) {
-        <a class="btn-secondary" [routerLink]="['/stock', preview.symbol]">View stock page</a>
-        <button type="button" class="btn-secondary" [disabled]="busy()" (click)="savePreviewToRegistry()">
-          {{ busy() ? 'Saving…' : 'Save to registry' }}
-        </button>
-      }
-    </div>
-    @if (previewStock(); as preview) {
-      <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 class="font-semibold text-slate-900">{{ preview.name }}</h3>
-            <p class="text-xs text-slate-500">{{ preview.symbol }} · CMP {{ formatPrice(preview.currentPrice) }} · P/E {{ preview.pe ?? '—' }}</p>
-          </div>
-        </div>
-        <app-screener-fundamentals [stock]="preview" />
-      </div>
-    }
+  <div class="registry-toolbar">
+    <button
+      type="button"
+      class="btn-secondary"
+      [class.btn-toggle-on]="showScreenerPanel()"
+      [attr.aria-expanded]="showScreenerPanel()"
+      (click)="showScreenerPanel.set(!showScreenerPanel())"
+    >
+      {{ showScreenerPanel() ? 'Hide Screener fetch' : 'Fetch from Screener' }}
+    </button>
+    <button
+      type="button"
+      class="btn-secondary"
+      [class.btn-toggle-on]="showLabelPanel()"
+      [attr.aria-expanded]="showLabelPanel()"
+      (click)="showLabelPanel.set(!showLabelPanel())"
+    >
+      {{ showLabelPanel() ? 'Hide labels' : 'Manage labels' }}
+    </button>
   </div>
 
-  <div class="card p-4">
-    <h2 class="text-sm font-semibold text-slate-900">Labels</h2>
-    <p class="mt-1 text-xs text-slate-500">
-      Create labels, then tag stocks. Filter the list below by a label. Deleting a label removes it from every stock. Labels cannot be renamed.
-    </p>
-    <div class="mt-3 flex flex-wrap items-end gap-2">
-      <label class="block min-w-[12rem] flex-1 text-sm">
-        <span class="text-slate-500">New label</span>
-        <input
-          class="input-field mt-1 w-full"
-          placeholder="e.g. Watch, Core, Swing"
-          [(ngModel)]="newLabelName"
-          (keyup.enter)="createLabel()"
-        />
-      </label>
-      <button type="button" class="btn-primary" [disabled]="labelsBusy() || !newLabelName.trim()" (click)="createLabel()">
-        {{ labelsBusy() ? 'Saving…' : 'Add label' }}
-      </button>
-    </div>
-    @if (labels().length) {
-      <ul class="mt-3 flex flex-wrap gap-2">
-        @for (label of labels(); track label.id) {
-          <li class="label-manage-chip">
-            <span>{{ label.name }}</span>
-            <span class="text-xs text-slate-400">{{ labelCount(label.id) }}</span>
-            <button
-              type="button"
-              class="text-xs text-red-500 hover:underline"
-              [disabled]="labelsBusy()"
-              (click)="deleteLabel(label)"
-            >
-              Delete
-            </button>
-          </li>
+  @if (showScreenerPanel()) {
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-slate-900">Fetch from Screener</h2>
+      <div class="mt-3 flex flex-wrap items-end gap-2">
+        <label class="block min-w-[12rem] flex-1 text-sm">
+          <span class="text-slate-500">Symbol</span>
+          <input
+            class="input-field mt-1 w-full uppercase"
+            placeholder="e.g. MAZAGONDOCKSHIPBUIL"
+            [ngModel]="screenerSearchSymbol()"
+            (ngModelChange)="screenerSearchSymbol.set($event)"
+            (keyup.enter)="searchAndFetchScreener()"
+          />
+        </label>
+        <button
+          type="button"
+          class="btn-primary"
+          [disabled]="!!fetchingSymbol() || !screenerSearchSymbol().trim()"
+          (click)="searchAndFetchScreener()"
+        >
+          {{ fetchingSymbol() ? 'Fetching…' : 'Fetch Screener data' }}
+        </button>
+        @if (previewStock(); as preview) {
+          <a class="btn-secondary" [routerLink]="['/stock', preview.symbol]">View stock page</a>
+          <button type="button" class="btn-secondary" [disabled]="busy()" (click)="savePreviewToRegistry()">
+            {{ busy() ? 'Saving…' : 'Save to registry' }}
+          </button>
         }
-      </ul>
-    } @else {
-      <p class="mt-3 text-xs text-slate-400">No labels yet. Add one to start tagging stocks.</p>
-    }
-  </div>
+      </div>
+      @if (previewStock(); as preview) {
+        <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="font-semibold text-slate-900">{{ preview.name }}</h3>
+              <p class="text-xs text-slate-500">{{ preview.symbol }} · CMP {{ formatPrice(preview.currentPrice) }} · P/E {{ preview.pe ?? '—' }}</p>
+            </div>
+          </div>
+          <app-screener-fundamentals [stock]="preview" />
+        </div>
+      }
+    </div>
+  }
+
+  @if (showLabelPanel()) {
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-slate-900">Labels</h2>
+      <app-stock-labels-manager [allowDelete]="true" />
+    </div>
+  }
 
   <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
     <div>
@@ -235,33 +219,21 @@
     <div class="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="text-sm font-semibold text-slate-900">Stock registry</h2>
-        <input
-          type="search"
-          class="input-field w-full max-w-sm"
-          placeholder="Search by symbol or name…"
-          [ngModel]="searchQuery()"
-          (ngModelChange)="onSearchChange($event)"
-        />
-      </div>
-      <div class="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          class="label-filter-pill"
-          [class.label-filter-pill-active]="activeLabelId() === 'all'"
-          (click)="setLabelFilter('all')"
-        >
-          All ({{ stockCount() }})
-        </button>
-        @for (label of labels(); track label.id) {
-          <button
-            type="button"
-            class="label-filter-pill"
-            [class.label-filter-pill-active]="activeLabelId() === label.id"
-            (click)="setLabelFilter(label.id)"
-          >
-            {{ label.name }} ({{ labelCount(label.id) }})
-          </button>
-        }
+        <div class="registry-filter-row">
+          <app-label-filter-select
+            [options]="labelFilterOptions()"
+            [allCount]="stockCount()"
+            [selectedIds]="activeLabelIds()"
+            (selectionChange)="setLabelFilter($event)"
+          />
+          <input
+            type="search"
+            class="input-field w-full sm:max-w-sm"
+            placeholder="Search by symbol or name…"
+            [ngModel]="searchQuery()"
+            (ngModelChange)="onSearchChange($event)"
+          />
+        </div>
       </div>
     </div>
 
@@ -282,8 +254,8 @@
       </div>
     } @else if (!filteredStocks().length) {
       <div class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">
-        @if (activeLabelId() !== 'all') {
-          No stocks with this label{{ searchQuery().trim() ? ' match your search' : '' }}.
+        @if (activeLabelIds().length) {
+          No stocks with {{ activeLabelIds().length === 1 ? 'this label' : 'these labels' }}{{ searchQuery().trim() ? ' match your search' : '' }}.
         } @else {
           No stocks match your search.
         }

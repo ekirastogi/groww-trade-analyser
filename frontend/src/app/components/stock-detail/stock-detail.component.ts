@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal, effect, OnInit } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { switchMap, of } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
@@ -11,12 +11,12 @@ import { TradeLedgerService } from '../../services/trade-ledger.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { RegistryStockService } from '../../services/registry-stock.service';
-import { RegistryLabelService } from '../../services/registry-label.service';
+import { StockLabelsStore } from '../../services/stock-labels.store';
 import { ScreenerService } from '../../services/screener.service';
 import { TradingChartComponent } from '../trading-chart/trading-chart.component';
 import { ScreenerFundamentalsComponent } from '../screener-fundamentals/screener-fundamentals.component';
-import { StockLabelPickerComponent } from '../stock-labels/stock-label-picker.component';
-import { RegistryLabel, RegistryStock } from '../../models/trading-journal.models';
+import { StockLabelsManagerComponent } from '../stock-labels/stock-labels-manager.component';
+import { RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency, formatPct } from '../../utils/format.utils';
 import { formatDataAge, formatFetchedAt } from '../../utils/data-age.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
@@ -25,7 +25,7 @@ import { Trade } from '../../models/trade.models';
 @Component({
   selector: 'app-stock-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TradingChartComponent, ScreenerFundamentalsComponent, StockLabelPickerComponent],
+  imports: [CommonModule, FormsModule, TradingChartComponent, ScreenerFundamentalsComponent, StockLabelsManagerComponent],
   templateUrl: './stock-detail.component.html',
 })
 export class StockDetailComponent implements OnInit {
@@ -38,7 +38,7 @@ export class StockDetailComponent implements OnInit {
   readonly reportState = inject(ReportStateService);
   private ledger = inject(TradeLedgerService);
   private registrySvc = inject(RegistryStockService);
-  private labelSvc = inject(RegistryLabelService);
+  readonly labelStore = inject(StockLabelsStore);
   private screenerSvc = inject(ScreenerService);
 
   readonly tableSort = new TableSortState('sellDate', 'desc');
@@ -51,9 +51,25 @@ export class StockDetailComponent implements OnInit {
   screenerError = signal<string | null>(null);
   screenerSuccess = signal<string | null>(null);
   registryStock = signal<RegistryStock | null>(null);
-  labels = signal<RegistryLabel[]>([]);
-  selectedLabelIds = signal<string[]>([]);
-  labelsBusy = signal(false);
+  showLabelPanel = signal(false);
+
+  /** Labels currently tagged to this stock, for the read-only chips in the hero. */
+  assignedLabels = computed(() => {
+    const ids = new Set(this.labelStore.labelIdsFor(this.symbol()));
+    return this.labelStore.labels().filter((label) => ids.has(label.id));
+  });
+
+  /** Passed to the label manager so tagging also lists the stock in the registry. */
+  readonly ensureRegistryRow = async (): Promise<void> => {
+    const sym = this.symbol();
+    if (!sym || this.registryStock()) return;
+    const row = await this.registrySvc.ensureListed(sym, {
+      name: this.displayName(),
+      currentPrice: this.displayPrice()?.value,
+      exchange: this.displayExchange(),
+    });
+    this.registryStock.set(row);
+  };
 
   formatFetchedAt = formatFetchedAt;
   formatDataAge = formatDataAge;
@@ -165,11 +181,10 @@ export class StockDetailComponent implements OnInit {
     const sym = this.symbol();
     if (!sym) {
       this.registryStock.set(null);
-      this.selectedLabelIds.set([]);
       return;
     }
     void this.registrySvc.getBySymbol(sym).then((row) => this.registryStock.set(row));
-    void this.loadLabels(sym);
+    void this.labelStore.ensureLoaded();
   }, { allowSignalWrites: true });
 
   myTrades = signal<Trade[]>([]);
@@ -251,56 +266,6 @@ export class StockDetailComponent implements OnInit {
 
   goBack(): void {
     this.location.back();
-  }
-
-  private async loadLabels(symbol: string): Promise<void> {
-    try {
-      const [labels, assignments] = await Promise.all([
-        this.labelSvc.listLabels(),
-        this.labelSvc.listAssignments(),
-      ]);
-      this.labels.set(labels);
-      this.selectedLabelIds.set(assignments.get(symbol.toUpperCase()) ?? []);
-    } catch {
-      this.labels.set([]);
-      this.selectedLabelIds.set([]);
-    }
-  }
-
-  async addLabel(labelId: string): Promise<void> {
-    const sym = this.symbol();
-    if (!sym || this.labelsBusy()) return;
-    this.labelsBusy.set(true);
-    this.screenerError.set(null);
-    try {
-      const row = await this.registrySvc.ensureListed(sym, {
-        name: this.displayName(),
-        currentPrice: this.displayPrice()?.value,
-        exchange: this.displayExchange(),
-      });
-      this.registryStock.set(row);
-      await this.labelSvc.addToStock(sym, labelId);
-      this.selectedLabelIds.update((ids) => (ids.includes(labelId) ? ids : [...ids, labelId]));
-    } catch (e) {
-      this.screenerError.set(e instanceof Error ? e.message : 'Could not add label');
-    } finally {
-      this.labelsBusy.set(false);
-    }
-  }
-
-  async removeLabel(labelId: string): Promise<void> {
-    const sym = this.symbol();
-    if (!sym || this.labelsBusy()) return;
-    this.labelsBusy.set(true);
-    this.screenerError.set(null);
-    try {
-      await this.labelSvc.removeFromStock(sym, labelId);
-      this.selectedLabelIds.update((ids) => ids.filter((id) => id !== labelId));
-    } catch (e) {
-      this.screenerError.set(e instanceof Error ? e.message : 'Could not remove label');
-    } finally {
-      this.labelsBusy.set(false);
-    }
   }
 
   ngOnInit(): void {

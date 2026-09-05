@@ -1,3 +1,5 @@
+import { TradeDirection } from '../models/trading-journal.models';
+
 export type FillSide = 'buy' | 'sell';
 
 export interface AvgFill {
@@ -7,9 +9,11 @@ export interface AvgFill {
   quantity: number;
 }
 
+/** A partial exit level: sell this many shares of the position at this price. */
 export interface AvgTarget {
   id: string;
   price: number;
+  quantity: number;
 }
 
 export interface AvgCalculatorSummary {
@@ -34,19 +38,6 @@ export interface AvgPosition {
   avgPrice: number;
 }
 
-export interface AvgTargetView {
-  id: string;
-  price: number;
-  /** Distance from the open position average, or from the buy average when flat. */
-  fromAvg: { delta: number; pct: number } | null;
-  grossPnL: number | null;
-  charges: number | null;
-  netPnL: number | null;
-}
-
-/** Charges for exiting `position` at `exitPrice`. */
-export type AvgChargeFn = (position: AvgPosition, exitPrice: number) => number;
-
 function newId(): string {
   return crypto.randomUUID();
 }
@@ -55,8 +46,8 @@ export function createFill(side: FillSide, price: number, quantity: number): Avg
   return { id: newId(), side, price, quantity };
 }
 
-export function createTarget(price: number): AvgTarget {
-  return { id: newId(), price };
+export function createTarget(price: number, quantity: number): AvgTarget {
+  return { id: newId(), price, quantity };
 }
 
 export function summarizeFills(fills: AvgFill[]): AvgCalculatorSummary {
@@ -102,10 +93,6 @@ export function summarizeFills(fills: AvgFill[]): AvgCalculatorSummary {
   };
 }
 
-function distance(from: number, to: number): { delta: number; pct: number } {
-  return { delta: to - from, pct: from ? ((to - from) / from) * 100 : 0 };
-}
-
 export function openPosition(summary: AvgCalculatorSummary): AvgPosition | null {
   if (summary.remainingQty > 0 && summary.remainingAvg != null && summary.remainingSide) {
     return {
@@ -120,33 +107,7 @@ export function openPosition(summary: AvgCalculatorSummary): AvgPosition | null 
   return null;
 }
 
-export function grossPnLAtTarget(position: AvgPosition, exitPrice: number): number {
-  return position.side === 'buy'
-    ? (exitPrice - position.avgPrice) * position.quantity
-    : (position.avgPrice - exitPrice) * position.quantity;
-}
-
-export function evaluateTargets(
-  targets: AvgTarget[],
-  summary: AvgCalculatorSummary,
-  chargeFn?: AvgChargeFn
-): AvgTargetView[] {
-  const position = openPosition(summary);
-  const referenceAvg = position?.avgPrice ?? summary.avgBuy ?? summary.avgSell;
-
-  return [...targets]
-    .sort((a, b) => a.price - b.price)
-    .map((target) => {
-      const grossPnL = position ? grossPnLAtTarget(position, target.price) : null;
-      const charges = position && chargeFn ? chargeFn(position, target.price) : null;
-
-      return {
-        id: target.id,
-        price: target.price,
-        fromAvg: referenceAvg != null ? distance(referenceAvg, target.price) : null,
-        grossPnL,
-        charges,
-        netPnL: grossPnL == null ? null : grossPnL - (charges ?? 0),
-      };
-    });
+/** Position direction in the terms the charges service and trade book use. */
+export function positionDirection(position: AvgPosition): TradeDirection {
+  return position.side === 'buy' ? 'long' : 'short';
 }

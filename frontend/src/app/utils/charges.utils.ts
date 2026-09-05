@@ -1,9 +1,11 @@
 import {
   ChargeBreakdown,
-  ChargeExchange,
   ChargeLegInput,
   ChargeRates,
   ChargeSegment,
+  LadderInput,
+  LadderResult,
+  LadderSliceResult,
   ProfitTargetResult,
   RoundTripInput,
   RoundTripResult,
@@ -11,7 +13,7 @@ import {
 import { ChargeItem } from '../models/trade.models';
 
 /**
- * Groww equity + F&O rate card (FY 2025-26). Percent values are percent of turnover,
+ * Groww equity rate card on NSE (FY 2025-26). Percent values are percent of turnover,
  * so 0.1 means 0.1%. Override via ChargesService when the rate card changes.
  */
 export const DEFAULT_CHARGE_RATES: ChargeRates = {
@@ -22,48 +24,22 @@ export const DEFAULT_CHARGE_RATES: ChargeRates = {
       brokeragePct: 0.1,
       brokerageCap: 20,
       brokerageMin: 2,
-      brokerageFlat: null,
       sttBuyPct: 0.1,
       sttSellPct: 0.1,
       stampDutyBuyPct: 0.015,
-      exchangeTxnPct: { NSE: 0.00297, BSE: 0.00375 },
-      ipftPct: { NSE: 0.0001, BSE: 0 },
+      exchangeTxnPct: 0.00297,
+      ipftPct: 0.0001,
       dpChargePerSell: 20,
     },
     intraday: {
       brokeragePct: 0.1,
       brokerageCap: 20,
       brokerageMin: 2,
-      brokerageFlat: null,
       sttBuyPct: 0,
       sttSellPct: 0.025,
       stampDutyBuyPct: 0.003,
-      exchangeTxnPct: { NSE: 0.00297, BSE: 0.00375 },
-      ipftPct: { NSE: 0.0001, BSE: 0 },
-      dpChargePerSell: 0,
-    },
-    futures: {
-      brokeragePct: 0,
-      brokerageCap: 0,
-      brokerageMin: 0,
-      brokerageFlat: 20,
-      sttBuyPct: 0,
-      sttSellPct: 0.02,
-      stampDutyBuyPct: 0.002,
-      exchangeTxnPct: { NSE: 0.00183, BSE: 0.00183 },
-      ipftPct: { NSE: 0, BSE: 0 },
-      dpChargePerSell: 0,
-    },
-    options: {
-      brokeragePct: 0,
-      brokerageCap: 0,
-      brokerageMin: 0,
-      brokerageFlat: 20,
-      sttBuyPct: 0,
-      sttSellPct: 0.1,
-      stampDutyBuyPct: 0.003,
-      exchangeTxnPct: { NSE: 0.03553, BSE: 0.03553 },
-      ipftPct: { NSE: 0, BSE: 0 },
+      exchangeTxnPct: 0.00297,
+      ipftPct: 0.0001,
       dpChargePerSell: 0,
     },
   },
@@ -72,11 +48,9 @@ export const DEFAULT_CHARGE_RATES: ChargeRates = {
 export const CHARGE_SEGMENT_LABELS: Record<ChargeSegment, string> = {
   delivery: 'Delivery',
   intraday: 'Intraday',
-  futures: 'Futures',
-  options: 'Options',
 };
 
-export const CHARGE_EXCHANGES: ChargeExchange[] = ['NSE', 'BSE'];
+export const CHARGE_SEGMENTS: ChargeSegment[] = ['delivery', 'intraday'];
 
 /** Equity price tick on Indian exchanges. */
 export const PRICE_TICK = 0.05;
@@ -120,14 +94,14 @@ export function calcLegCharges(
 
   const isBuy = input.side === 'buy';
   const cap = segment.brokerageCap > 0 ? segment.brokerageCap : Infinity;
-  const brokerage =
-    segment.brokerageFlat != null
-      ? segment.brokerageFlat
-      : Math.max(Math.min(pctOf(turnover, segment.brokeragePct), cap), segment.brokerageMin);
+  const brokerage = Math.max(
+    Math.min(pctOf(turnover, segment.brokeragePct), cap),
+    segment.brokerageMin
+  );
 
   const stt = pctOf(turnover, isBuy ? segment.sttBuyPct : segment.sttSellPct);
-  const exchangeTxn = pctOf(turnover, segment.exchangeTxnPct[input.exchange] ?? 0);
-  const ipft = pctOf(turnover, segment.ipftPct[input.exchange] ?? 0);
+  const exchangeTxn = pctOf(turnover, segment.exchangeTxnPct);
+  const ipft = pctOf(turnover, segment.ipftPct);
   const sebi = pctOf(turnover, rates.sebiPct);
   const stampDuty = isBuy ? pctOf(turnover, segment.stampDutyBuyPct) : 0;
   const dpCharges = isBuy ? 0 : segment.dpChargePerSell;
@@ -147,7 +121,7 @@ export function calcLegCharges(
   };
 }
 
-function addBreakdowns(a: ChargeBreakdown, b: ChargeBreakdown): ChargeBreakdown {
+export function addBreakdowns(a: ChargeBreakdown, b: ChargeBreakdown): ChargeBreakdown {
   return {
     turnover: a.turnover + b.turnover,
     brokerage: a.brokerage + b.brokerage,
@@ -167,7 +141,7 @@ export function calcRoundTrip(
   rates: ChargeRates = DEFAULT_CHARGE_RATES
 ): RoundTripResult {
   const long = input.direction === 'long';
-  const base = { segment: input.segment, exchange: input.exchange, quantity: input.quantity };
+  const base = { segment: input.segment, quantity: input.quantity };
   const entryLeg = calcLegCharges(
     { ...base, side: long ? 'buy' : 'sell', price: input.entryPrice },
     rates
@@ -208,6 +182,86 @@ export function chargeItems(breakdown: ChargeBreakdown): ChargeItem[] {
     { label: 'DP charges', amount: breakdown.dpCharges },
     { label: 'GST', amount: breakdown.gst },
   ].filter((item) => item.amount > 0);
+}
+
+/**
+ * Charges and P&L for a position exited in parts. The entry is treated as one order
+ * (so its brokerage is charged once and shared pro rata), while each exit slice pays
+ * its own brokerage, STT and DP charges — which is how a real scale-out is billed.
+ */
+export function calcLadder(
+  input: LadderInput,
+  rates: ChargeRates = DEFAULT_CHARGE_RATES
+): LadderResult {
+  const long = input.direction === 'long';
+  const entryPrice = Math.max(0, input.entryPrice || 0);
+  const usable = (slice: { quantity: number; price: number }) => slice.quantity > 0 && slice.price > 0;
+  const allocatedQty = input.slices
+    .filter(usable)
+    .reduce((sum, slice) => sum + slice.quantity, 0);
+
+  const entryLeg = calcLegCharges(
+    { segment: input.segment, side: long ? 'buy' : 'sell', price: entryPrice, quantity: allocatedQty },
+    rates
+  );
+
+  let combined = entryLeg;
+  // Every input slice gets a result row, so callers can line results up with their own list.
+  const slices: LadderSliceResult[] = input.slices.map((slice) => {
+    if (!usable(slice)) {
+      return {
+        quantity: Math.max(0, slice.quantity || 0),
+        price: Math.max(0, slice.price || 0),
+        sharePct: 0,
+        grossPnL: 0,
+        charges: 0,
+        netPnL: 0,
+        movePct: 0,
+      };
+    }
+
+    const exitLeg = calcLegCharges(
+      { segment: input.segment, side: long ? 'sell' : 'buy', price: slice.price, quantity: slice.quantity },
+      rates
+    );
+    combined = addBreakdowns(combined, exitLeg);
+
+    const sharePct = allocatedQty > 0 ? (slice.quantity / allocatedQty) * 100 : 0;
+    const grossPnL = long
+      ? (slice.price - entryPrice) * slice.quantity
+      : (entryPrice - slice.price) * slice.quantity;
+    const charges = exitLeg.total + entryLeg.total * (sharePct / 100);
+
+    return {
+      quantity: slice.quantity,
+      price: slice.price,
+      sharePct,
+      grossPnL,
+      charges,
+      netPnL: grossPnL - charges,
+      movePct: entryPrice > 0 ? ((slice.price - entryPrice) / entryPrice) * 100 : 0,
+    };
+  });
+
+  const grossPnL = slices.reduce((sum, slice) => sum + slice.grossPnL, 0);
+  const charges = combined.total;
+  const entryValue = entryPrice * allocatedQty;
+  const exitValue = input.slices
+    .filter(usable)
+    .reduce((sum, slice) => sum + slice.price * slice.quantity, 0);
+
+  return {
+    slices,
+    allocatedQty,
+    unallocatedQty: (input.totalQuantity || 0) - allocatedQty,
+    avgExitPrice: allocatedQty > 0 ? exitValue / allocatedQty : 0,
+    entryValue,
+    grossPnL,
+    charges,
+    netPnL: grossPnL - charges,
+    netPnLPct: entryValue > 0 ? ((grossPnL - charges) / entryValue) * 100 : 0,
+    combined,
+  };
 }
 
 /**

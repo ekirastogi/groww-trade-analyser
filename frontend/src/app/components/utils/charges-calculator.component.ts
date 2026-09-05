@@ -2,9 +2,9 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TradeDirection } from '../../models/trading-journal.models';
-import { ChargeBreakdown, ChargeExchange, ChargeSegment } from '../../models/charges.models';
+import { ChargeBreakdown, ChargeSegment } from '../../models/charges.models';
 import { ChargesService } from '../../services/charges.service';
-import { CHARGE_EXCHANGES, CHARGE_SEGMENT_LABELS } from '../../utils/charges.utils';
+import { CHARGE_SEGMENTS, CHARGE_SEGMENT_LABELS } from '../../utils/charges.utils';
 import { formatCurrency, formatPctSigned, formatPrice, pnlClass } from '../../utils/format.utils';
 import { readJson, writeJson } from '../../utils/local-store.utils';
 
@@ -12,7 +12,6 @@ const STORAGE_KEY = 'kairo-charges-calculator-v1';
 
 interface PersistedState {
   segment: ChargeSegment;
-  exchange: ChargeExchange;
   direction: TradeDirection;
   entryPrice: number;
   exitPrice: number;
@@ -21,7 +20,6 @@ interface PersistedState {
 
 const FALLBACK: PersistedState = {
   segment: 'delivery',
-  exchange: 'NSE',
   direction: 'long',
   entryPrice: 0,
   exitPrice: 0,
@@ -79,7 +77,6 @@ export class ChargesCalculatorComponent {
   private persisted = { ...FALLBACK, ...readJson<Partial<PersistedState>>(STORAGE_KEY, FALLBACK) };
 
   segment = signal<ChargeSegment>(this.persisted.segment);
-  exchange = signal<ChargeExchange>(this.persisted.exchange);
   direction = signal<TradeDirection>(this.persisted.direction);
   entryPrice = signal<number>(this.persisted.entryPrice);
   exitPrice = signal<number>(this.persisted.exitPrice);
@@ -90,8 +87,7 @@ export class ChargesCalculatorComponent {
   readonly formatPctSigned = formatPctSigned;
   readonly pnlClass = pnlClass;
   readonly segmentLabels = CHARGE_SEGMENT_LABELS;
-  readonly segments: ChargeSegment[] = ['delivery', 'intraday', 'futures', 'options'];
-  readonly exchanges = CHARGE_EXCHANGES;
+  readonly segments = CHARGE_SEGMENTS;
   readonly chargeRows = CHARGE_ROWS;
 
   constructor() {
@@ -100,7 +96,6 @@ export class ChargesCalculatorComponent {
 
   private snapshot = computed<PersistedState>(() => ({
     segment: this.segment(),
-    exchange: this.exchange(),
     direction: this.direction(),
     entryPrice: this.entryPrice(),
     exitPrice: this.exitPrice(),
@@ -113,7 +108,6 @@ export class ChargesCalculatorComponent {
     if (!this.ready()) return null;
     return this.charges.roundTrip({
       segment: this.segment(),
-      exchange: this.exchange(),
       direction: this.direction(),
       quantity: this.quantity(),
       entryPrice: this.entryPrice(),
@@ -125,7 +119,6 @@ export class ChargesCalculatorComponent {
     if (!(this.entryPrice() > 0) || !(this.quantity() > 0)) return null;
     return this.charges.breakevenPrice({
       segment: this.segment(),
-      exchange: this.exchange(),
       direction: this.direction(),
       quantity: this.quantity(),
       entryPrice: this.entryPrice(),
@@ -134,10 +127,6 @@ export class ChargesCalculatorComponent {
 
   setSegment(segment: ChargeSegment): void {
     this.segment.set(segment);
-  }
-
-  setExchange(exchange: ChargeExchange): void {
-    this.exchange.set(exchange);
   }
 
   setDirection(direction: TradeDirection): void {

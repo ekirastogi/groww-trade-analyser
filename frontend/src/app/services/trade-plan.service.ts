@@ -5,6 +5,7 @@ import {
   ExecutionLeg,
   PlannedEntryLeg,
   PlannedTrade,
+  PlannedTradeTarget,
   TradeDirection,
   TradeExecutionInput,
   TradeExecutionStatus,
@@ -27,6 +28,8 @@ export interface CreatePlannedTradeInput {
   targetPrice: number;
   stopLoss?: number;
   entryLegs?: PlannedEntryLeg[];
+  /** Partial exit ladder. When set, targetPrice is derived from its weighted average. */
+  targets?: PlannedTradeTarget[];
   source?: TradePlanSource;
   notes?: string;
   carriedFromDate?: string;
@@ -61,6 +64,7 @@ type PlannedTradePayload = {
   buyLegs?: ExecutionLeg[] | null;
   sellLegs?: ExecutionLeg[] | null;
   entryLegs?: PlannedEntryLeg[] | null;
+  targets?: PlannedTradeTarget[] | null;
   updatedAt?: number;
   carriedFromDate?: string;
   openedFromDate?: string;
@@ -107,6 +111,7 @@ function rowToPlannedTrade(row: Record<string, unknown>): PlannedTrade {
     targetPrice: Number(camel['targetPrice'] ?? 0),
     stopLoss: camel['stopLoss'] as number | undefined,
     entryLegs,
+    targets: payload.targets?.length ? payload.targets : undefined,
     source: payload.source ?? 'manual',
     status: (camel['status'] as TradeExecutionStatus) ?? 'planned',
     estimatedPnL: numField(camel, 'estimatedPnL', 'estimatedPnl'),
@@ -330,6 +335,23 @@ export class TradePlanService {
     return TradePlanService.legTotalValue(sellLegs) - TradePlanService.legTotalValue(buyLegs);
   }
 
+  /** Drops incomplete rows from a target ladder. */
+  static sanitizeTargets(targets: PlannedTradeTarget[] | undefined): PlannedTradeTarget[] {
+    return (targets ?? []).filter((target) => target.quantity > 0 && target.price > 0);
+  }
+
+  /** The exit ladder for a trade, falling back to a single exit at targetPrice. */
+  static resolveTargets(
+    trade: Pick<PlannedTrade, 'targets' | 'targetPrice' | 'quantity'>
+  ): PlannedTradeTarget[] {
+    const targets = TradePlanService.sanitizeTargets(trade.targets);
+    if (targets.length) return targets;
+    if (trade.quantity > 0 && trade.targetPrice > 0) {
+      return [{ quantity: trade.quantity, price: trade.targetPrice }];
+    }
+    return [];
+  }
+
   static resolveEntryLegs(
     legs: PlannedEntryLeg[] | undefined,
     entryPrice: number,
@@ -488,11 +510,15 @@ export class TradePlanService {
     const entryLegs = TradePlanService.resolveEntryLegs(input.entryLegs, input.entryPrice, input.quantity);
     const validationError = TradePlanService.validatePlannedEntryLegs(entryLegs, segment, direction);
     if (validationError) throw new Error(validationError);
+    const targets = TradePlanService.sanitizeTargets(input.targets);
+    const targetPrice = targets.length
+      ? TradePlanService.weightedAvgPrice(targets)
+      : input.targetPrice;
     const summary = TradePlanService.entryLegSummary(
       entryLegs,
       segment,
       direction,
-      input.targetPrice,
+      targetPrice,
       input.stopLoss
     );
 
@@ -516,7 +542,7 @@ export class TradePlanService {
       quantity: summary.totalQuantity,
       cmp: input.cmp ?? null,
       entryPrice: summary.avgEntryPrice,
-      targetPrice: input.targetPrice,
+      targetPrice,
       stopLoss: input.stopLoss ?? null,
       status,
       estimatedPnl: summary.estimatedPnL,
@@ -530,6 +556,7 @@ export class TradePlanService {
         executedBuyPrice: null,
         executedSellPrice: null,
         entryLegs,
+        targets: targets.length ? targets : null,
         updatedAt: now,
         carriedFromDate: input.carriedFromDate,
         momentumStockId: input.momentumId,
@@ -558,6 +585,7 @@ export class TradePlanService {
       buyLegs: null,
       sellLegs: null,
       entryLegs: existing?.entryLegs ?? null,
+      targets: existing?.targets ?? null,
     };
     let realizedPnl: number | null = null;
     if (status === 'executed' && execution) {
@@ -607,6 +635,7 @@ export class TradePlanService {
       buyLegs: null,
       sellLegs: null,
       entryLegs: existing.entryLegs ?? null,
+      targets: existing.targets ?? null,
       openedFromDate,
       updatedAt: Date.now(),
     };
@@ -653,6 +682,7 @@ export class TradePlanService {
       buyLegs: null,
       sellLegs: null,
       entryLegs: existing.entryLegs ?? null,
+      targets: existing.targets ?? null,
       openedFromDate: existing.openedFromDate,
       updatedAt: Date.now(),
     };
@@ -698,11 +728,15 @@ export class TradePlanService {
     const entryLegs = TradePlanService.resolveEntryLegs(input.entryLegs, input.entryPrice, input.quantity);
     const validationError = TradePlanService.validatePlannedEntryLegs(entryLegs, segment, direction);
     if (validationError) throw new Error(validationError);
+    const targets = TradePlanService.sanitizeTargets(input.targets);
+    const targetPrice = targets.length
+      ? TradePlanService.weightedAvgPrice(targets)
+      : input.targetPrice;
     const summary = TradePlanService.entryLegSummary(
       entryLegs,
       segment,
       direction,
-      input.targetPrice,
+      targetPrice,
       input.stopLoss
     );
 
@@ -715,6 +749,7 @@ export class TradePlanService {
       buyLegs: existing?.buyLegs ?? null,
       sellLegs: existing?.sellLegs ?? null,
       entryLegs,
+      targets: targets.length ? targets : null,
       updatedAt: Date.now(),
     };
 
@@ -730,7 +765,7 @@ export class TradePlanService {
           quantity: summary.totalQuantity,
           cmp: input.cmp ?? null,
           entryPrice: summary.avgEntryPrice,
-          targetPrice: input.targetPrice,
+          targetPrice,
           stopLoss: input.stopLoss ?? null,
           notes: input.notes ?? '',
           estimatedPnl: summary.estimatedPnL,
@@ -790,6 +825,7 @@ export class TradePlanService {
         targetPrice: t.targetPrice,
         stopLoss: t.stopLoss,
         entryLegs: t.entryLegs,
+        targets: t.targets,
         source: t.source,
         notes: t.notes,
         carriedFromDate: sourceDate,

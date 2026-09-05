@@ -3,6 +3,8 @@ import {
   ChargeBreakdown,
   ChargeLegInput,
   ChargeRates,
+  LadderInput,
+  LadderResult,
   ProfitTargetResult,
   RoundTripInput,
   RoundTripResult,
@@ -10,6 +12,7 @@ import {
 import { ChargeItem } from '../models/trade.models';
 import {
   DEFAULT_CHARGE_RATES,
+  calcLadder,
   calcLegCharges,
   calcRoundTrip,
   chargeItems,
@@ -18,7 +21,7 @@ import {
 } from '../utils/charges.utils';
 import { readJson, writeJson } from '../utils/local-store.utils';
 
-const RATES_STORAGE_KEY = 'kairo-charge-rates-v1';
+const RATES_STORAGE_KEY = 'kairo-charge-rates-v2';
 
 /**
  * Single source of truth for forward-looking trading cost estimates (brokerage, STT,
@@ -49,6 +52,11 @@ export class ChargesService {
   /** Entry + exit charges with gross and net P&L for a complete trade. */
   roundTrip(input: RoundTripInput): RoundTripResult {
     return calcRoundTrip(input, this.ratesState());
+  }
+
+  /** Charges and P&L for a position exited in parts at different prices. */
+  ladder(input: LadderInput): LadderResult {
+    return calcLadder(input, this.ratesState());
   }
 
   /** Exit price needed to keep the given net profit after all charges. */

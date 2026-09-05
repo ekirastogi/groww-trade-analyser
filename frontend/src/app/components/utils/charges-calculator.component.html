@@ -61,13 +61,6 @@
             }
           </div>
           <div class="flex rounded-lg bg-slate-100 p-0.5">
-            @for (ex of exchanges; track ex) {
-              <button type="button" class="mini-toggle" [class.mini-toggle-active]="exchange() === ex" (click)="setExchange(ex)">
-                {{ ex }}
-              </button>
-            }
-          </div>
-          <div class="flex rounded-lg bg-slate-100 p-0.5">
             <button type="button" class="mini-toggle" [class.mini-toggle-active]="direction() === 'long'" (click)="setDirection('long')">Long</button>
             <button type="button" class="mini-toggle" [class.mini-toggle-active]="direction() === 'short'" (click)="setDirection('short')">Short</button>
           </div>

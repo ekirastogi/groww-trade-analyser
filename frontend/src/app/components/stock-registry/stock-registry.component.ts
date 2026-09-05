@@ -3,11 +3,16 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { RegistryStockService } from '../../services/registry-stock.service';
-import { RegistryLabelService, StockLabelMap } from '../../services/registry-label.service';
+import { StockLabelsStore } from '../../services/stock-labels.store';
 import { WorkerJobService } from '../../services/worker-job.service';
 import { ScreenerService, ScreenerSnapshot } from '../../services/screener.service';
-import { RegistryLabel, RegistryStock } from '../../models/trading-journal.models';
+import { RegistryStock } from '../../models/trading-journal.models';
 import { StockLabelPickerComponent } from '../stock-labels/stock-label-picker.component';
+import { StockLabelsManagerComponent } from '../stock-labels/stock-labels-manager.component';
+import {
+  LabelFilterOption,
+  LabelFilterSelectComponent,
+} from '../stock-labels/label-filter-select.component';
 import { formatCurrency } from '../../utils/format.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { ScreenerFundamentalsComponent } from '../screener-fundamentals/screener-fundamentals.component';
@@ -29,21 +34,29 @@ type RegistryColumnKey =
 @Component({
   selector: 'app-stock-registry',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ScreenerFundamentalsComponent, StockLabelPickerComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    ScreenerFundamentalsComponent,
+    StockLabelPickerComponent,
+    StockLabelsManagerComponent,
+    LabelFilterSelectComponent,
+  ],
   templateUrl: './stock-registry.component.html',
 })
 export class StockRegistryComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
-  private labelSvc = inject(RegistryLabelService);
+  private labelStore = inject(StockLabelsStore);
   private workerJobs = inject(WorkerJobService);
   private screener = inject(ScreenerService);
 
   stocks = signal<RegistryStock[]>([]);
-  labels = signal<RegistryLabel[]>([]);
-  assignments = signal<StockLabelMap>(new Map());
-  activeLabelId = signal<string | 'all'>('all');
-  newLabelName = '';
-  labelsBusy = signal(false);
+  labels = computed(() => this.labelStore.labels());
+  labelsBusy = computed(() => this.labelStore.busy());
+  activeLabelIds = signal<string[]>([]);
+  showScreenerPanel = signal(false);
+  showLabelPanel = signal(false);
   stockCount = signal(0);
   loading = signal(false);
   tableSort = new TableSortState('symbol', 'asc');
@@ -121,11 +134,14 @@ export class StockRegistryComponent implements OnInit {
     this.tableSort.direction();
 
     const q = this.searchQuery().trim().toLowerCase();
-    const labelId = this.activeLabelId();
-    const assigned = this.assignments();
+    const labelIds = this.activeLabelIds();
+    const assigned = this.labelStore.assignments();
     let rows = this.stocks();
-    if (labelId !== 'all') {
-      rows = rows.filter((s) => (assigned.get(s.symbol) ?? []).includes(labelId));
+    if (labelIds.length) {
+      rows = rows.filter((s) => {
+        const ids = assigned.get(s.symbol) ?? [];
+        return labelIds.some((id) => ids.includes(id));
+      });
     }
     if (q) {
       rows = rows.filter(
@@ -164,14 +180,10 @@ export class StockRegistryComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [stocks, stockCount, labels, assignments] = await Promise.all([
+      const [stocks, stockCount] = await Promise.all([
         this.registrySvc.listAll(),
         this.registrySvc.count(),
-        this.labelSvc.listLabels().catch((e) => {
-          this.error.set(e instanceof Error ? e.message : 'Failed to load labels');
-          return [] as RegistryLabel[];
-        }),
-        this.labelSvc.listAssignments().catch(() => new Map() as StockLabelMap),
+        this.labelStore.reload(),
       ]);
 
       const deduped = await this.registrySvc.dedupeByIsin();
@@ -180,11 +192,8 @@ export class StockRegistryComponent implements OnInit {
 
       this.stocks.set(finalStocks);
       this.stockCount.set(finalCount);
-      this.labels.set(labels);
-      this.assignments.set(assignments);
-      if (this.activeLabelId() !== 'all' && !labels.some((l) => l.id === this.activeLabelId())) {
-        this.activeLabelId.set('all');
-      }
+      const known = new Set(this.labelStore.labels().map((l) => l.id));
+      this.activeLabelIds.update((ids) => ids.filter((id) => known.has(id)));
       this.currentPage.set(1);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
@@ -198,102 +207,29 @@ export class StockRegistryComponent implements OnInit {
     this.currentPage.set(1);
   }
 
-  setLabelFilter(id: string | 'all'): void {
-    this.activeLabelId.set(id);
+  setLabelFilter(ids: string[]): void {
+    this.activeLabelIds.set(ids);
     this.currentPage.set(1);
   }
 
+  labelFilterOptions = computed<LabelFilterOption[]>(() =>
+    this.labelStore.labels().map((label) => ({
+      id: label.id,
+      name: label.name,
+      count: this.labelStore.countFor(label.id),
+    }))
+  );
+
   labelIdsFor(symbol: string): string[] {
-    return this.assignments().get(symbol.toUpperCase()) ?? [];
-  }
-
-  labelCount(id: string): number {
-    let n = 0;
-    for (const ids of this.assignments().values()) {
-      if (ids.includes(id)) n++;
-    }
-    return n;
-  }
-
-  private setSymbolLabels(symbol: string, ids: string[]): void {
-    const sym = symbol.toUpperCase();
-    this.assignments.update((map) => {
-      const next = new Map(map);
-      if (ids.length) next.set(sym, ids);
-      else next.delete(sym);
-      return next;
-    });
-  }
-
-  async createLabel(): Promise<void> {
-    const name = this.newLabelName.trim();
-    if (!name) {
-      this.error.set('Enter a label name');
-      return;
-    }
-    this.labelsBusy.set(true);
-    this.error.set(null);
-    this.success.set(null);
-    try {
-      const created = await this.labelSvc.createLabel(name);
-      this.labels.update((rows) => [...rows, created]);
-      this.newLabelName = '';
-      this.success.set(`Created label “${created.name}”.`);
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Could not create label');
-    } finally {
-      this.labelsBusy.set(false);
-    }
-  }
-
-  async deleteLabel(label: RegistryLabel): Promise<void> {
-    const count = this.labelCount(label.id);
-    const extra = count ? ` It will be removed from ${count} stock${count === 1 ? '' : 's'}.` : '';
-    if (!confirm(`Delete label “${label.name}”?${extra} Labels cannot be renamed.`)) return;
-    this.labelsBusy.set(true);
-    this.error.set(null);
-    try {
-      await this.labelSvc.deleteLabel(label.id);
-      this.labels.update((rows) => rows.filter((row) => row.id !== label.id));
-      this.assignments.update((map) => {
-        const next = new Map<string, string[]>();
-        for (const [symbol, ids] of map) {
-          const kept = ids.filter((id) => id !== label.id);
-          if (kept.length) next.set(symbol, kept);
-        }
-        return next;
-      });
-      if (this.activeLabelId() === label.id) this.setLabelFilter('all');
-      this.success.set(`Deleted label “${label.name}”.`);
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Could not delete label');
-    } finally {
-      this.labelsBusy.set(false);
-    }
+    return this.labelStore.labelIdsFor(symbol);
   }
 
   async addLabelToStock(symbol: string, labelId: string): Promise<void> {
-    this.error.set(null);
-    try {
-      await this.labelSvc.addToStock(symbol, labelId);
-      const current = this.labelIdsFor(symbol);
-      if (!current.includes(labelId)) this.setSymbolLabels(symbol, [...current, labelId]);
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Could not add label');
-    }
+    await this.labelStore.assign(symbol, labelId);
   }
 
   async removeLabelFromStock(symbol: string, labelId: string): Promise<void> {
-    this.error.set(null);
-    try {
-      await this.labelSvc.removeFromStock(symbol, labelId);
-      this.setSymbolLabels(
-        symbol,
-        this.labelIdsFor(symbol).filter((id) => id !== labelId)
-      );
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Could not remove label');
-    }
+    await this.labelStore.unassign(symbol, labelId);
   }
 
   onPageSizeChange(value: string): void {

@@ -74,6 +74,9 @@ export interface ExecutionLeg {
 /** Planned entry levels — initial entry plus optional scale-ins at other prices. */
 export type PlannedEntryLeg = ExecutionLeg;
 
+/** Planned partial exit — book this many shares at this price. */
+export type PlannedTradeTarget = ExecutionLeg;
+
 export interface PlannedTrade {
   id: string;
   symbol: string;
@@ -87,6 +90,8 @@ export interface PlannedTrade {
   targetPrice: number;
   stopLoss?: number;
   entryLegs?: PlannedEntryLeg[];
+  /** Partial exit ladder; absent means a single exit at targetPrice. */
+  targets?: PlannedTradeTarget[];
   source: TradePlanSource;
   status: TradeExecutionStatus;
   estimatedPnL: number;

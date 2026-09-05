@@ -1,24 +1,21 @@
 import { TradeDirection, TradeSegment } from './trading-journal.models';
 
-export type ChargeSegment = TradeSegment | 'futures' | 'options';
-export type ChargeExchange = 'NSE' | 'BSE';
+export type ChargeSegment = TradeSegment;
 export type ChargeSide = 'buy' | 'sell';
 
 export interface SegmentChargeRates {
-  /** Percent of turnover per order; ignored when `brokerageFlat` is set. */
+  /** Percent of turnover per order. */
   brokeragePct: number;
   /** Rupee cap per order; 0 means uncapped. */
   brokerageCap: number;
   /** Rupee floor per order. */
   brokerageMin: number;
-  /** Flat rupees per order (F&O style pricing). */
-  brokerageFlat: number | null;
   sttBuyPct: number;
   sttSellPct: number;
   /** Stamp duty applies on the buy side only. */
   stampDutyBuyPct: number;
-  exchangeTxnPct: Record<ChargeExchange, number>;
-  ipftPct: Record<ChargeExchange, number>;
+  exchangeTxnPct: number;
+  ipftPct: number;
   /** Depository + broker DP fee per scrip on a sell, before GST. */
   dpChargePerSell: number;
 }
@@ -31,7 +28,6 @@ export interface ChargeRates {
 
 export interface ChargeLegInput {
   segment: ChargeSegment;
-  exchange: ChargeExchange;
   side: ChargeSide;
   price: number;
   quantity: number;
@@ -52,7 +48,6 @@ export interface ChargeBreakdown {
 
 export interface RoundTripInput {
   segment: ChargeSegment;
-  exchange: ChargeExchange;
   direction: TradeDirection;
   quantity: number;
   entryPrice: number;
@@ -80,6 +75,48 @@ export interface ProfitTargetResult {
   roundTrip: RoundTripResult;
   /** Percent move from entry to the target price. */
   movePct: number;
-  /** Gross move needed per share to clear charges and the profit goal. */
+  /** Move needed per share to clear charges and the profit goal. */
   movePerShare: number;
+}
+
+/** One partial exit: sell (or buy back) this many shares at this price. */
+export interface ExitSlice {
+  quantity: number;
+  price: number;
+}
+
+export interface LadderInput {
+  segment: ChargeSegment;
+  direction: TradeDirection;
+  entryPrice: number;
+  /** Full position size; anything not allocated to a slice is reported as unallocated. */
+  totalQuantity: number;
+  slices: ExitSlice[];
+}
+
+export interface LadderSliceResult {
+  quantity: number;
+  price: number;
+  /** Share of the position this slice exits. */
+  sharePct: number;
+  grossPnL: number;
+  /** Slice's exit charges plus its pro-rated share of the single entry order. */
+  charges: number;
+  netPnL: number;
+  movePct: number;
+}
+
+export interface LadderResult {
+  slices: LadderSliceResult[];
+  allocatedQty: number;
+  /** Position left over after every slice; negative means over-allocated. */
+  unallocatedQty: number;
+  avgExitPrice: number;
+  entryValue: number;
+  grossPnL: number;
+  charges: number;
+  netPnL: number;
+  netPnLPct: number;
+  /** Every charge line across the entry order and all exit slices. */
+  combined: ChargeBreakdown;
 }

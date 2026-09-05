@@ -4,23 +4,35 @@
       <button type="button" class="stock-detail-back" (click)="goBack()">
         <span aria-hidden="true">←</span> Back
       </button>
-      <button
-        type="button"
-        class="stock-fetch-cta"
-        [class.stock-fetch-cta-busy]="screenerBusy()"
-        [disabled]="screenerBusy() || !auth.hasAccess"
-        (click)="fetchScreener()"
-      >
-        @if (screenerBusy()) {
-          <span class="stock-fetch-spinner" aria-hidden="true"></span>
-          <span>Fetching from Screener…</span>
-        } @else {
-          <svg class="stock-fetch-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466A5.5 5.5 0 1112.28 6.28a.75.75 0 011.06 1.06 4 4 0 00-5.78 5.47 4 4 0 008.16-1.53.75.75 0 011.44.61z" clip-rule="evenodd" />
-          </svg>
-          <span>Refresh from Screener</span>
-        }
-      </button>
+      <div class="stock-detail-hero-actions">
+        <button
+          type="button"
+          class="stock-fetch-cta"
+          [class.stock-fetch-cta-busy]="screenerBusy()"
+          [disabled]="screenerBusy() || !auth.hasAccess"
+          (click)="fetchScreener()"
+        >
+          @if (screenerBusy()) {
+            <span class="stock-fetch-spinner" aria-hidden="true"></span>
+            <span>Fetching from Screener…</span>
+          } @else {
+            <svg class="stock-fetch-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466A5.5 5.5 0 1112.28 6.28a.75.75 0 011.06 1.06 4 4 0 00-5.78 5.47 4 4 0 008.16-1.53.75.75 0 011.44.61z" clip-rule="evenodd" />
+            </svg>
+            <span>Refresh from Screener</span>
+          }
+        </button>
+        <button
+          type="button"
+          class="btn-secondary"
+          [class.btn-toggle-on]="showLabelPanel()"
+          [disabled]="!auth.hasAccess"
+          [attr.aria-expanded]="showLabelPanel()"
+          (click)="showLabelPanel.set(!showLabelPanel())"
+        >
+          {{ showLabelPanel() ? 'Hide labels' : 'Labels' }}
+        </button>
+      </div>
     </div>
 
     <div class="stock-detail-hero-body">
@@ -28,22 +40,13 @@
         <p class="stock-detail-symbol">{{ symbol() }}</p>
         <h1 class="stock-detail-name">{{ displayName() }}</h1>
         <p class="stock-detail-exchange">{{ displayExchange() }}</p>
-        <div class="mt-3">
-          <app-stock-label-picker
-            [labels]="labels()"
-            [selectedIds]="selectedLabelIds()"
-            [disabled]="labelsBusy() || !auth.hasAccess"
-            (addLabel)="addLabel($event)"
-            (removeLabel)="removeLabel($event)"
-          />
-          @if (!labels().length) {
-            <p class="mt-1 text-xs text-slate-400">
-              Create labels on the
-              <a class="underline hover:text-kairo-700" routerLink="/registry">stock registry</a>
-              page.
-            </p>
-          }
-        </div>
+        @if (assignedLabels().length) {
+          <div class="mt-3 flex flex-wrap gap-1">
+            @for (label of assignedLabels(); track label.id) {
+              <span class="label-chip">{{ label.name }}</span>
+            }
+          </div>
+        }
       </div>
 
       <div class="stock-detail-quote">
@@ -89,6 +92,17 @@
       </div>
     </div>
   </header>
+
+  @if (showLabelPanel()) {
+    <div class="stock-detail-panel">
+      <app-stock-labels-manager
+        [symbol]="symbol()"
+        [allowDelete]="true"
+        [disabled]="!auth.hasAccess"
+        [beforeAssign]="ensureRegistryRow"
+      />
+    </div>
+  }
 
   @if (screenerError()) {
     <div class="stock-detail-alert stock-detail-alert-error">{{ screenerError() }}</div>
