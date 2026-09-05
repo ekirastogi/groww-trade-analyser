@@ -1,5 +1,4 @@
 import { Injectable, inject } from '@angular/core';
-import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabaseConfig } from '../../environments/supabase.config';
 import { RegistryFinancialTable } from '../models/trading-journal.models';
 import { SupabaseService } from './supabase.service';
@@ -46,33 +45,31 @@ export class ScreenerService {
   private supabase = inject(SupabaseService);
 
   async fetchStock(symbol: string, name?: string): Promise<ScreenerSnapshot> {
-    const { data, error } = await this.supabase.client.functions.invoke<ScreenerSnapshot>('screener-fetch', {
-      body: { symbol, name: name?.trim() || undefined },
-      // Edge Functions verify Supabase JWTs; use publishable anon key (Firebase auth is app-side).
+    // Use fetch directly — supabase.functions.invoke always attaches the Firebase JWT
+    // from accessToken, which the Edge gateway rejects even when JWT verify is off.
+    const res = await fetch(`${supabaseConfig.url}/functions/v1/screener-fetch`, {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseConfig.anonKey,
         Authorization: `Bearer ${supabaseConfig.anonKey}`,
       },
+      body: JSON.stringify({ symbol, name: name?.trim() || undefined }),
     });
 
-    if (error) {
-      if (error instanceof FunctionsHttpError) {
-        let message = error.message;
-        try {
-          const payload = (await error.context.json()) as { error?: string; message?: string };
-          message = payload.error ?? payload.message ?? message;
-        } catch {
-          // Response body may not be JSON.
-        }
-        throw new Error(message || 'Screener fetch failed');
-      }
-      throw new Error(error.message || 'Screener fetch failed');
+    let payload: ScreenerSnapshot & { error?: string; message?: string } | null = null;
+    try {
+      payload = (await res.json()) as ScreenerSnapshot & { error?: string; message?: string };
+    } catch {
+      payload = null;
     }
 
-    if (!data || typeof data !== 'object') {
-      throw new Error('Screener fetch failed');
+    if (!res.ok) {
+      throw new Error(payload?.error ?? payload?.message ?? `Screener fetch failed (${res.status})`);
     }
-    const payload = data as ScreenerSnapshot & { error?: string };
-    if (payload.error) throw new Error(payload.error);
+    if (!payload || payload.error) {
+      throw new Error(payload?.error ?? 'Screener fetch failed');
+    }
     return payload;
   }
 }

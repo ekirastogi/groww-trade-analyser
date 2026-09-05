@@ -111,7 +111,7 @@ function searchQueries(symbol: string, hintName?: string): string[] {
     const firstWord = name.split(/\s+/)[0];
     if (firstWord && firstWord.length >= 4) out.add(firstWord);
   }
-  const markers = ['DOCK', 'SHIP', 'BANK', 'FIN', 'TECH', 'POWER', 'STEEL', 'CHEM', 'LAB', 'PHARMA', 'IND'];
+  const markers = ['DOCK', 'SHIP', 'BANK', 'FIN', 'TECH', 'POWER', 'STEEL', 'CHEM', 'LAB', 'PHARMA', 'IND', 'CARS', 'MOTOR'];
   for (const marker of markers) {
     const idx = sym.indexOf(marker);
     if (idx >= 4) out.add(sym.slice(0, idx));

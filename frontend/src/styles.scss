@@ -486,48 +486,52 @@
     @apply flex flex-1 items-center justify-center p-4 text-center text-xs text-slate-400;
   }
 
-  .date-range-filter {
-    @apply flex min-w-0 flex-col gap-1.5;
+  .period-filter {
+    @apply flex min-w-0 flex-wrap items-center gap-2;
   }
 
-  .date-range-filter-toolbar {
-    @apply flex-row flex-wrap items-center gap-x-1.5 gap-y-1;
+  .period-filter-panel {
+    @apply w-full;
   }
 
-  .date-range-filter-panel {
-    @apply rounded-lg border border-slate-200 bg-slate-50/60 p-2;
+  .period-track {
+    @apply inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-slate-100 p-0.5 [-ms-overflow-style:none] [scrollbar-width:none];
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
-  .date-range-presets {
-    @apply flex flex-wrap gap-0.5;
+  .period-seg {
+    @apply shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide text-slate-500 transition hover:text-slate-800;
   }
 
-  .date-range-preset {
-    @apply shrink-0 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 transition hover:border-kairo-400 hover:text-kairo-700;
+  .period-seg-active {
+    @apply bg-kairo-600 text-white shadow-sm hover:text-white;
   }
 
-  .date-range-preset-active {
-    @apply border-slate-800 bg-slate-800 text-white shadow-none;
+  .period-caption {
+    @apply min-w-0 truncate text-[11px] text-slate-400;
   }
 
-  .date-range-custom {
-    @apply flex items-center gap-1;
+  .period-custom {
+    @apply flex items-center gap-1.5;
   }
 
-  .date-range-input {
-    @apply w-[7.25rem] rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-800 focus:border-kairo-500 focus:outline-none focus:ring-1 focus:ring-kairo-500/30;
+  .period-date {
+    @apply h-7 w-[8.5rem] rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-medium tabular-nums text-slate-700 shadow-sm transition focus:border-kairo-500 focus:outline-none focus:ring-2 focus:ring-kairo-500/20;
   }
 
-  .date-range-sep {
-    @apply text-[10px] font-medium text-slate-300;
-  }
-
-  .date-range-caption {
-    @apply hidden min-w-0 truncate text-[10px] text-slate-400 sm:inline;
+  .period-dash {
+    @apply text-[11px] text-slate-300;
   }
 
   .filter-toolbar {
-    @apply flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5;
+    @apply flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 py-1.5 shadow-sm;
+  }
+
+  .filter-toolbar-rule {
+    @apply hidden h-4 w-px bg-slate-200 sm:block;
   }
 
   .filter-toolbar-label {

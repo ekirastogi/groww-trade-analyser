@@ -17,9 +17,8 @@
     <div class="analytics-page space-y-5">
       <div class="space-y-1">
         <div class="filter-toolbar">
-          <span class="filter-toolbar-label">Trade</span>
           <app-trade-type-filter [compact]="true" />
-          <span class="hidden h-3 w-px bg-slate-200 sm:inline-block"></span>
+          <span class="filter-toolbar-rule" aria-hidden="true"></span>
           <app-date-range-filter />
         </div>
         <app-filter-panel class="block" [collapsible]="true" [showChartFilters]="true" [showDateRange]="false" [showTradeTypes]="false" (filtersChanged)="onFiltersChanged()" />

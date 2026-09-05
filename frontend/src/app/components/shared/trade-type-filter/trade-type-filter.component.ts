@@ -14,7 +14,7 @@ import { TRADE_TYPE_LABELS, TradeType } from '../../../models/trade.models';
         @for (type of availableTypes(); track type) {
           <button
             type="button"
-            class="chip !px-2 !py-0.5 !text-[11px]"
+            class="chip !px-2.5 !py-1 !text-[11px]"
             [class.chip-active]="isSelected(type)"
             [class.chip-inactive]="!isSelected(type)"
             (click)="toggle(type)"

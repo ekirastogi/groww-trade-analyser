@@ -1,15 +1,11 @@
-<div
-  class="date-range-filter"
-  [class.date-range-filter-toolbar]="variant() === 'toolbar'"
-  [class.date-range-filter-panel]="variant() === 'panel'"
->
-  <div class="date-range-presets" role="radiogroup" aria-label="Date range">
+<div class="period-filter" [class.period-filter-panel]="variant() === 'panel'">
+  <div class="period-track" role="radiogroup" aria-label="Date range">
     @for (preset of presets; track preset.id) {
       <button
         type="button"
         role="radio"
-        class="date-range-preset"
-        [class.date-range-preset-active]="isPresetActive(preset.id)"
+        class="period-seg"
+        [class.period-seg-active]="isPresetActive(preset.id)"
         [attr.aria-checked]="isPresetActive(preset.id)"
         [attr.title]="preset.label"
         (click)="selectPreset(preset.id)"
@@ -17,24 +13,35 @@
         {{ preset.shortLabel }}
       </button>
     }
+    <button
+      type="button"
+      role="radio"
+      class="period-seg"
+      [class.period-seg-active]="showCustomDates()"
+      [attr.aria-checked]="showCustomDates()"
+      title="Custom range"
+      (click)="toggleCustom()"
+    >
+      Custom
+    </button>
   </div>
 
-  @if (activePreset() === 'custom') {
-    <div class="date-range-custom">
+  @if (showCustomDates()) {
+    <div class="period-custom">
       <input
         type="date"
-        class="date-range-input"
-        aria-label="From date"
+        class="period-date"
+        aria-label="From"
         [min]="bounds().min"
         [max]="bounds().max || state.endDate()"
         [ngModel]="state.startDate()"
         (ngModelChange)="onCustomDateChange('start', $event)"
       />
-      <span class="date-range-sep" aria-hidden="true">–</span>
+      <span class="period-dash" aria-hidden="true">–</span>
       <input
         type="date"
-        class="date-range-input"
-        aria-label="To date"
+        class="period-date"
+        aria-label="To"
         [min]="bounds().min || state.startDate()"
         [max]="bounds().max"
         [ngModel]="state.endDate()"
@@ -42,6 +49,6 @@
       />
     </div>
   } @else if (rangeCaption()) {
-    <span class="date-range-caption tabular-nums" [title]="rangeCaption()">{{ rangeCaption() }}</span>
+    <span class="period-caption tabular-nums">{{ rangeCaption() }}</span>
   }
 </div>

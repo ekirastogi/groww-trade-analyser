@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ReportStateService } from '../../../services/report-state.service';
@@ -21,11 +21,11 @@ export class DateRangeFilterComponent {
   readonly state = inject(ReportStateService);
   private filterUrl = inject(FilterUrlService);
 
-  /** Toolbar (default) vs stacked layout inside a filter card. */
   variant = input<'toolbar' | 'panel'>('toolbar');
 
   readonly presets = DATE_RANGE_PRESETS;
   readonly formatDate = formatDate;
+  customOpen = signal(false);
 
   bounds = computed(() => {
     const range = this.state.report()?.dateRange;
@@ -43,15 +43,22 @@ export class DateRangeFilterComponent {
     return `${formatDate(start)} – ${formatDate(end)}`;
   });
 
+  showCustomDates = computed(() => this.customOpen() || this.activePreset() === 'custom');
+
   isPresetActive(id: DateRangePresetId): boolean {
-    return this.activePreset() === id;
+    return !this.showCustomDates() && this.activePreset() === id;
   }
 
   selectPreset(id: DateRangePresetId): void {
     const report = this.state.report();
     if (!report) return;
+    this.customOpen.set(false);
     const range = rangeForPreset(id, this.bounds());
     this.filterUrl.updateDateRange(range.start, range.end, this.state.selectedTradeTypes());
+  }
+
+  toggleCustom(): void {
+    this.customOpen.update((open) => !open);
   }
 
   onCustomDateChange(which: 'start' | 'end', value: string): void {

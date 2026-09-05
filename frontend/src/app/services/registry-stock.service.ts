@@ -277,8 +277,12 @@ export class RegistryStockService {
       screenerFetchedAt: stock.screenerFetchedAt,
       updatedAt: Date.now(),
     });
-    const { error } = await this.supabase.client.from('registry_stocks').upsert(row);
-    if (error) throw error;
+    const { error } = await this.supabase.client
+      .from('registry_stocks')
+      .upsert(row, { onConflict: 'user_id,symbol' });
+    if (error) {
+      throw new Error(error.message || 'Failed to save registry stock');
+    }
   }
 
   async remove(symbol: string): Promise<void> {
