@@ -1,9 +1,11 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { RegistryStockService } from '../../services/registry-stock.service';
 import { StockLabelsStore } from '../../services/stock-labels.store';
+import { TRADED_LABEL_NAME } from '../../services/registry-label.service';
+import { TradeLedgerService } from '../../services/trade-ledger.service';
 import { ScreenerService, ScreenerSnapshot } from '../../services/screener.service';
 import { RegistryLabel, RegistryStock } from '../../models/trading-journal.models';
 import { StockLabelsManagerComponent } from '../stock-labels/stock-labels-manager.component';
@@ -47,6 +49,10 @@ export class StockRegistryComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
   private labelStore = inject(StockLabelsStore);
   private screener = inject(ScreenerService);
+  private ledger = inject(TradeLedgerService);
+
+  /** Once the user picks a filter we stop forcing the "traded" default. */
+  private labelFilterTouched = false;
 
   stocks = signal<RegistryStock[]>([]);
   activeLabelIds = signal<string[]>([]);
@@ -71,7 +77,9 @@ export class StockRegistryComponent implements OnInit {
   screenerRefreshDone = signal(0);
   screenerRefreshTotal = signal(0);
   fetchingSymbol = signal<string | null>(null);
-  expandedSymbol = signal<string | null>(null);
+  rowMenuSymbol = signal<string | null>(null);
+  rowMenuPos = signal<{ top: number; right: number } | null>(null);
+  labelDialogSymbol = signal<string | null>(null);
   symbolQuery = signal('');
   screenerSearchSymbol = signal('');
   previewStock = signal<RegistryStock | null>(null);
@@ -177,7 +185,31 @@ export class StockRegistryComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    void this.reload();
+    void this.reload().then(() => this.backfillTradedLabel());
+  }
+
+  /**
+   * Ledgers imported before the "traded" label existed still need tagging, so tag them on
+   * first visit and refresh the label state if anything changed.
+   */
+  private async backfillTradedLabel(): Promise<void> {
+    try {
+      const tagged = await this.ledger.syncTradedLabels();
+      if (!tagged.length) return;
+      await this.labelStore.reload();
+      this.applyDefaultLabelFilter();
+    } catch {
+      // Backfill is best-effort; the page stays usable without it.
+    }
+  }
+
+  /** Opens on the "traded" label rather than the whole registry. */
+  private applyDefaultLabelFilter(): void {
+    if (this.labelFilterTouched) return;
+    const traded = this.labelStore.labels().find(
+      (label) => label.name.trim().toLowerCase() === TRADED_LABEL_NAME
+    );
+    this.activeLabelIds.set(traded ? [traded.id] : []);
   }
 
   async reload(): Promise<void> {
@@ -198,6 +230,7 @@ export class StockRegistryComponent implements OnInit {
       this.stockCount.set(finalCount);
       const known = new Set(this.labelStore.labels().map((l) => l.id));
       this.activeLabelIds.update((ids) => ids.filter((id) => known.has(id)));
+      this.applyDefaultLabelFilter();
       this.currentPage.set(1);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Failed to load registry');
@@ -212,6 +245,7 @@ export class StockRegistryComponent implements OnInit {
   }
 
   setLabelFilter(ids: string[]): void {
+    this.labelFilterTouched = true;
     this.activeLabelIds.set(ids);
     this.currentPage.set(1);
   }
@@ -227,6 +261,12 @@ export class StockRegistryComponent implements OnInit {
   labelIdsFor(symbol: string): string[] {
     return this.labelStore.labelIdsFor(symbol);
   }
+
+  rowMenuStock = computed(() => {
+    const symbol = this.rowMenuSymbol();
+    if (!symbol) return null;
+    return this.stocks().find((s) => s.symbol === symbol) ?? null;
+  });
 
   rowLabels(symbol: string): RegistryLabel[] {
     const ids = new Set(this.labelStore.labelIdsFor(symbol));
@@ -331,8 +371,50 @@ export class StockRegistryComponent implements OnInit {
     return total ? `Refreshing ${this.screenerRefreshDone() + 1}/${total}…` : 'Refreshing…';
   });
 
-  toggleDetails(symbol: string): void {
-    this.expandedSymbol.set(this.expandedSymbol() === symbol ? null : symbol);
+  /**
+   * The row menu renders in a fixed layer anchored to its trigger so it is never clipped
+   * by the table's scroll container.
+   */
+  toggleRowMenu(symbol: string, event: MouseEvent): void {
+    if (this.rowMenuSymbol() === symbol) {
+      this.closeRowMenu();
+      return;
+    }
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.rowMenuPos.set({
+      top: rect.bottom + 6,
+      right: Math.max(8, window.innerWidth - rect.right),
+    });
+    this.rowMenuSymbol.set(symbol);
+  }
+
+  closeRowMenu(): void {
+    this.rowMenuSymbol.set(null);
+    this.rowMenuPos.set(null);
+  }
+
+  openLabelDialog(symbol: string): void {
+    this.closeRowMenu();
+    this.labelDialogSymbol.set(symbol);
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.rowMenuSymbol()) return;
+    if ((event.target as HTMLElement | null)?.closest('[data-row-menu]')) return;
+    this.closeRowMenu();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.closeRowMenu();
+    this.labelDialogSymbol.set(null);
+  }
+
+  @HostListener('window:resize')
+  @HostListener('window:scroll')
+  onViewportChange(): void {
+    this.closeRowMenu();
   }
 
   private applyScreener(stock: RegistryStock, data: ScreenerSnapshot): RegistryStock {
@@ -447,7 +529,6 @@ export class StockRegistryComponent implements OnInit {
       const data = await this.screener.fetchStock(stock.symbol, stock.name);
       await this.registrySvc.save(this.applyScreener(stock, data));
       this.success.set(`Fetched Screener data for ${stock.symbol}.`);
-      this.expandedSymbol.set(stock.symbol);
       await this.reload();
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Screener fetch failed');

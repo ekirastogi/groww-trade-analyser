@@ -5,6 +5,11 @@ import { objectToSnake, rowsToCamel, SupabaseService } from './supabase.service'
 
 export type StockLabelMap = Map<string, string[]>;
 
+/** Auto-managed label applied to every symbol found in the user's trade ledger. */
+export const TRADED_LABEL_NAME = 'traded';
+
+const ASSIGN_BATCH_LIMIT = 500;
+
 function isMissingTableError(error: { message?: string; code?: string }): boolean {
   const message = (error.message ?? '').toLowerCase();
   return (
@@ -75,6 +80,47 @@ export class RegistryLabelService {
       this.throwQueryError(error);
     }
     return rowsToCamel<RegistryLabel>([data as Record<string, unknown>])[0];
+  }
+
+  /** Returns the label with this name, creating it if needed. Name match is case-insensitive. */
+  async ensureLabel(name: string): Promise<RegistryLabel> {
+    const wanted = name.trim().toLowerCase();
+    const existing = (await this.listLabels()).find((l) => l.name.trim().toLowerCase() === wanted);
+    if (existing) return existing;
+    try {
+      return await this.createLabel(name);
+    } catch (err) {
+      // Another tab may have created it first; fall back to whatever is stored now.
+      const retry = (await this.listLabels()).find((l) => l.name.trim().toLowerCase() === wanted);
+      if (retry) return retry;
+      throw err;
+    }
+  }
+
+  /**
+   * Tags every traded symbol with the shared "traded" label. Idempotent, so it is safe to
+   * run after each upload and as a backfill for ledgers imported before labels existed.
+   */
+  async syncTradedSymbols(symbols: string[]): Promise<number> {
+    const unique = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+    if (!unique.length) return 0;
+    const label = await this.ensureLabel(TRADED_LABEL_NAME);
+    return this.addManyToStocks(unique, label.id);
+  }
+
+  async addManyToStocks(symbols: string[], labelId: string): Promise<number> {
+    const uid = await this.requireUid();
+    const rows = symbols.map((symbol) => objectToSnake({ userId: uid, symbol, labelId }));
+    for (let i = 0; i < rows.length; i += ASSIGN_BATCH_LIMIT) {
+      const { error } = await this.supabase.client
+        .from('registry_stock_labels')
+        .upsert(rows.slice(i, i + ASSIGN_BATCH_LIMIT), {
+          onConflict: 'user_id,symbol,label_id',
+          ignoreDuplicates: true,
+        });
+      if (error) this.throwQueryError(error);
+    }
+    return rows.length;
   }
 
   async deleteLabel(id: string): Promise<void> {

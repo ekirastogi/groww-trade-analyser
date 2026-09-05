@@ -208,7 +208,7 @@
     </div>
   }
 
-  <div class="card overflow-hidden">
+  <div class="card">
     <div class="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="text-sm font-semibold text-slate-900">Stock registry</h2>
@@ -273,10 +273,12 @@
           </thead>
           <tbody>
             @for (s of paginatedStocks(); track s.symbol) {
-              <tr [class.registry-row-open]="expandedSymbol() === s.symbol">
+              <tr [class.registry-row-open]="rowMenuSymbol() === s.symbol">
                 <td>
-                  <a class="registry-symbol" [routerLink]="['/stock', s.symbol]">{{ s.symbol }}</a>
-                  <p class="registry-name">{{ s.name || '—' }}</p>
+                  <a class="registry-stock-link" [routerLink]="['/stock', s.symbol]">
+                    <span class="registry-symbol">{{ s.symbol }}</span>
+                    <span class="registry-name">{{ s.name || '—' }}</span>
+                  </a>
                   @if (labelIdsFor(s.symbol).length) {
                     <div class="registry-row-labels">
                       @for (label of rowLabels(s.symbol); track label.id) {
@@ -313,49 +315,20 @@
                   {{ s.screenerFetchedAt ? formatDataAge(s.screenerFetchedAt) : '—' }}
                 </td>
                 <td class="text-right">
-                  <button
-                    type="button"
-                    class="registry-expand-btn"
-                    [class.registry-expand-btn-open]="expandedSymbol() === s.symbol"
-                    [attr.aria-expanded]="expandedSymbol() === s.symbol"
-                    [attr.aria-label]="'Actions and details for ' + s.symbol"
-                    (click)="toggleDetails(s.symbol)"
-                  >
-                    <span aria-hidden="true">⌄</span>
-                  </button>
+                  <div data-row-menu>
+                    <button
+                      type="button"
+                      class="registry-menu-btn"
+                      [class.registry-menu-btn-open]="rowMenuSymbol() === s.symbol"
+                      [attr.aria-expanded]="rowMenuSymbol() === s.symbol"
+                      [attr.aria-label]="'Actions for ' + s.symbol"
+                      (click)="toggleRowMenu(s.symbol, $event)"
+                    >
+                      <span aria-hidden="true">⋯</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
-              @if (expandedSymbol() === s.symbol) {
-                <tr class="registry-detail-row">
-                  <td [attr.colspan]="columns.length + 1">
-                    <div class="registry-detail-actions">
-                      <button
-                        type="button"
-                        class="btn-secondary px-3 py-1.5 text-xs"
-                        [disabled]="fetchingSymbol() === s.symbol"
-                        (click)="fetchScreener(s)"
-                      >
-                        {{ fetchingSymbol() === s.symbol ? 'Fetching…' : 'Refresh from Screener' }}
-                      </button>
-                      <a class="btn-secondary px-3 py-1.5 text-xs" [routerLink]="['/stock', s.symbol]">Open stock page</a>
-                      <button type="button" class="btn-secondary px-3 py-1.5 text-xs" (click)="edit(s)">Edit</button>
-                      <button type="button" class="registry-delete-btn" (click)="remove(s.symbol)">Delete</button>
-                    </div>
-
-                    <div class="registry-detail-stats">
-                      <div><span>Promoter</span><strong>{{ formatPct(s.promoterHolding) }}</strong></div>
-                      <div><span>FII</span><strong>{{ formatPct(s.fiiHolding) }}</strong></div>
-                      <div><span>CAGR 3Y</span><strong>{{ formatPct(s.stockCagr3y) }}</strong></div>
-                      <div><span>Supports</span><strong class="text-emerald-700">{{ s.supports.join(', ') || '—' }}</strong></div>
-                      <div><span>Resistances</span><strong class="text-red-600">{{ s.resistances.join(', ') || '—' }}</strong></div>
-                      <div><span>Updated</span><strong>{{ formatUpdated(s.updatedAt) }}</strong></div>
-                    </div>
-
-                    <app-stock-labels-manager [symbol]="s.symbol" />
-                    <app-screener-fundamentals [stock]="s" />
-                  </td>
-                </tr>
-              }
             }
           </tbody>
         </table>
@@ -393,4 +366,54 @@
       </div>
     }
   </div>
+
+  @if (rowMenuStock(); as menuStock) {
+    @if (rowMenuPos(); as pos) {
+      <div
+        class="registry-menu-panel"
+        data-row-menu
+        role="menu"
+        [style.top.px]="pos.top"
+        [style.right.px]="pos.right"
+      >
+        <p class="registry-menu-title">{{ menuStock.symbol }}</p>
+        <button type="button" class="registry-menu-item" (click)="openLabelDialog(menuStock.symbol)">
+          Add labels
+        </button>
+        <button
+          type="button"
+          class="registry-menu-item"
+          [disabled]="fetchingSymbol() === menuStock.symbol"
+          (click)="fetchScreener(menuStock); closeRowMenu()"
+        >
+          {{ fetchingSymbol() === menuStock.symbol ? 'Refreshing…' : 'Refresh from Screener' }}
+        </button>
+        <a class="registry-menu-item" [routerLink]="['/stock', menuStock.symbol]" (click)="closeRowMenu()">
+          Open stock page
+        </a>
+        <button type="button" class="registry-menu-item" (click)="edit(menuStock); closeRowMenu()">Edit</button>
+        <div class="registry-menu-divider"></div>
+        <button
+          type="button"
+          class="registry-menu-item registry-menu-item-danger"
+          (click)="remove(menuStock.symbol); closeRowMenu()"
+        >
+          Delete
+        </button>
+      </div>
+    }
+  }
+
+  @if (labelDialogSymbol(); as dialogSymbol) {
+    <div class="registry-dialog-backdrop" (click)="labelDialogSymbol.set(null)"></div>
+    <div class="registry-dialog" role="dialog" aria-modal="true" aria-label="Manage labels">
+      <div class="registry-dialog-head">
+        <h3 class="text-sm font-semibold text-slate-900">Labels · {{ dialogSymbol }}</h3>
+        <button type="button" class="text-sm text-slate-500 hover:text-slate-800" (click)="labelDialogSymbol.set(null)">
+          Close
+        </button>
+      </div>
+      <app-stock-labels-manager [symbol]="dialogSymbol" />
+    </div>
+  }
 </div>

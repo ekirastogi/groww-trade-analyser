@@ -259,6 +259,8 @@ export class TradeLedgerService {
   private watchlists = inject(WatchlistService);
   /** null = unknown; false = `by_trade_type` column not on remote DB yet. */
   private stockProfilesSupportByTradeType: boolean | null = null;
+  /** The traded-label backfill only needs to run once per session. */
+  private tradedLabelsSynced = false;
 
   async uploadReport(file: File, options: UploadOptions = {}): Promise<UploadResult> {
     await this.auth.whenReady();
@@ -394,6 +396,37 @@ export class TradeLedgerService {
     };
   }
 
+  /**
+   * Tags every symbol in the ledger with the shared "traded" label, across all clients.
+   * Used to backfill ledgers imported before the label existed.
+   */
+  async syncTradedLabels(force = false): Promise<string[]> {
+    if (this.tradedLabelsSynced && !force) return [];
+    await this.auth.whenReady();
+    if (!(await this.auth.getDataUserId())) return [];
+
+    const symbols = new Set<string>();
+    for (const client of await this.clientSvc.listClients()) {
+      for (const profile of await this.getStockProfiles(client.clientCode)) {
+        if (profile.symbol) symbols.add(profile.symbol.toUpperCase());
+      }
+    }
+
+    const list = [...symbols];
+    await this.tagTradedSymbols(list);
+    this.tradedLabelsSynced = true;
+    return list;
+  }
+
+  /** Label bookkeeping must never fail an upload, so failures are swallowed here. */
+  private async tagTradedSymbols(symbols: string[]): Promise<void> {
+    try {
+      await this.registryLabels.syncTradedSymbols(symbols);
+    } catch {
+      // Labels may not be provisioned yet; the registry page retries this as a backfill.
+    }
+  }
+
   async backfillUniverse(options: BackfillUniverseOptions = {}): Promise<BackfillUniverseResult> {
     await this.auth.whenReady();
     if (!(await this.auth.getDataUserId())) throw new Error('Sign in to backfill universe');
@@ -427,6 +460,7 @@ export class TradeLedgerService {
     }
 
     const symbolsSynced = await this.registry.syncSymbols([...symbolMap.values()], 'pnl_upload');
+    await this.tagTradedSymbols([...symbolMap.keys()]);
 
     return {
       clientsProcessed: clients.length,
@@ -691,6 +725,7 @@ export class TradeLedgerService {
         })),
         'pnl_upload'
       );
+      await this.tagTradedSymbols(stockProfiles.map((profile) => profile.symbol));
     }
 
     const loadTrades = options.loadTrades !== false;
@@ -789,6 +824,7 @@ export class TradeLedgerService {
       profiles.map((p) => ({ symbol: p.symbol, name: p.stockName, isin: p.isin })),
       'pnl_upload'
     );
+    await this.tagTradedSymbols(profiles.map((p) => p.symbol));
 
     return this.buildReportFromStoredData(
       trades,

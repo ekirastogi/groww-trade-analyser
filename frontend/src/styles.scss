@@ -1392,8 +1392,16 @@
   @apply border-kairo-500 bg-kairo-50 text-kairo-800;
 }
 
+.registry-stock-link {
+  @apply flex flex-col;
+}
+
 .registry-symbol {
-  @apply font-semibold text-slate-900 transition hover:text-kairo-700;
+  @apply font-semibold text-slate-900 transition;
+
+  .registry-stock-link:hover & {
+    @apply text-kairo-700;
+  }
 }
 
 .registry-name {
@@ -1408,44 +1416,44 @@
   @apply bg-kairo-50/40;
 }
 
-.registry-expand-btn {
-  @apply inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-500 transition hover:border-kairo-300 hover:text-kairo-700;
+.registry-menu-btn {
+  @apply inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-base leading-none text-slate-500 transition hover:border-kairo-300 hover:text-kairo-700;
 }
 
-.registry-expand-btn-open {
+.registry-menu-btn-open {
   @apply border-kairo-500 bg-kairo-50 text-kairo-700;
-
-  span {
-    @apply inline-block -scale-y-100;
-  }
 }
 
-.registry-detail-row td {
-  @apply whitespace-normal bg-slate-50 px-4 py-4;
+.registry-menu-panel {
+  @apply fixed z-50 w-52 rounded-xl border border-slate-200 bg-white p-1 shadow-elevated;
 }
 
-.registry-detail-actions {
-  @apply flex flex-wrap items-center gap-2;
+.registry-menu-title {
+  @apply truncate px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-400;
 }
 
-.registry-delete-btn {
-  @apply rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50;
+.registry-menu-item {
+  @apply block w-full rounded-lg px-2 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60;
 }
 
-.registry-detail-stats {
-  @apply mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6;
+.registry-menu-item-danger {
+  @apply text-red-600 hover:bg-red-50;
+}
 
-  div {
-    @apply flex flex-col;
-  }
+.registry-menu-divider {
+  @apply my-1 border-t border-slate-100;
+}
 
-  span {
-    @apply text-[11px] font-bold uppercase tracking-wide text-slate-400;
-  }
+.registry-dialog-backdrop {
+  @apply fixed inset-0 z-40 bg-slate-900/40;
+}
 
-  strong {
-    @apply truncate font-semibold text-slate-800;
-  }
+.registry-dialog {
+  @apply fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-elevated;
+}
+
+.registry-dialog-head {
+  @apply flex items-center justify-between gap-3;
 }
 
 .registry-filter-row {
