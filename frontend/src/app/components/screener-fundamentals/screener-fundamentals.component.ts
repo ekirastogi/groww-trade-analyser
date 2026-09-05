@@ -57,7 +57,8 @@ const growthLabelPlugin: Plugin<'bar'> = {
     chart.getDatasetMeta(0).data.forEach((element, i) => {
       const text = labels[i];
       if (!text) return;
-      const bar = element as { x: number; y: number; base?: number };
+      const bar = element as unknown as { x: number; y: number; base?: number };
+      // Place the label outside the bar end, whichever way the bar points.
       const pointsUp = bar.y <= (bar.base ?? bar.y);
       ctx.fillStyle = growthUp[i] ? GROWTH_UP_BORDER : GROWTH_DOWN_BORDER;
       ctx.textBaseline = pointsUp ? 'bottom' : 'top';
