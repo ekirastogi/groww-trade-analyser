@@ -158,46 +158,17 @@
 
           @if (analysis().quarterlyCharts.length) {
             <section class="screener-analysis-section">
-              <h3 class="screener-analysis-heading">Quarterly trend — last 5 quarters</h3>
+              <h3 class="screener-analysis-heading">Quarterly growth — last 5 quarters</h3>
               <p class="screener-divergence-note">{{ analysis().divergenceNote }}</p>
-              <app-chart-card
-                [config]="quarterlyGroupedChart()"
-                [heightPx]="300"
-                emptyMessage="No quarterly data to chart yet"
-              />
-
-              <div class="screener-quarter-summary-grid">
-                @for (chart of quarterlyMetricSummaries(); track chart.metric) {
-                  <article class="screener-quarter-summary-card">
-                    <div class="screener-quarter-summary-top">
-                      <span class="screener-quarter-chart-title">{{ chart.metric }}</span>
-                      @if (latestBar(chart); as bar) {
-                        <span class="screener-quarter-summary-value">{{ bar.displayValue }}</span>
-                      }
-                    </div>
-                    @if (latestBar(chart); as bar) {
-                      <div class="screener-quarter-summary-chips">
-                        <span
-                          class="screener-quarter-chip"
-                          [class.screener-growth-up]="bar.qoqPct != null && trendDirection(bar.qoqPct) === 'up'"
-                          [class.screener-growth-down]="bar.qoqPct != null && trendDirection(bar.qoqPct) === 'down'"
-                          [class.screener-quarter-chip-muted]="bar.qoqPct == null"
-                        >
-                          QoQ {{ bar.qoqPct != null ? formatAnalysisChange(bar.qoqPct, chart.unit) : '—' }}
-                        </span>
-                        <span
-                          class="screener-quarter-chip"
-                          [class.screener-growth-up]="bar.yoyPct != null && trendDirection(bar.yoyPct) === 'up'"
-                          [class.screener-growth-down]="bar.yoyPct != null && trendDirection(bar.yoyPct) === 'down'"
-                          [class.screener-quarter-chip-muted]="bar.yoyPct == null"
-                        >
-                          YoY {{ bar.yoyPct != null ? formatAnalysisChange(bar.yoyPct, chart.unit) : '—' }}
-                        </span>
-                        <span class="screener-quarter-bar-period">{{ bar.shortLabel }}</span>
-                      </div>
-                    }
-                    <p class="screener-growth-bar-explain">{{ chart.summary }}</p>
-                  </article>
+              <div class="screener-growth-charts-grid">
+                @for (chart of growthCharts(); track chart.key) {
+                  <app-chart-card
+                    [config]="chart.config"
+                    [title]="chart.title"
+                    [subtitle]="chart.caption"
+                    [heightPx]="growthChartHeight()"
+                    emptyMessage="Not enough quarters to compare"
+                  />
                 }
               </div>
             </section>

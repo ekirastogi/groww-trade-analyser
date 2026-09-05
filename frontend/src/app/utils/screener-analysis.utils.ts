@@ -67,7 +67,12 @@ export interface AnalysisVerdict {
 }
 
 export interface QuarterlyMetricChart {
+  /** Stable id, e.g. `sales-qoq`. */
+  key: string;
   metric: string;
+  basis: 'QoQ' | 'YoY';
+  title: string;
+  caption: string;
   unit: 'currency' | 'percent';
   bars: QuarterBar[];
   summary: string;
@@ -78,9 +83,11 @@ export interface QuarterBar {
   shortLabel: string;
   value: number | null;
   displayValue: string;
-  qoqPct: number | null;
-  yoyPct: number | null;
-  barHeightPct: number;
+  /** Percent change vs the comparison quarter (percentage points for OPM). */
+  growthPct: number;
+  growthLabel: string;
+  basePeriod: string;
+  baseDisplayValue: string;
   isLatest: boolean;
   hasData: boolean;
 }
@@ -184,63 +191,62 @@ function buildGrowthTable(
 
 const QUARTER_BAR_COUNT = 5;
 
+/** One chart per metric per basis: Sales/PAT/OPM × QoQ/YoY. */
 function buildQuarterlyCharts(
   sales: MetricAnalysis | null,
   profit: MetricAnalysis | null,
   opm: MetricAnalysis | null
 ): QuarterlyMetricChart[] {
+  const metrics: { metric: MetricAnalysis; title: string; key: string }[] = [];
+  if (sales) metrics.push({ metric: sales, title: 'Sales', key: 'sales' });
+  if (profit) metrics.push({ metric: profit, title: 'Net profit (PAT)', key: 'pat' });
+  if (opm) metrics.push({ metric: opm, title: 'OPM', key: 'opm' });
+
   const charts: QuarterlyMetricChart[] = [];
-  if (sales) charts.push(buildQuarterlyMetricChart(sales, 'Sales'));
-  if (profit) charts.push(buildQuarterlyMetricChart(profit, 'Net profit (PAT)'));
-  if (opm) charts.push(buildQuarterlyMetricChart(opm, 'OPM'));
+  for (const entry of metrics) {
+    for (const basis of ['QoQ', 'YoY'] as const) {
+      const chart = buildGrowthTrendChart(entry.metric, entry.title, entry.key, basis);
+      if (chart.bars.length) charts.push(chart);
+    }
+  }
   return charts;
 }
 
-function buildQuarterlyMetricChart(metric: MetricAnalysis, title: string): QuarterlyMetricChart {
+/**
+ * Growth bars for the last {@link QUARTER_BAR_COUNT} comparable quarters, oldest first.
+ * QoQ compares against the previous quarter, YoY against the same quarter a year back.
+ */
+function buildGrowthTrendChart(
+  metric: MetricAnalysis,
+  title: string,
+  key: string,
+  basis: 'QoQ' | 'YoY'
+): QuarterlyMetricChart {
   const all = metric.series;
-  const start = Math.max(0, all.length - QUARTER_BAR_COUNT);
-  const window = all.slice(start);
-  const padCount = QUARTER_BAR_COUNT - window.length;
+  const lag = basis === 'QoQ' ? 1 : 4;
 
-  const slots: Array<{ period: string; value: number; dataIdx: number } | null> = [];
-  for (let i = 0; i < padCount; i++) slots.push(null);
-  window.forEach((point, offset) => {
-    slots.push({ period: point.period, value: point.value, dataIdx: start + offset });
-  });
-
-  const values = slots.filter((s): s is NonNullable<typeof s> => s != null).map((s) => s.value);
-  const maxVal = values.length ? Math.max(...values) : 1;
-
-  const bars: QuarterBar[] = slots.map((slot) => {
-    if (!slot) {
-      return {
-        period: '—',
-        shortLabel: '—',
-        value: null,
-        displayValue: '—',
-        qoqPct: null,
-        yoyPct: null,
-        barHeightPct: 0,
-        isLatest: false,
-        hasData: false,
-      };
-    }
-
-    const prev = slot.dataIdx > 0 ? all[slot.dataIdx - 1]?.value ?? null : null;
-    const yoyBase = slot.dataIdx >= 4 ? all[slot.dataIdx - 4]?.value ?? null : null;
-
-    return {
-      period: slot.period,
-      shortLabel: shortPeriodLabel(slot.period),
-      value: slot.value,
-      displayValue: formatMetricValue(slot.value, metric.unit),
-      qoqPct: pctChange(slot.value, prev, metric.unit),
-      yoyPct: pctChange(slot.value, yoyBase, metric.unit),
-      barHeightPct: maxVal > 0 ? Math.max((slot.value / maxVal) * 100, 4) : 0,
-      isLatest: slot.dataIdx === all.length - 1,
+  const computed: QuarterBar[] = [];
+  for (let i = lag; i < all.length; i++) {
+    const point = all[i];
+    const base = all[i - lag]?.value ?? null;
+    const growthPct = pctChange(point.value, base, metric.unit);
+    if (growthPct == null) continue;
+    computed.push({
+      period: point.period,
+      shortLabel: shortPeriodLabel(point.period),
+      value: point.value,
+      displayValue: formatMetricValue(point.value, metric.unit),
+      growthPct,
+      growthLabel: formatAnalysisChange(growthPct, metric.unit),
+      basePeriod: all[i - lag]?.period ?? '—',
+      baseDisplayValue: formatMetricValue(base, metric.unit),
+      isLatest: i === all.length - 1,
       hasData: true,
-    };
-  });
+    });
+  }
+
+  // Oldest first, capped to the most recent 5 comparable quarters.
+  const bars = computed.slice(-QUARTER_BAR_COUNT);
 
   const row = {
     metric: title,
@@ -253,7 +259,14 @@ function buildQuarterlyMetricChart(metric: MetricAnalysis, title: string): Quart
   };
 
   return {
+    key: `${key}-${basis.toLowerCase()}`,
     metric: title,
+    basis,
+    title: `${title} · ${basis} growth`,
+    caption:
+      basis === 'QoQ'
+        ? 'Change vs the previous quarter'
+        : 'Change vs the same quarter last year',
     unit: metric.unit,
     bars,
     summary: growthMetricSummary(row),

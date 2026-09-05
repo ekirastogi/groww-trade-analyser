@@ -1,9 +1,10 @@
-import { Component, Input, computed, signal } from '@angular/core';
+import { Component, HostListener, Input, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ChartConfiguration } from 'chart.js';
+import { ChartConfiguration, Plugin } from 'chart.js';
 import { RegistryFinancialTable, RegistryStock } from '../../models/trading-journal.models';
 import { formatFetchedAt, formatDataAge } from '../../utils/data-age.utils';
 import { formatCurrency } from '../../utils/format.utils';
+import { CHART_COLORS, isMobileChart } from '../../utils/chart-theme';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import {
   buildStockAnalysis,
@@ -22,9 +23,39 @@ import {
 
 type FinancialTab = 'analysis' | 'quarterly' | 'annual' | 'balance' | 'cashflow' | 'shareholding' | 'growth';
 
-/** Grouped-bar palette: light blue / dark blue / light green with a slate outline. */
-const QUARTER_SERIES_COLORS = ['#aecfe4', '#3c76a6', '#b1d884'];
-const QUARTER_BAR_BORDER = '#334155';
+interface GrowthChartView {
+  key: string;
+  title: string;
+  caption: string;
+  config: ChartConfiguration<'bar'>;
+}
+
+/** Draws the % change above (or below, for declines) each bar. */
+const growthLabelPlugin: Plugin<'bar'> = {
+  id: 'screenerGrowthLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    const meta = chart.getDatasetMeta(0);
+    const labels = (chart.data.datasets[0] as { growthLabels?: string[] })?.growthLabels ?? [];
+    const mobile = isMobileChart();
+
+    ctx.save();
+    ctx.font = `600 ${mobile ? 9 : 11}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+
+    meta.data.forEach((bar, i) => {
+      const text = labels[i];
+      if (!text) return;
+      const value = Number(chart.data.datasets[0].data[i] ?? 0);
+      const up = value >= 0;
+      ctx.fillStyle = up ? '#047857' : '#b91c1c';
+      ctx.textBaseline = up ? 'bottom' : 'top';
+      ctx.fillText(text, bar.x, bar.y + (up ? -5 : 5));
+    });
+
+    ctx.restore();
+  },
+};
 
 @Component({
   selector: 'app-screener-fundamentals',
@@ -41,59 +72,85 @@ export class ScreenerFundamentalsComponent {
 
   analysis = computed(() => buildStockAnalysis(this.stock));
 
-  /** Grouped bar chart: one group per quarter, one bar per metric (OPM on the right % axis). */
-  quarterlyGroupedChart = computed<ChartConfiguration<'bar'> | null>(() => {
-    const charts = this.analysis().quarterlyCharts;
-    if (!charts.length) return null;
+  /** Bumped on resize so chart sizing/font choices recompute for the new breakpoint. */
+  private viewportVersion = signal(0);
 
-    const labelSource = charts.reduce((best, chart) =>
-      chart.bars.filter((b) => b.hasData).length > best.bars.filter((b) => b.hasData).length
-        ? chart
-        : best
-    );
-    const labels = labelSource.bars.map((b) => b.shortLabel);
-    if (!labels.some((label) => label !== '—')) return null;
+  growthChartHeight = computed(() => {
+    this.viewportVersion();
+    return isMobileChart() ? 210 : 250;
+  });
 
-    const datasets = charts.map((chart, index) => ({
-      label: chart.metric,
-      data: chart.bars.map((b) => b.value),
-      backgroundColor: QUARTER_SERIES_COLORS[index % QUARTER_SERIES_COLORS.length],
-      borderColor: QUARTER_BAR_BORDER,
-      borderWidth: 1,
-      borderRadius: 2,
-      maxBarThickness: 34,
-      yAxisID: chart.unit === 'percent' ? 'yPct' : 'yValue',
+  /** One growth chart per metric per basis (Sales/PAT/OPM × QoQ/YoY). */
+  growthCharts = computed<GrowthChartView[]>(() => {
+    this.viewportVersion();
+    return this.analysis().quarterlyCharts.map((chart) => ({
+      key: chart.key,
+      title: chart.title,
+      caption: chart.caption,
+      config: this.buildGrowthChartConfig(chart),
     }));
+  });
 
-    const hasPercent = charts.some((c) => c.unit === 'percent');
-    const hasValue = charts.some((c) => c.unit !== 'percent');
+  @HostListener('window:resize')
+  onViewportResize(): void {
+    this.viewportVersion.update((v) => v + 1);
+  }
+
+  private buildGrowthChartConfig(chart: QuarterlyMetricChart): ChartConfiguration<'bar'> {
+    const mobile = isMobileChart();
+    const values = chart.bars.map((b) => b.growthPct);
+    const unitSuffix = chart.unit === 'percent' ? ' pp' : '%';
+    const labelGutter = mobile ? 18 : 22;
+    const hasDecline = values.some((v) => v < 0);
 
     return {
       type: 'bar',
-      data: { labels, datasets },
+      data: {
+        labels: chart.bars.map((b) => b.shortLabel),
+        datasets: [
+          {
+            label: `${chart.metric} ${chart.basis}`,
+            data: values,
+            growthLabels: chart.bars.map((b) => b.growthLabel),
+            backgroundColor: values.map((v) =>
+              v >= 0 ? 'rgba(16,185,129,0.85)' : 'rgba(239,68,68,0.85)'
+            ),
+            hoverBackgroundColor: values.map((v) =>
+              v >= 0 ? CHART_COLORS.success : CHART_COLORS.danger
+            ),
+            borderWidth: 0,
+            borderRadius: 3,
+            // Bars sit flush against each other.
+            categoryPercentage: 1,
+            barPercentage: 1,
+          } as ChartConfiguration<'bar'>['data']['datasets'][number],
+        ],
+      },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        layout: { padding: { top: 4, right: 4, bottom: 0, left: 0 } },
+        // Gutters so the % labels at the bar ends are never clipped.
+        layout: {
+          padding: { top: labelGutter, right: 2, bottom: hasDecline ? labelGutter : 0, left: 0 },
+        },
         plugins: {
-          legend: {
-            display: true,
-            position: 'top',
-            align: 'start',
-            labels: { boxWidth: 10, boxHeight: 10, usePointStyle: false, font: { size: 11 } },
-          },
+          legend: { display: false },
           tooltip: {
-            backgroundColor: '#0f172a',
+            backgroundColor: CHART_COLORS.ink,
             titleColor: '#f8fafc',
             bodyColor: '#e2e8f0',
             padding: 10,
             cornerRadius: 8,
             callbacks: {
+              title: (items) => chart.bars[items[0]?.dataIndex ?? 0]?.period ?? '',
               label: (ctx) => {
-                const unit = charts[ctx.datasetIndex]?.unit ?? 'currency';
-                const value = Number(ctx.parsed.y);
-                return `${ctx.dataset.label}: ${formatMetricValue(value, unit)}`;
+                const bar = chart.bars[ctx.dataIndex];
+                if (!bar) return '';
+                return [
+                  `${chart.basis}: ${bar.growthLabel}`,
+                  `${chart.metric}: ${bar.displayValue}`,
+                  `vs ${bar.basePeriod}: ${bar.baseDisplayValue}`,
+                ];
               },
             },
           },
@@ -101,46 +158,24 @@ export class ScreenerFundamentalsComponent {
         scales: {
           x: {
             grid: { display: false },
-            border: { color: '#cbd5e1' },
-            ticks: { font: { size: 10 }, color: '#64748b' },
+            border: { color: CHART_COLORS.border },
+            ticks: { font: { size: mobile ? 9 : 10 }, color: CHART_COLORS.muted },
           },
-          yValue: {
-            display: hasValue,
-            position: 'left',
-            grid: { color: 'rgba(148,163,184,0.25)' },
+          y: {
+            grid: { color: CHART_COLORS.grid },
             border: { display: false },
+            grace: '18%',
             ticks: {
-              font: { size: 10 },
-              color: '#64748b',
+              font: { size: mobile ? 9 : 10 },
+              color: CHART_COLORS.muted,
               maxTicksLimit: 5,
-              callback: (v) => formatMetricValue(Number(v), 'currency'),
+              callback: (v) => `${Number(v).toFixed(0)}${unitSuffix}`,
             },
-            grace: '8%',
-          },
-          yPct: {
-            display: hasPercent,
-            position: 'right',
-            grid: { display: false },
-            border: { display: false },
-            ticks: {
-              font: { size: 10 },
-              color: '#64748b',
-              maxTicksLimit: 5,
-              callback: (v) => `${Number(v).toFixed(0)}%`,
-            },
-            grace: '8%',
           },
         },
       },
+      plugins: [growthLabelPlugin],
     };
-  });
-
-  quarterlyMetricSummaries = computed<QuarterlyMetricChart[]>(() =>
-    this.analysis().quarterlyCharts
-  );
-
-  latestBar(chart: QuarterlyMetricChart) {
-    return [...chart.bars].reverse().find((b) => b.hasData) ?? null;
   }
   priceRangeRawPct = computed(() => calcPriceRangeRawPct(this.analysis().pricePosition));
   priceRangeDisplayPct = computed(() => calcPriceRangeDisplayPct(this.analysis().pricePosition));
