@@ -24,6 +24,7 @@ import {
   computeTradeFingerprint,
   enrichTradeWithCharges,
   normalizeSymbol,
+  tradeOccurrenceKey,
 } from '../utils/upload-merge.utils';
 import { expandTradeTypes, effectiveTradeType, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
 import { profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
@@ -278,6 +279,7 @@ export class TradeLedgerService {
     }
 
     if (!options.forceReingest) {
+      await this.removeDuplicateTrades(uid, clientCode);
       const { data: existingFile } = await this.supabase.client
         .from('uploads')
         .select('id')
@@ -301,20 +303,30 @@ export class TradeLedgerService {
       }
     }
 
+    const fingerprintCounts = await this.loadFingerprintCounts(uid, clientCode);
+
     const uploadId = crypto.randomUUID();
     const totalSellValue = report.trades.reduce((s, t) => s + t.sellValue, 0);
     const chargeRatio = computeChargeRatio(totalSellValue, report.charges.total);
     const now = Date.now();
 
     let newTradesAdded = 0;
-    const duplicatesSkipped = 0;
+    let duplicatesSkipped = 0;
     const affectedSymbols = new Set<string>();
     const pendingWrites: StoredTrade[] = [];
+    const occurrenceInFile = new Map<string, number>();
 
-    for (let index = 0; index < report.trades.length; index++) {
-      const trade = report.trades[index];
+    for (const trade of report.trades) {
       const fingerprint = await computeTradeFingerprint(trade, clientCode);
-      const dedupeKey = `${uploadId}_${String(index).padStart(6, '0')}`;
+      const occurrence = occurrenceInFile.get(fingerprint) ?? 0;
+      occurrenceInFile.set(fingerprint, occurrence + 1);
+      const alreadyStored = fingerprintCounts.get(fingerprint) ?? 0;
+      if (occurrence < alreadyStored) {
+        duplicatesSkipped++;
+        continue;
+      }
+
+      const dedupeKey = await tradeOccurrenceKey(fingerprint, occurrence);
       const symbol = normalizeSymbol(trade.stockName);
       const enriched = enrichTradeWithCharges(trade, chargeRatio);
       pendingWrites.push({
@@ -333,7 +345,9 @@ export class TradeLedgerService {
       affectedSymbols.add(symbol);
     }
 
-    await this.commitTradesInChunks(pendingWrites, uid);
+    if (pendingWrites.length) {
+      await this.commitTradesInChunks(pendingWrites, uid);
+    }
 
     const uploadRecord: Omit<UploadRecord, 'id'> = {
       fileName: file.name,
@@ -363,7 +377,6 @@ export class TradeLedgerService {
     if (uploadError) throw uploadError;
 
     const syncedReport = await this.syncDerivedData(clientCode, clientName, {
-      trades: pendingWrites,
       uploadMeta: uploadRecord,
     });
 
@@ -1018,6 +1031,68 @@ export class TradeLedgerService {
       uploadIds: [...uploadIds],
       updatedAt: Date.now(),
     };
+  }
+
+  private async loadFingerprintCounts(userId: string, clientCode: string): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.supabase.client
+        .from('trades')
+        .select('fingerprint')
+        .eq('user_id', userId)
+        .eq('client_code', clientCode)
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data?.length) break;
+      for (const row of data) {
+        const fingerprint = String((row as { fingerprint?: string }).fingerprint ?? '');
+        if (!fingerprint) continue;
+        counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + 1);
+      }
+      if (data.length < pageSize) break;
+    }
+    return counts;
+  }
+
+  /** Keep the oldest row per fingerprint so overlapping P&L windows do not inflate totals. */
+  private async removeDuplicateTrades(userId: string, clientCode: string): Promise<number> {
+    const pageSize = 1000;
+    const rows: { id: string; fingerprint: string }[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.supabase.client
+        .from('trades')
+        .select('id, fingerprint, created_at')
+        .eq('user_id', userId)
+        .eq('client_code', clientCode)
+        .order('created_at', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data?.length) break;
+      for (const row of data) {
+        const rec = row as { id?: string; fingerprint?: string };
+        rows.push({
+          id: String(rec.id ?? ''),
+          fingerprint: String(rec.fingerprint ?? ''),
+        });
+      }
+      if (data.length < pageSize) break;
+    }
+
+    const seen = new Set<string>();
+    const toDelete: string[] = [];
+    for (const row of rows) {
+      if (!row.id || !row.fingerprint) continue;
+      if (seen.has(row.fingerprint)) toDelete.push(row.id);
+      else seen.add(row.fingerprint);
+    }
+
+    for (let i = 0; i < toDelete.length; i += UPSERT_BATCH_LIMIT) {
+      const chunk = toDelete.slice(i, i + UPSERT_BATCH_LIMIT);
+      const { error } = await this.supabase.client.from('trades').delete().in('id', chunk);
+      if (error) throw error;
+    }
+    return toDelete.length;
   }
 
   private async commitTradesInChunks(trades: StoredTrade[], userId: string): Promise<void> {

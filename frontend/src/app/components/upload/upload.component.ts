@@ -67,9 +67,13 @@ export class UploadComponent {
             `File already saved for ${result.clientName} (${result.clientCode}). Dashboard refreshed from cloud.`
           );
         } else {
+          const skipped =
+            result.duplicatesSkipped > 0
+              ? ` ${result.duplicatesSkipped} already stored and skipped.`
+              : '';
           this.pushResult.set(
             `Saved to Supabase for ${result.clientName} (${result.clientCode}): ` +
-              `${result.newTradesAdded} trades imported.`
+              `${result.newTradesAdded} trades imported.${skipped}`
           );
         }
 

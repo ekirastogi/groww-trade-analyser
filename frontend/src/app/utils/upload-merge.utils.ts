@@ -37,30 +37,29 @@ export async function computeTradeFingerprint(trade: Trade, clientCode: string):
   return sha256Hex(raw);
 }
 
+/** Doc id for the Nth identical fingerprint (0 = the fingerprint itself). */
+export async function tradeOccurrenceKey(fingerprint: string, occurrence: number): Promise<string> {
+  return occurrence <= 0 ? fingerprint : sha256Hex(`${fingerprint}|${occurrence}`);
+}
+
 /** @deprecated Use computeTradeFingerprint */
 export async function computeTradeDedupeKey(trade: Trade, clientCode: string): Promise<string> {
   return computeTradeFingerprint(trade, clientCode);
 }
 
 /**
- * Assign a unique Firestore doc id for each parsed row.
- * Identical rows in the same file get suffixes; only exact keys already in Firestore are skipped.
+ * Stable id for a parsed row. Returns null when that occurrence already exists
+ * (caller should skip the row). Identical rows in the same file use suffixes.
  */
 export async function resolveTradeDedupeKey(
   trade: Trade,
   clientCode: string,
   occurrenceInFile: number,
   takenKeys: Set<string>
-): Promise<string> {
+): Promise<string | null> {
   const base = await computeTradeFingerprint(trade, clientCode);
-  let suffix = occurrenceInFile;
-  let key = suffix === 0 ? base : await sha256Hex(`${base}|${suffix}`);
-
-  while (takenKeys.has(key)) {
-    suffix++;
-    key = await sha256Hex(`${base}|${suffix}`);
-  }
-
+  const key = await tradeOccurrenceKey(base, occurrenceInFile);
+  if (takenKeys.has(key)) return null;
   takenKeys.add(key);
   return key;
 }
