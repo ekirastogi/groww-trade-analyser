@@ -23,13 +23,17 @@ export class FilterUrlService {
   private writingUrl = false;
 
   constructor() {
-    effect(() => {
-      // Read the signal before any guard so the effect always tracks report loads.
-      const report = this.state.report();
-      if (this.started && report) {
-        this.syncFromUrl();
-      }
-    });
+    effect(
+      () => {
+        // Read the signal before any guard so the effect always tracks report loads.
+        const report = this.state.report();
+        if (this.started && report) {
+          this.syncFromUrl();
+        }
+      },
+      // syncFromUrl pushes the URL's filters back into report state.
+      { allowSignalWrites: true }
+    );
   }
 
   start(): void {
