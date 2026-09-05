@@ -19,7 +19,7 @@ Chart.register(...registerables);
   standalone: true,
   template: `
     <div
-      class="flex flex-col overflow-hidden"
+      class="flex w-full flex-col overflow-hidden"
       [class.rounded-xl]="!compact()"
       [class.border]="!compact()"
       [class.border-slate-200]="!compact()"
