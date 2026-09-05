@@ -92,25 +92,59 @@ async function fetchText(url: string): Promise<string> {
   return res.text();
 }
 
-async function resolveCompanyUrl(symbol: string): Promise<{ url: string; name?: string }> {
-  const query = encodeURIComponent(symbol);
-  const body = await fetchText(`https://www.screener.in/api/company/search/?q=${query}`);
+async function resolveCompanyUrl(symbol: string, hintName?: string): Promise<{ url: string; name?: string }> {
+  const queries = searchQueries(symbol, hintName);
+  for (const query of queries) {
+    const hit = await searchCompany(query, symbol);
+    if (hit) return hit;
+  }
+  return { url: `https://www.screener.in/company/${encodeURIComponent(symbol)}/consolidated/` };
+}
+
+function searchQueries(symbol: string, hintName?: string): string[] {
+  const out = new Set<string>();
+  const sym = symbol.trim().toUpperCase();
+  if (sym) out.add(sym);
+  const name = hintName?.trim();
+  if (name) {
+    out.add(name);
+    const firstWord = name.split(/\s+/)[0];
+    if (firstWord && firstWord.length >= 4) out.add(firstWord);
+  }
+  const markers = ['DOCK', 'SHIP', 'BANK', 'FIN', 'TECH', 'POWER', 'STEEL', 'CHEM', 'LAB', 'PHARMA', 'IND'];
+  for (const marker of markers) {
+    const idx = sym.indexOf(marker);
+    if (idx >= 4) out.add(sym.slice(0, idx));
+  }
+  if (sym.length > 8) {
+    out.add(sym.slice(0, 8));
+    out.add(sym.slice(0, 7));
+    out.add(sym.slice(0, 6));
+  }
+  return [...out].filter((q) => q.length >= 4);
+}
+
+async function searchCompany(
+  query: string,
+  originalSymbol: string
+): Promise<{ url: string; name?: string } | null> {
+  const body = await fetchText(`https://www.screener.in/api/company/search/?q=${encodeURIComponent(query)}`);
   let hits: SearchHit[] = [];
   try {
     hits = JSON.parse(body) as SearchHit[];
   } catch {
     hits = [];
   }
+  if (!hits.length) return null;
+
   const exact = hits.find((h) => {
     const path = (h.url ?? '').toUpperCase();
-    return path.includes(`/COMPANY/${symbol.toUpperCase()}/`);
+    return path.includes(`/COMPANY/${originalSymbol}/`);
   });
   const hit = exact ?? hits[0];
-  if (hit?.url) {
-    const path = hit.url.startsWith('http') ? hit.url : `https://www.screener.in${hit.url}`;
-    return { url: path, name: hit.name };
-  }
-  return { url: `https://www.screener.in/company/${encodeURIComponent(symbol)}/consolidated/` };
+  if (!hit?.url) return null;
+  const path = hit.url.startsWith('http') ? hit.url : `https://www.screener.in${hit.url}`;
+  return { url: path, name: hit.name };
 }
 
 function parseTopRatios($: cheerio.CheerioAPI): Record<string, string> {
@@ -225,10 +259,10 @@ function parseScreenerHtml(html: string, url: string, symbol: string, fallbackNa
   };
 }
 
-async function fetchScreenerSnapshot(rawSymbol: string): Promise<ScreenerSnapshot> {
+async function fetchScreenerSnapshot(rawSymbol: string, hintName?: string): Promise<ScreenerSnapshot> {
   const symbol = rawSymbol.trim().toUpperCase().replace(/\.(NS|BO|BSE)$/i, '');
   if (!symbol) throw new Error('Symbol is required');
-  const resolved = await resolveCompanyUrl(symbol);
+  const resolved = await resolveCompanyUrl(symbol, hintName);
   const html = await fetchText(resolved.url);
   if (/page not found/i.test(html) || html.length < 2000) {
     throw new Error(`No Screener page found for ${symbol}`);
@@ -244,6 +278,7 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const symbol = String(body?.symbol ?? '').trim();
+    const name = String(body?.name ?? '').trim();
     if (!symbol) {
       return new Response(JSON.stringify({ error: 'Symbol is required' }), {
         status: 400,
@@ -251,7 +286,7 @@ serve(async (req) => {
       });
     }
 
-    const snapshot = await fetchScreenerSnapshot(symbol);
+    const snapshot = await fetchScreenerSnapshot(symbol, name || undefined);
     return new Response(JSON.stringify(snapshot), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

@@ -52,6 +52,19 @@ export class WatchlistService {
     return (data ?? []).map((row) => rowToWatchlist(row)).sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
+  async listManual(): Promise<Watchlist[]> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+    const { data, error } = await this.supabase.client
+      .from('watchlists')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('list_type', 'manual')
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => rowToWatchlist(row));
+  }
+
   async create(watchlist: Omit<Watchlist, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to manage watchlists');

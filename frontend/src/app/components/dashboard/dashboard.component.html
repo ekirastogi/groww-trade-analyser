@@ -38,8 +38,10 @@
       <span class="col-span-full text-slate-400 sm:col-auto">{{ state.report()!.stockSummary.length }} stocks · {{ data.summary.tradeCount }} trades</span>
     </div>
 
-    <div class="mb-2 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+    <div class="filter-toolbar mb-2">
+      <span class="filter-toolbar-label">Trade</span>
       <app-trade-type-filter [compact]="true" />
+      <span class="hidden h-3 w-px bg-slate-200 sm:inline-block"></span>
       <app-date-range-filter />
     </div>
 
@@ -51,7 +53,8 @@
             { id: 'stocks', label: 'Per Stock' },
             { id: 'daily', label: 'Daily' },
             { id: 'weekly', label: 'Weekly' },
-            { id: 'monthly', label: 'Monthly' }
+            { id: 'monthly', label: 'Monthly' },
+            { id: 'custom', label: 'Custom' }
           ]; track tab.id) {
             <button
               type="button"
@@ -265,8 +268,49 @@
           </div>
         }
 
-        @if (activeTab() === 'stocks') {
+        @if (isStockTableTab()) {
           <div class="space-y-2 border-b border-slate-100 px-3 py-2 sm:px-4">
+            @if (activeTab() === 'custom') {
+              <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                @if (customLists.listsLoading()) {
+                  <span class="text-xs text-slate-500">Loading lists…</span>
+                } @else {
+                  <select
+                    class="input-field w-full min-w-[160px] py-1.5 text-xs sm:w-auto sm:max-w-xs"
+                    [ngModel]="customLists.selectedListId() ?? ''"
+                    (ngModelChange)="selectCustomList($event)"
+                    [disabled]="!customLists.lists().length"
+                    aria-label="Saved custom lists"
+                  >
+                    @if (!customLists.lists().length) {
+                      <option value="">No saved lists</option>
+                    }
+                    @for (list of customLists.lists(); track list.id) {
+                      <option [value]="list.id">{{ list.name }} ({{ list.stockSymbols.length }})</option>
+                    }
+                  </select>
+                }
+                <a routerLink="/dashboard/custom-lists/new" queryParamsHandling="preserve" class="btn-primary px-3 py-1.5 text-xs">
+                  New list
+                </a>
+                @if (customLists.selectedList(); as list) {
+                  <a
+                    [routerLink]="['/dashboard/custom-lists', list.id]"
+                    queryParamsHandling="preserve"
+                    class="btn-secondary px-3 py-1.5 text-xs"
+                  >
+                    Edit
+                  </a>
+                  <button type="button" class="btn-ghost px-3 py-1.5 text-xs text-red-600" (click)="deleteSelectedCustomList()">
+                    Delete
+                  </button>
+                }
+                @if (customLists.error()) {
+                  <span class="text-xs text-red-600">{{ customLists.error() }}</span>
+                }
+              </div>
+            }
+
             <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <div class="relative min-w-0 flex-1 sm:max-w-xs">
               <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -292,22 +336,24 @@
               }
             </div>
 
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition"
-                [class.bg-kairo-50]="stockScenarioPanelOpen()"
-                [class.text-kairo-700]="stockScenarioPanelOpen()"
-                [class.text-slate-600]="!stockScenarioPanelOpen()"
-                [class.hover:bg-slate-100]="!stockScenarioPanelOpen()"
-                (click)="toggleStockScenarioPanel()"
-              >
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-                Scenario builder
-                @if (hasActiveStockScenario()) {
-                  <span class="rounded-full bg-kairo-500 px-1.5 py-0.5 text-[10px] font-bold text-white">ON</span>
-                }
-                <svg class="h-3.5 w-3.5 transition" [class.rotate-180]="stockScenarioPanelOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-              </button>
+              @if (activeTab() === 'stocks') {
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition"
+                  [class.bg-kairo-50]="stockScenarioPanelOpen()"
+                  [class.text-kairo-700]="stockScenarioPanelOpen()"
+                  [class.text-slate-600]="!stockScenarioPanelOpen()"
+                  [class.hover:bg-slate-100]="!stockScenarioPanelOpen()"
+                  (click)="toggleStockScenarioPanel()"
+                >
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                  Scenario builder
+                  @if (hasActiveStockScenario()) {
+                    <span class="rounded-full bg-kairo-500 px-1.5 py-0.5 text-[10px] font-bold text-white">ON</span>
+                  }
+                  <svg class="h-3.5 w-3.5 transition" [class.rotate-180]="stockScenarioPanelOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+              }
 
               <span class="text-xs text-slate-500 sm:shrink-0">
                 Showing {{ stockScenarioStats().shown }} of {{ stockScenarioStats().total }} stocks
@@ -338,7 +384,7 @@
               </div>
             </div>
 
-            @if (stockScenarioPanelOpen()) {
+            @if (activeTab() === 'stocks' && stockScenarioPanelOpen()) {
               <div class="rounded-lg border border-slate-200 bg-slate-50/80 p-3 sm:p-4">
                 <p class="mb-3 text-xs text-slate-500">
                   Add rules on any column. All rules must match (AND). Build your own view — nothing is forced.
@@ -606,8 +652,14 @@
                   }
                 } @empty {
                   <tr><td [attr.colspan]="visibleStockColumnList().length + 1" class="py-8 text-center text-slate-400">
-                    @if (hasStockSearch()) {
+                    @if (activeTab() === 'custom' && !customLists.lists().length && !customLists.listsLoading()) {
+                      No custom lists yet. Create one to pick a subset of stocks.
+                    } @else if (activeTab() === 'custom' && !customLists.selectedList()) {
+                      Select or create a list to see stocks.
+                    } @else if (hasStockSearch()) {
                       No stocks match "{{ stockSearchQuery() }}"
+                    } @else if (activeTab() === 'custom') {
+                      None of the stocks in this list appear in the current filters.
                     } @else if (!hasActiveStockScenario()) {
                       No stock data
                     } @else {

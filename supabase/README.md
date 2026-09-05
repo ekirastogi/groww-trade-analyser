@@ -73,7 +73,7 @@ Worker writes market data to Postgres; UI reads via `supabase-js`.
 On-demand Screener.in scraping:
 
 ```bash
-supabase functions deploy screener-fetch --project-ref vufjhwxlyhxunqhfeqtr
+supabase functions deploy screener-fetch --project-ref vufjhwxlyhxunqhfeqtr --no-verify-jwt
 ```
 
 The Angular app calls `screener-fetch` via `supabase.functions.invoke()` when you fetch fundamentals from Stock Registry or a stock detail page.

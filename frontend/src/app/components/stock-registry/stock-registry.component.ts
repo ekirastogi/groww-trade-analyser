@@ -316,8 +316,8 @@ export class StockRegistryComponent implements OnInit {
     this.success.set(null);
     this.fetchingSymbol.set(symbol);
     try {
-      const data = await this.screener.fetchStock(symbol);
       const existing = await this.registrySvc.getBySymbol(symbol);
+      const data = await this.screener.fetchStock(symbol, existing?.name);
       this.previewStock.set(this.snapshotToRegistry(data, existing));
       this.success.set(`Fetched Screener data for ${symbol}.`);
     } catch (e) {
@@ -362,7 +362,7 @@ export class StockRegistryComponent implements OnInit {
     this.success.set(null);
     this.fetchingSymbol.set(stock.symbol);
     try {
-      const data = await this.screener.fetchStock(stock.symbol);
+      const data = await this.screener.fetchStock(stock.symbol, stock.name);
       await this.registrySvc.save(this.applyScreener(stock, data));
       this.success.set(`Fetched Screener data for ${stock.symbol}.`);
       this.expandedSymbol.set(stock.symbol);

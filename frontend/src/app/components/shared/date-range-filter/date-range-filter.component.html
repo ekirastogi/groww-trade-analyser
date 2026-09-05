@@ -1,9 +1,8 @@
-<div class="date-range-filter" [class.date-range-filter-panel]="variant() === 'panel'">
-  <div class="date-range-filter-head">
-    <span class="date-range-filter-kicker">Session</span>
-    <span class="date-range-filter-caption tabular-nums">{{ rangeCaption() }}</span>
-  </div>
-
+<div
+  class="date-range-filter"
+  [class.date-range-filter-toolbar]="variant() === 'toolbar'"
+  [class.date-range-filter-panel]="variant() === 'panel'"
+>
   <div class="date-range-presets" role="radiogroup" aria-label="Date range">
     @for (preset of presets; track preset.id) {
       <button
@@ -15,35 +14,34 @@
         [attr.title]="preset.label"
         (click)="selectPreset(preset.id)"
       >
-        <span class="date-range-preset-short">{{ preset.shortLabel }}</span>
-        <span class="date-range-preset-full">{{ preset.label }}</span>
+        {{ preset.shortLabel }}
       </button>
     }
   </div>
 
-  <div class="date-range-custom">
-    <label class="date-range-field">
-      <span>From</span>
+  @if (activePreset() === 'custom') {
+    <div class="date-range-custom">
       <input
         type="date"
         class="date-range-input"
+        aria-label="From date"
         [min]="bounds().min"
         [max]="bounds().max || state.endDate()"
         [ngModel]="state.startDate()"
         (ngModelChange)="onCustomDateChange('start', $event)"
       />
-    </label>
-    <span class="date-range-sep" aria-hidden="true">→</span>
-    <label class="date-range-field">
-      <span>To</span>
+      <span class="date-range-sep" aria-hidden="true">–</span>
       <input
         type="date"
         class="date-range-input"
+        aria-label="To date"
         [min]="bounds().min || state.startDate()"
         [max]="bounds().max"
         [ngModel]="state.endDate()"
         (ngModelChange)="onCustomDateChange('end', $event)"
       />
-    </label>
-  </div>
+    </div>
+  } @else if (rangeCaption()) {
+    <span class="date-range-caption tabular-nums" [title]="rangeCaption()">{{ rangeCaption() }}</span>
+  }
 </div>

@@ -29,6 +29,22 @@ export const routes: Routes = [
         data: { title: 'Signals', subtitle: 'Trade recommendations from your engine' },
       },
       {
+        path: 'dashboard/custom-lists/new',
+        loadComponent: () =>
+          import('./components/dashboard/custom-stock-list-editor.component').then(
+            (m) => m.CustomStockListEditorComponent
+          ),
+        data: { title: 'New custom list', subtitle: 'Pick stocks for a focused dashboard view' },
+      },
+      {
+        path: 'dashboard/custom-lists/:id',
+        loadComponent: () =>
+          import('./components/dashboard/custom-stock-list-editor.component').then(
+            (m) => m.CustomStockListEditorComponent
+          ),
+        data: { title: 'Edit custom list', subtitle: 'Update the stocks in this dashboard view' },
+      },
+      {
         path: 'dashboard',
         component: DashboardComponent,
         data: { title: 'Dashboard', subtitle: 'Portfolio overview from your P&L' },

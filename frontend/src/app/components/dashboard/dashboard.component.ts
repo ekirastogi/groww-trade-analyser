@@ -1,12 +1,14 @@
 import { Component, signal, computed, inject, effect, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
 import { LazyTradeLoaderService } from '../../services/lazy-trade-loader.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
 import { PageShellService } from '../../services/page-shell.service';
 import { ClientAccountService, ClientAccount } from '../../services/client-account.service';
+import { CustomStockListService } from '../../services/custom-stock-list.service';
+import { FilterUrlService } from '../../services/filter-url.service';
 import {
   PeriodBucket,
   StockSummary,
@@ -45,7 +47,7 @@ const DEFAULT_VISIBLE_PERIOD_COLUMNS: PeriodColumnKey[] = [
   'period', 'tradeCount', 'realisedPnL', 'allocatedCharges', 'netPnL', 'winRate',
 ];
 type SortDir = 'asc' | 'desc';
-type TabId = 'daily' | 'weekly' | 'monthly' | 'stocks';
+type TabId = 'daily' | 'weekly' | 'monthly' | 'stocks' | 'custom';
 type StockColumnKey =
   | 'stockName'
   | 'tradeCount'
@@ -78,6 +80,9 @@ export class DashboardComponent implements OnInit {
   private pageShell = inject(PageShellService);
   private clientSvc = inject(ClientAccountService);
   readonly lazyTrades = inject(LazyTradeLoaderService);
+  readonly customLists = inject(CustomStockListService);
+  private route = inject(ActivatedRoute);
+  private filterUrl = inject(FilterUrlService);
   readonly clients = signal<ClientAccount[]>([]);
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
   readonly formatCurrency = formatCurrency;
@@ -98,6 +103,14 @@ export class DashboardComponent implements OnInit {
     await this.state.ensureLoadedFromFirebase();
     await this.state.ensureTradesLoaded();
     this.clients.set(await this.clientSvc.listClients());
+    const params = this.route.snapshot.queryParamMap;
+    if (params.get('tab') === 'custom') {
+      this.activeTab.set('custom');
+      this.resetSortForTab('custom');
+      const listId = params.get('list');
+      if (listId) this.customLists.select(listId);
+      void this.customLists.ensureLoaded();
+    }
   }
 
   activeTab = signal<TabId>('stocks');
@@ -216,9 +229,14 @@ export class DashboardComponent implements OnInit {
   );
 
   sortedStockData = computed(() => {
-    const stocks = this.filteredStocks.stocks();
-    const filtered = filterStocksByRules(stocks, this.stockFilterRules());
-    const searched = filtered.filter((stock) => this.matchesStockSearch(stock, this.stockSearchQuery()));
+    let stocks = this.filteredStocks.stocks();
+    if (this.activeTab() === 'custom') {
+      const list = this.customLists.selectedList();
+      stocks = list ? this.customLists.stocksForList(list, stocks) : [];
+    } else {
+      stocks = filterStocksByRules(stocks, this.stockFilterRules());
+    }
+    const searched = stocks.filter((stock) => this.matchesStockSearch(stock, this.stockSearchQuery()));
     return this.sortRows(searched, (row, col) => {
       if (col === 'stockName') return row.stockName.toLowerCase();
       return row[col as keyof StockSummary] as number;
@@ -228,10 +246,16 @@ export class DashboardComponent implements OnInit {
   hasStockSearch = computed(() => this.stockSearchQuery().trim().length > 0);
 
   stockScenarioStats = computed(() => {
-    const stocks = this.filteredStocks.stocks();
-    const afterRules = filterStocksByRules(stocks, this.stockFilterRules());
+    const universe = this.filteredStocks.stocks();
+    if (this.activeTab() === 'custom') {
+      const list = this.customLists.selectedList();
+      const listed = list ? this.customLists.stocksForList(list, universe) : [];
+      const shown = listed.filter((stock) => this.matchesStockSearch(stock, this.stockSearchQuery())).length;
+      return { total: listed.length, shown };
+    }
+    const afterRules = filterStocksByRules(universe, this.stockFilterRules());
     const shown = afterRules.filter((stock) => this.matchesStockSearch(stock, this.stockSearchQuery())).length;
-    return { total: stocks.length, shown };
+    return { total: universe.length, shown };
   });
 
   stockTableTotals = computed(() => {
@@ -270,6 +294,31 @@ export class DashboardComponent implements OnInit {
     this.expandedDayKey.set(null);
     this.lazyTrades.clear();
     this.resetSortForTab(tab);
+    if (tab === 'custom') {
+      void this.customLists.ensureLoaded();
+      this.filterUrl.patchWatchlistQuery({ tab: 'custom' });
+    } else {
+      this.filterUrl.patchWatchlistQuery({ tab: null });
+    }
+  }
+
+  isStockTableTab(): boolean {
+    const tab = this.activeTab();
+    return tab === 'stocks' || tab === 'custom';
+  }
+
+  selectCustomList(id: string): void {
+    this.customLists.select(id || null);
+    this.expandedPerStock.set(null);
+    this.expandedDayKey.set(null);
+  }
+
+  async deleteSelectedCustomList(): Promise<void> {
+    const list = this.customLists.selectedList();
+    if (!list) return;
+    if (!confirm(`Delete “${list.name}”? This cannot be undone.`)) return;
+    await this.customLists.remove(list.id);
+    this.expandedPerStock.set(null);
   }
 
   togglePeriodExpand(period: string): void {
@@ -704,6 +753,7 @@ export class DashboardComponent implements OnInit {
       weekly: { column: 'period', direction: 'desc' },
       monthly: { column: 'period', direction: 'desc' },
       stocks: { column: 'realisedPnL', direction: 'desc' },
+      custom: { column: 'realisedPnL', direction: 'desc' },
     };
     const { column, direction } = defaults[tab];
     this.sortColumn.set(column);

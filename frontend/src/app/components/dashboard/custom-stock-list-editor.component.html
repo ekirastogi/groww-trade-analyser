@@ -1,0 +1,108 @@
+@if (!state.hasReport()) {
+  <div class="card overflow-hidden p-8 text-center">
+    <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>
+    <p class="mt-2 text-sm text-slate-500">Upload a broker P&amp;L export before creating a custom list.</p>
+    <a routerLink="/settings" class="btn-primary mt-4 inline-block">Upload File</a>
+  </div>
+} @else if (loading()) {
+  <div class="card px-4 py-8 text-center text-sm text-slate-500">Loading list…</div>
+} @else {
+  <div class="mb-3 flex flex-wrap items-center gap-2">
+    <a routerLink="/dashboard" [queryParams]="{ tab: 'custom' }" class="btn-ghost px-2 py-1 text-xs">← Back to Custom tab</a>
+  </div>
+
+  @if (error()) {
+    <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      {{ error() }}
+    </div>
+  }
+
+  <div class="card overflow-hidden">
+    <div class="space-y-3 border-b border-slate-100 px-3 py-3 sm:px-4">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <label class="min-w-0 flex-1">
+          <span class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">List name</span>
+          <input
+            type="text"
+            class="input-field py-1.5 text-sm"
+            placeholder="e.g. Core holdings"
+            [ngModel]="name()"
+            (ngModelChange)="name.set($event)"
+          />
+        </label>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn-secondary px-3 py-1.5 text-xs" (click)="selectVisible()">Select visible</button>
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" (click)="clearVisible()">Clear visible</button>
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs text-red-600" (click)="clearAll()">Clear all</button>
+          <button
+            type="button"
+            class="btn-primary px-3 py-1.5 text-xs"
+            [disabled]="saving() || !name().trim() || !selectedCount()"
+            (click)="save()"
+          >
+            {{ saving() ? 'Saving…' : isEditing() ? 'Save changes' : 'Save list' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div class="relative min-w-0 flex-1 sm:max-w-xs">
+          <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input
+            type="search"
+            class="input-field w-full py-1.5 pl-9 text-xs"
+            placeholder="Search stocks by name or symbol…"
+            [ngModel]="searchQuery()"
+            (ngModelChange)="searchQuery.set($event)"
+            aria-label="Search stocks"
+          />
+        </div>
+        <span class="text-xs text-slate-500">
+          {{ selectedCount() }} selected · showing {{ visibleStocks().length }} of {{ allStocks().length }}
+        </span>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th class="w-10 text-center"></th>
+            <th class="text-left">Stock</th>
+            <th class="hidden text-right sm:table-cell">Trades</th>
+            <th class="text-right">Net P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (stock of visibleStocks(); track stock.isin || stock.stockName) {
+            <tr class="cursor-pointer transition hover:bg-slate-50" (click)="toggleStock(stock)">
+              <td class="text-center">
+                <input
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-slate-300 text-kairo-600"
+                  [checked]="isSelected(stock)"
+                  (click)="$event.stopPropagation(); toggleStock(stock)"
+                  [attr.aria-label]="'Select ' + stock.stockName"
+                />
+              </td>
+              <td class="col-name">
+                <div class="truncate font-semibold text-slate-900" [title]="stock.stockName">{{ stock.stockName }}</div>
+                <div class="text-[11px] text-slate-400">{{ stockSymbol(stock) }}</div>
+              </td>
+              <td class="hidden text-right tabular-nums sm:table-cell">{{ stock.tradeCount }}</td>
+              <td class="text-right font-semibold tabular-nums" [class]="pnlClass(stock.netPnL)">
+                {{ formatCurrency(stock.netPnL) }}
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4" class="py-8 text-center text-slate-400">No stocks match this search</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+}

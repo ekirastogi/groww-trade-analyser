@@ -20,6 +20,7 @@ export class FilterPanelComponent {
   collapsible = input(false);
   showChartFilters = input(false);
   showDateRange = input(true);
+  showTradeTypes = input(true);
   filtersChanged = output<void>();
 
   localTradeTypes = signal<TradeType[]>(['all']);

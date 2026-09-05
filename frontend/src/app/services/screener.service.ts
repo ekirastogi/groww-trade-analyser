@@ -1,4 +1,6 @@
 import { Injectable, inject } from '@angular/core';
+import { FunctionsHttpError } from '@supabase/supabase-js';
+import { supabaseConfig } from '../../environments/supabase.config';
 import { RegistryFinancialTable } from '../models/trading-journal.models';
 import { SupabaseService } from './supabase.service';
 
@@ -43,11 +45,29 @@ export interface ScreenerSnapshot {
 export class ScreenerService {
   private supabase = inject(SupabaseService);
 
-  async fetchStock(symbol: string): Promise<ScreenerSnapshot> {
+  async fetchStock(symbol: string, name?: string): Promise<ScreenerSnapshot> {
     const { data, error } = await this.supabase.client.functions.invoke<ScreenerSnapshot>('screener-fetch', {
-      body: { symbol },
+      body: { symbol, name: name?.trim() || undefined },
+      // Edge Functions verify Supabase JWTs; use publishable anon key (Firebase auth is app-side).
+      headers: {
+        Authorization: `Bearer ${supabaseConfig.anonKey}`,
+      },
     });
-    if (error) throw new Error(error.message || 'Screener fetch failed');
+
+    if (error) {
+      if (error instanceof FunctionsHttpError) {
+        let message = error.message;
+        try {
+          const payload = (await error.context.json()) as { error?: string; message?: string };
+          message = payload.error ?? payload.message ?? message;
+        } catch {
+          // Response body may not be JSON.
+        }
+        throw new Error(message || 'Screener fetch failed');
+      }
+      throw new Error(error.message || 'Screener fetch failed');
+    }
+
     if (!data || typeof data !== 'object') {
       throw new Error('Screener fetch failed');
     }

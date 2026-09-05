@@ -222,7 +222,7 @@ export class StockDetailComponent implements OnInit {
     this.screenerSuccess.set(null);
 
     try {
-      const data = await this.screenerSvc.fetchStock(sym);
+      const data = await this.screenerSvc.fetchStock(sym, this.registryStock()?.name ?? this.stock()?.name);
       const existing = this.registryStock() ?? {
         symbol: sym,
         name: data.name,
