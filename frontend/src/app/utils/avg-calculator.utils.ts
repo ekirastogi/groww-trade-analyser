@@ -27,13 +27,25 @@ export interface AvgCalculatorSummary {
   remainingAvg: number | null;
 }
 
+/** The open position a target is measured against: leftover lots, or the full buy leg when flat. */
+export interface AvgPosition {
+  side: FillSide;
+  quantity: number;
+  avgPrice: number;
+}
+
 export interface AvgTargetView {
   id: string;
   price: number;
-  vsBuy: { delta: number; pct: number } | null;
-  vsSell: { delta: number; pct: number } | null;
-  remainingPnL: number | null;
+  /** Distance from the open position average, or from the buy average when flat. */
+  fromAvg: { delta: number; pct: number } | null;
+  grossPnL: number | null;
+  charges: number | null;
+  netPnL: number | null;
 }
+
+/** Charges for exiting `position` at `exitPrice`. */
+export type AvgChargeFn = (position: AvgPosition, exitPrice: number) => number;
 
 function newId(): string {
   return crypto.randomUUID();
@@ -94,24 +106,47 @@ function distance(from: number, to: number): { delta: number; pct: number } {
   return { delta: to - from, pct: from ? ((to - from) / from) * 100 : 0 };
 }
 
-export function evaluateTargets(targets: AvgTarget[], summary: AvgCalculatorSummary): AvgTargetView[] {
-  return targets.map((target) => {
-    let remainingPnL: number | null = null;
-    if (summary.remainingQty > 0 && summary.remainingAvg != null && summary.remainingSide) {
-      remainingPnL =
-        summary.remainingSide === 'buy'
-          ? (target.price - summary.remainingAvg) * summary.remainingQty
-          : (summary.remainingAvg - target.price) * summary.remainingQty;
-    } else if (summary.avgBuy != null && summary.buyQty > 0 && summary.remainingQty === 0) {
-      remainingPnL = (target.price - summary.avgBuy) * summary.buyQty;
-    }
-
+export function openPosition(summary: AvgCalculatorSummary): AvgPosition | null {
+  if (summary.remainingQty > 0 && summary.remainingAvg != null && summary.remainingSide) {
     return {
-      id: target.id,
-      price: target.price,
-      vsBuy: summary.avgBuy != null ? distance(summary.avgBuy, target.price) : null,
-      vsSell: summary.avgSell != null ? distance(summary.avgSell, target.price) : null,
-      remainingPnL,
+      side: summary.remainingSide,
+      quantity: summary.remainingQty,
+      avgPrice: summary.remainingAvg,
     };
-  });
+  }
+  if (summary.remainingQty === 0 && summary.buyQty > 0 && summary.avgBuy != null) {
+    return { side: 'buy', quantity: summary.buyQty, avgPrice: summary.avgBuy };
+  }
+  return null;
+}
+
+export function grossPnLAtTarget(position: AvgPosition, exitPrice: number): number {
+  return position.side === 'buy'
+    ? (exitPrice - position.avgPrice) * position.quantity
+    : (position.avgPrice - exitPrice) * position.quantity;
+}
+
+export function evaluateTargets(
+  targets: AvgTarget[],
+  summary: AvgCalculatorSummary,
+  chargeFn?: AvgChargeFn
+): AvgTargetView[] {
+  const position = openPosition(summary);
+  const referenceAvg = position?.avgPrice ?? summary.avgBuy ?? summary.avgSell;
+
+  return [...targets]
+    .sort((a, b) => a.price - b.price)
+    .map((target) => {
+      const grossPnL = position ? grossPnLAtTarget(position, target.price) : null;
+      const charges = position && chargeFn ? chargeFn(position, target.price) : null;
+
+      return {
+        id: target.id,
+        price: target.price,
+        fromAvg: referenceAvg != null ? distance(referenceAvg, target.price) : null,
+        grossPnL,
+        charges,
+        netPnL: grossPnL == null ? null : grossPnL - (charges ?? 0),
+      };
+    });
 }

@@ -68,12 +68,12 @@
       </div>
 
       <!-- Tab navigation -->
-      <div class="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1">
+      <div class="pill-tabs">
         @for (tab of tabs; track tab.id) {
           <button
             type="button"
-            class="analytics-tab"
-            [class.analytics-tab-active]="activeTab() === tab.id"
+            class="pill-tab"
+            [class.pill-tab-active]="activeTab() === tab.id"
             (click)="setTab(tab.id)"
           >
             {{ tab.label }}

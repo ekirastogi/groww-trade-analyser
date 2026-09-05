@@ -70,12 +70,6 @@ type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
     .analytics-kpi-value {
       @apply mt-1 text-lg font-bold tabular-nums sm:text-xl;
     }
-    .analytics-tab {
-      @apply shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800;
-    }
-    .analytics-tab-active {
-      @apply bg-slate-900 text-white shadow-sm hover:bg-slate-900 hover:text-white;
-    }
     .insight-card {
       @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm;
     }

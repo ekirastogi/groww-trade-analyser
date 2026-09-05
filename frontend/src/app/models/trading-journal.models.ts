@@ -3,6 +3,12 @@ export interface RegistryFinancialTable {
   rows: Array<{ label: string; values: string[] }>;
 }
 
+export interface RegistryLabel {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
 export interface RegistryStock {
   symbol: string;
   name: string;

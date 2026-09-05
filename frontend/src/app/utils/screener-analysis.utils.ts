@@ -214,63 +214,111 @@ interface MetricPair {
   annual: MetricAnalysis | null;
 }
 
-/**
- * One chart per metric per basis: QoQ reads the quarterly table, YoY the annual P&L,
- * so every bar is a real period (Jun '25… / 2022…) rather than a hidden comparison.
- */
+type PeriodLabelStyle = 'quarter' | 'quarter-year' | 'year';
+
+interface GrowthChartSpec {
+  suffix: string;
+  basis: 'QoQ' | 'YoY';
+  titleSuffix: string;
+  caption: string;
+  source: 'quarterly' | 'annual';
+  labelStyle: PeriodLabelStyle;
+  /** Series stride between bars: 1 = consecutive, 4 = same quarter each year. */
+  sampleEvery: number;
+  /** Series distance back to the bar's comparison period. */
+  compareLag: number;
+}
+
+/** Three views per metric: consecutive quarters, the same quarter across years, then years. */
+const GROWTH_CHART_SPECS: GrowthChartSpec[] = [
+  {
+    suffix: 'qoq',
+    basis: 'QoQ',
+    titleSuffix: 'Quarterly (QoQ)',
+    caption: 'Consecutive quarters · % vs previous quarter',
+    source: 'quarterly',
+    labelStyle: 'quarter',
+    sampleEvery: 1,
+    compareLag: 1,
+  },
+  {
+    suffix: 'same-quarter',
+    basis: 'YoY',
+    titleSuffix: 'Same quarter, year on year',
+    caption: 'Same quarter each year · % vs previous year',
+    source: 'quarterly',
+    labelStyle: 'quarter-year',
+    sampleEvery: 4,
+    compareLag: 4,
+  },
+  {
+    suffix: 'yoy',
+    basis: 'YoY',
+    titleSuffix: 'Yearly (YoY)',
+    caption: 'Financial years · % vs previous year',
+    source: 'annual',
+    labelStyle: 'year',
+    sampleEvery: 1,
+    compareLag: 1,
+  },
+];
+
 function buildQuarterlyCharts(pairs: MetricPair[]): QuarterlyMetricChart[] {
   const charts: QuarterlyMetricChart[] = [];
   for (const pair of pairs) {
-    const qoq = pair.quarterly
-      ? buildPeriodGrowthChart(pair.quarterly, pair, 'QoQ', 'quarter')
-      : null;
-    if (qoq?.bars.length) charts.push(qoq);
-
-    const yoy = pair.annual ? buildPeriodGrowthChart(pair.annual, pair, 'YoY', 'year') : null;
-    if (yoy?.bars.length) charts.push(yoy);
+    for (const spec of GROWTH_CHART_SPECS) {
+      const metric = spec.source === 'annual' ? pair.annual : pair.quarterly;
+      if (!metric) continue;
+      const chart = buildPeriodGrowthChart(metric, pair, spec);
+      if (chart.bars.length) charts.push(chart);
+    }
   }
   return charts;
 }
 
 /**
- * Bars for the last {@link QUARTER_BAR_COUNT} periods, oldest first.
- * Each bar carries its own value; the percentage is the change from the preceding bar.
+ * Bars for the last {@link QUARTER_BAR_COUNT} sampled periods, oldest first. Each bar
+ * carries its own value; the percentage is the change against its comparison period.
  */
 function buildPeriodGrowthChart(
   metric: MetricAnalysis,
   pair: MetricPair,
-  basis: 'QoQ' | 'YoY',
-  periodStyle: 'quarter' | 'year'
+  spec: GrowthChartSpec
 ): QuarterlyMetricChart {
   // Annual tables end with a TTM column, which is not a comparable full year.
   const all =
-    periodStyle === 'year'
+    spec.source === 'annual'
       ? metric.series.filter((p) => !/ttm/i.test(p.period))
       : metric.series;
 
-  const computed: QuarterBar[] = [];
-  for (let i = 1; i < all.length; i++) {
+  // Walk back from the newest period so the sampled stride anchors on the latest quarter.
+  const indices: number[] = [];
+  for (let i = all.length - 1; i >= spec.compareLag; i -= spec.sampleEvery) {
+    indices.push(i);
+    if (indices.length === QUARTER_BAR_COUNT) break;
+  }
+  indices.reverse();
+
+  const bars: QuarterBar[] = [];
+  for (const i of indices) {
     const point = all[i];
-    const base = all[i - 1]?.value ?? null;
-    const growthPct = pctChange(point.value, base, metric.unit);
+    const base = all[i - spec.compareLag]?.value ?? null;
+    const growthPct = relativeChange(point.value, base);
     if (growthPct == null) continue;
-    computed.push({
+    bars.push({
       period: point.period,
-      shortLabel:
-        periodStyle === 'year' ? shortYearLabel(point.period) : shortPeriodLabel(point.period),
+      shortLabel: periodLabel(point.period, spec.labelStyle),
       value: point.value,
       displayValue: formatMetricValue(point.value, metric.unit),
       compactValue: formatIndianCompact(point.value, metric.unit),
       growthPct,
-      growthLabel: formatAnalysisChange(growthPct, metric.unit),
-      basePeriod: all[i - 1]?.period ?? '—',
+      growthLabel: formatRelativeChange(growthPct),
+      basePeriod: all[i - spec.compareLag]?.period ?? '—',
       baseDisplayValue: formatMetricValue(base, metric.unit),
       isLatest: i === all.length - 1,
       hasData: true,
     });
   }
-
-  const bars = computed.slice(-QUARTER_BAR_COUNT);
 
   const row = {
     metric: pair.title,
@@ -283,18 +331,27 @@ function buildPeriodGrowthChart(
   };
 
   return {
-    key: `${pair.key}-${basis.toLowerCase()}`,
+    key: `${pair.key}-${spec.suffix}`,
     metric: pair.title,
-    basis,
-    title: periodStyle === 'year' ? `${pair.title} · Yearly (YoY)` : `${pair.title} · Quarterly (QoQ)`,
-    caption:
-      periodStyle === 'year'
-        ? 'One bar per financial year · % change vs previous year'
-        : 'One bar per quarter · % change vs previous quarter',
+    basis: spec.basis,
+    title: `${pair.title} · ${spec.titleSuffix}`,
+    caption: spec.caption,
     unit: metric.unit,
     bars,
     summary: growthMetricSummary(row),
   };
+}
+
+function periodLabel(period: string, style: PeriodLabelStyle): string {
+  switch (style) {
+    case 'year':
+      return shortYearLabel(period);
+    // Bars span several years, so keep the full year to avoid ambiguity.
+    case 'quarter-year':
+      return period.trim().replace(/\s+/g, ' ');
+    default:
+      return shortPeriodLabel(period);
+  }
 }
 
 /** "Mar 2022" -> "2022"; falls back to the raw header when there is no year. */
@@ -618,6 +675,20 @@ function pctChange(current: number, base: number | null, unit: 'currency' | 'per
   if (base == null || base === 0) return null;
   if (unit === 'percent') return current - base;
   return ((current - base) / Math.abs(base)) * 100;
+}
+
+/**
+ * Relative change used by the growth charts. Unlike {@link pctChange} this is always a
+ * percentage, so an OPM move from 6% to 7% reads "+16.7%" rather than "+1 pp".
+ */
+function relativeChange(current: number, base: number | null): number | null {
+  if (base == null || base === 0) return null;
+  return ((current - base) / Math.abs(base)) * 100;
+}
+
+function formatRelativeChange(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
 export function trendDirection(value: number | null): TrendDirection {

@@ -13,6 +13,7 @@ import { AuthService } from './auth.service';
 import { ClientAccountService } from './client-account.service';
 import { ParserService } from './parser.service';
 import { RegistryStockService } from './registry-stock.service';
+import { RegistryLabelService } from './registry-label.service';
 import { TradePlanService } from './trade-plan.service';
 import { MomentumStockService } from './momentum-stock.service';
 import { WatchlistService } from './watchlist.service';
@@ -252,6 +253,7 @@ export class TradeLedgerService {
   private clientSvc = inject(ClientAccountService);
   private parser = inject(ParserService);
   private registry = inject(RegistryStockService);
+  private registryLabels = inject(RegistryLabelService);
   private tradePlans = inject(TradePlanService);
   private momentumStocks = inject(MomentumStockService);
   private watchlists = inject(WatchlistService);
@@ -462,6 +464,7 @@ export class TradeLedgerService {
     }
 
     if (options.stockRegistry) {
+      await this.registryLabels.deleteAll();
       result.registryStocksRemoved = await this.registry.deleteAll();
     }
 

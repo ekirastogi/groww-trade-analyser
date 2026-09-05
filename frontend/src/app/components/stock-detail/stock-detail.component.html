@@ -28,6 +28,22 @@
         <p class="stock-detail-symbol">{{ symbol() }}</p>
         <h1 class="stock-detail-name">{{ displayName() }}</h1>
         <p class="stock-detail-exchange">{{ displayExchange() }}</p>
+        <div class="mt-3">
+          <app-stock-label-picker
+            [labels]="labels()"
+            [selectedIds]="selectedLabelIds()"
+            [disabled]="labelsBusy() || !auth.hasAccess"
+            (addLabel)="addLabel($event)"
+            (removeLabel)="removeLabel($event)"
+          />
+          @if (!labels().length) {
+            <p class="mt-1 text-xs text-slate-400">
+              Create labels on the
+              <a class="underline hover:text-kairo-700" routerLink="/registry">stock registry</a>
+              page.
+            </p>
+          }
+        </div>
       </div>
 
       <div class="stock-detail-quote">

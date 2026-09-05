@@ -1,0 +1,177 @@
+<div class="space-y-4">
+  <div class="charges-hero">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Net P&amp;L after charges</p>
+        <p
+          class="mt-1 text-2xl font-bold tabular-nums sm:text-3xl"
+          [class.text-slate-500]="!result()"
+          [class.text-emerald-300]="(result()?.netPnL ?? 0) > 0"
+          [class.text-red-300]="(result()?.netPnL ?? 0) < 0"
+        >
+          {{ result() ? formatCurrency(result()!.netPnL) : '—' }}
+        </p>
+        <p class="mt-1 text-sm text-slate-400">
+          @if (result(); as res) {
+            {{ formatPctSigned(res.netPnLPct) }} on {{ formatCurrency(res.entryValue) }} capital
+          } @else {
+            Enter entry, exit, and quantity
+          }
+        </p>
+      </div>
+      <button type="button" class="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:bg-white/10 hover:text-white" (click)="reset()">
+        Reset
+      </button>
+    </div>
+
+    <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div class="hero-kpi">
+        <p class="hero-kpi-label">Gross P&amp;L</p>
+        <p class="hero-kpi-value">{{ result() ? formatCurrency(result()!.grossPnL) : '—' }}</p>
+      </div>
+      <div class="hero-kpi">
+        <p class="hero-kpi-label">Total charges</p>
+        <p class="hero-kpi-value text-red-300">{{ result() ? formatPrice(result()!.charges) : '—' }}</p>
+      </div>
+      <div class="hero-kpi">
+        <p class="hero-kpi-label">Charges on turnover</p>
+        <p class="hero-kpi-value">{{ result() ? (result()!.chargesPctOfTurnover | number: '1.3-3') + '%' : '—' }}</p>
+      </div>
+      <div class="hero-kpi">
+        <p class="hero-kpi-label">Breakeven exit</p>
+        <p class="hero-kpi-value">{{ breakeven() != null ? formatPrice(breakeven()!) : '—' }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+    <section class="card overflow-hidden">
+      <div class="border-b border-slate-100 px-4 py-3">
+        <h3 class="text-sm font-semibold text-slate-900">Trade</h3>
+        <p class="mt-0.5 text-xs text-slate-500">Brokerage, STT, exchange, SEBI, IPFT, stamp duty, DP and GST.</p>
+      </div>
+
+      <div class="space-y-3 p-4">
+        <div class="flex flex-wrap gap-2">
+          <div class="flex rounded-lg bg-slate-100 p-0.5">
+            @for (seg of segments; track seg) {
+              <button type="button" class="mini-toggle" [class.mini-toggle-active]="segment() === seg" (click)="setSegment(seg)">
+                {{ segmentLabels[seg] }}
+              </button>
+            }
+          </div>
+          <div class="flex rounded-lg bg-slate-100 p-0.5">
+            @for (ex of exchanges; track ex) {
+              <button type="button" class="mini-toggle" [class.mini-toggle-active]="exchange() === ex" (click)="setExchange(ex)">
+                {{ ex }}
+              </button>
+            }
+          </div>
+          <div class="flex rounded-lg bg-slate-100 p-0.5">
+            <button type="button" class="mini-toggle" [class.mini-toggle-active]="direction() === 'long'" (click)="setDirection('long')">Long</button>
+            <button type="button" class="mini-toggle" [class.mini-toggle-active]="direction() === 'short'" (click)="setDirection('short')">Short</button>
+          </div>
+        </div>
+
+        <div class="grid gap-2 sm:grid-cols-2">
+          <label class="field-label">
+            Entry price
+            <input
+              class="input-field mt-0.5 !py-2"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.05"
+              placeholder="0.00"
+              [ngModel]="entryPrice() || null"
+              (ngModelChange)="setNumber('entryPrice', $event)"
+            />
+          </label>
+          <label class="field-label">
+            Exit price
+            <input
+              class="input-field mt-0.5 !py-2"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.05"
+              placeholder="0.00"
+              [ngModel]="exitPrice() || null"
+              (ngModelChange)="setNumber('exitPrice', $event)"
+            />
+          </label>
+          <label class="field-label sm:col-span-2">
+            Quantity
+            <input
+              class="input-field mt-0.5 !py-2"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              step="1"
+              placeholder="0"
+              [ngModel]="quantity() || null"
+              (ngModelChange)="setNumber('quantity', $event)"
+            />
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card overflow-hidden">
+      <div class="border-b border-slate-100 px-4 py-3">
+        <h3 class="text-sm font-semibold text-slate-900">Breakdown</h3>
+        <p class="mt-0.5 text-xs text-slate-500">
+          {{ direction() === 'long' ? 'Buy at entry, sell at exit.' : 'Sell at entry, buy back at exit.' }}
+        </p>
+      </div>
+
+      @if (result(); as res) {
+        <div>
+          <div class="breakdown-head">
+            <span>Charge</span>
+            <span class="text-right">Entry</span>
+            <span class="text-right">Exit</span>
+            <span class="text-right">Total</span>
+          </div>
+          @for (row of chargeRows; track row.key) {
+            @if (value(res.combined, row.key) > 0) {
+              <div class="breakdown-row">
+                <span class="text-slate-600">{{ row.label }}</span>
+                <span class="text-right text-slate-500">{{ formatPrice(value(res.entryLeg, row.key)) }}</span>
+                <span class="text-right text-slate-500">{{ formatPrice(value(res.exitLeg, row.key)) }}</span>
+                <span class="text-right font-semibold text-slate-900">{{ formatPrice(value(res.combined, row.key)) }}</span>
+              </div>
+            }
+          }
+          <div class="breakdown-row bg-slate-50 font-semibold">
+            <span class="text-slate-700">Total charges</span>
+            <span class="text-right text-slate-600">{{ formatPrice(res.entryLeg.total) }}</span>
+            <span class="text-right text-slate-600">{{ formatPrice(res.exitLeg.total) }}</span>
+            <span class="text-right text-red-600">{{ formatPrice(res.charges) }}</span>
+          </div>
+          <div class="grid gap-2 border-t border-slate-100 p-4 sm:grid-cols-3">
+            <div class="rounded-xl bg-slate-50 px-3 py-2">
+              <p class="field-label">Turnover</p>
+              <p class="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">{{ formatCurrency(res.combined.turnover) }}</p>
+            </div>
+            <div class="rounded-xl bg-slate-50 px-3 py-2">
+              <p class="field-label">Gross P&amp;L</p>
+              <p class="mt-0.5 text-sm font-semibold tabular-nums" [class]="pnlClass(res.grossPnL)">{{ formatCurrency(res.grossPnL) }}</p>
+            </div>
+            <div class="rounded-xl bg-slate-900 px-3 py-2">
+              <p class="field-label !text-slate-400">Net P&amp;L</p>
+              <p
+                class="mt-0.5 text-sm font-semibold tabular-nums"
+                [class.text-emerald-300]="res.netPnL > 0"
+                [class.text-red-300]="res.netPnL < 0"
+                [class.text-slate-200]="res.netPnL === 0"
+              >{{ formatCurrency(res.netPnL) }}</p>
+            </div>
+          </div>
+        </div>
+      } @else {
+        <p class="px-4 py-10 text-center text-xs text-slate-500">Fill in entry, exit, and quantity to see every charge line.</p>
+      }
+    </section>
+  </div>
+</div>

@@ -1,0 +1,185 @@
+<div class="space-y-4">
+  <div class="target-hero">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Target price for your profit goal</p>
+        <p class="mt-1 text-2xl font-bold tabular-nums sm:text-3xl" [class]="tradablePrice() != null ? 'text-white' : 'text-slate-500'">
+          {{ tradablePrice() != null ? formatPrice(tradablePrice()!) : '—' }}
+        </p>
+        <p class="mt-1 text-sm text-slate-400">
+          @if (result(); as solved) {
+            {{ formatPctSigned(solved.movePct) }} move · {{ formatPrice(solved.movePerShare) }} per share
+          } @else {
+            Enter entry price, quantity, and the profit you want
+          }
+        </p>
+      </div>
+      <button type="button" class="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:bg-white/10 hover:text-white" (click)="reset()">
+        Reset
+      </button>
+    </div>
+
+    <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div class="hero-kpi">
+        <p class="hero-kpi-label">Profit you want</p>
+        <p class="hero-kpi-value text-emerald-300">{{ goalAmount() > 0 ? formatCurrency(goalAmount()) : '—' }}</p>
+      </div>
+      <div class="hero-kpi">
+        <p class="hero-kpi-label">Charges</p>
+        <p class="hero-kpi-value text-red-300">{{ result() ? formatCurrency(result()!.roundTrip.charges) : '—' }}</p>
+      </div>
+      <div class="hero-kpi">
+        <p class="hero-kpi-label">Gross needed</p>
+        <p class="hero-kpi-value">{{ result() ? formatCurrency(result()!.roundTrip.grossPnL) : '—' }}</p>
+      </div>
+      <div class="hero-kpi">
+        <p class="hero-kpi-label">Breakeven exit</p>
+        <p class="hero-kpi-value">{{ breakeven() != null ? formatPrice(breakeven()!) : '—' }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+    <section class="card overflow-hidden">
+      <div class="border-b border-slate-100 px-4 py-3">
+        <h3 class="text-sm font-semibold text-slate-900">Trade</h3>
+        <p class="mt-0.5 text-xs text-slate-500">Charges follow the {{ segmentLabels[segment()] }} rate card on {{ exchange() }}.</p>
+      </div>
+
+      <div class="space-y-3 p-4">
+        <div class="flex flex-wrap gap-2">
+          <div class="flex rounded-lg bg-slate-100 p-0.5">
+            @for (seg of segments; track seg) {
+              <button type="button" class="mini-toggle" [class.mini-toggle-active]="segment() === seg" (click)="setSegment(seg)">
+                {{ segmentLabels[seg] }}
+              </button>
+            }
+          </div>
+          <div class="flex rounded-lg bg-slate-100 p-0.5">
+            @for (ex of exchanges; track ex) {
+              <button type="button" class="mini-toggle" [class.mini-toggle-active]="exchange() === ex" (click)="setExchange(ex)">
+                {{ ex }}
+              </button>
+            }
+          </div>
+          <div class="flex rounded-lg bg-slate-100 p-0.5">
+            <button type="button" class="mini-toggle" [class.mini-toggle-active]="direction() === 'long'" (click)="setDirection('long')">Long</button>
+            <button type="button" class="mini-toggle" [class.mini-toggle-active]="direction() === 'short'" (click)="setDirection('short')">Short</button>
+          </div>
+        </div>
+
+        <div class="grid gap-2 sm:grid-cols-2">
+          <label class="field-label">
+            Entry price
+            <input
+              class="input-field mt-0.5 !py-2"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.05"
+              placeholder="0.00"
+              [ngModel]="entryPrice() || null"
+              (ngModelChange)="setNumber('entryPrice', $event)"
+            />
+          </label>
+          <label class="field-label">
+            Quantity
+            <input
+              class="input-field mt-0.5 !py-2"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              step="1"
+              placeholder="0"
+              [ngModel]="quantity() || null"
+              (ngModelChange)="setNumber('quantity', $event)"
+            />
+          </label>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
+          <div class="flex items-end gap-2">
+            <label class="min-w-0 flex-1 field-label">
+              Profit I want (after charges)
+              <input
+                class="input-field mt-0.5 !py-2"
+                type="number"
+                inputmode="decimal"
+                min="0"
+                [step]="profitUnit() === 'pct' ? 0.5 : 100"
+                [placeholder]="profitUnit() === 'pct' ? '2' : '5000'"
+                [ngModel]="profitGoal() || null"
+                (ngModelChange)="setNumber('profitGoal', $event)"
+              />
+            </label>
+            <div class="flex rounded-lg bg-white p-0.5 shadow-sm">
+              <button type="button" class="mini-toggle" [class.mini-toggle-active]="profitUnit() === 'inr'" (click)="setProfitUnit('inr')">₹</button>
+              <button type="button" class="mini-toggle" [class.mini-toggle-active]="profitUnit() === 'pct'" (click)="setProfitUnit('pct')">% of capital</button>
+            </div>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-500">
+            Capital at entry {{ capital() > 0 ? formatCurrency(capital()) : '—' }}. The target price is snapped to the next 0.05 tick in your favour.
+          </p>
+        </div>
+
+        @if (ready() && goalAmount() > 0 && !result()) {
+          <p class="text-xs text-red-600">That profit is not reachable at a valid exit price. Try a smaller goal or a bigger quantity.</p>
+        }
+      </div>
+    </section>
+
+    <div class="space-y-4">
+      <section class="card overflow-hidden">
+        <div class="border-b border-slate-100 px-4 py-3">
+          <h3 class="text-sm font-semibold text-slate-900">Charges at this target</h3>
+          <p class="mt-0.5 text-xs text-slate-500">Both legs of the trade, including GST.</p>
+        </div>
+        @if (result(); as solved) {
+          <div>
+            @for (line of chargeLines(); track line.label) {
+              <div class="charge-line">
+                <span class="text-slate-600">{{ line.label }}</span>
+                <span class="font-semibold tabular-nums text-slate-900">{{ formatPrice(line.amount) }}</span>
+              </div>
+            }
+            <div class="charge-line bg-slate-50 font-semibold">
+              <span class="text-slate-700">Total charges</span>
+              <span class="tabular-nums text-red-600">{{ formatPrice(solved.roundTrip.charges) }}</span>
+            </div>
+            <div class="charge-line bg-slate-900">
+              <span class="text-slate-300">Net in hand</span>
+              <span class="tabular-nums font-semibold text-emerald-300">{{ formatCurrency(solved.roundTrip.netPnL) }}</span>
+            </div>
+          </div>
+        } @else {
+          <p class="px-4 py-8 text-center text-xs text-slate-500">Fill in the trade to see the charge breakdown.</p>
+        }
+      </section>
+
+      <section class="card overflow-hidden">
+        <div class="border-b border-slate-100 px-4 py-3">
+          <h3 class="text-sm font-semibold text-slate-900">Profit ladder</h3>
+          <p class="mt-0.5 text-xs text-slate-500">Exit price needed for common profit goals on this capital.</p>
+        </div>
+        @if (ladder().length) {
+          <div>
+            @for (step of ladder(); track step.pct) {
+              <div class="ladder-row">
+                <span class="rounded-md bg-slate-100 px-1.5 py-0.5 text-center text-[11px] font-bold text-slate-700">{{ step.pct }}%</span>
+                <span class="tabular-nums text-slate-500">{{ formatCurrency(step.goal) }} net</span>
+                <span class="text-right font-semibold tabular-nums text-slate-900">
+                  {{ step.price != null ? formatPrice(step.price) : '—' }}
+                  @if (step.movePct != null) {
+                    <span class="block text-[11px] font-medium" [class]="pnlClass(step.movePct)">{{ formatPctSigned(step.movePct) }}</span>
+                  }
+                </span>
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="px-4 py-8 text-center text-xs text-slate-500">Enter an entry price and quantity to see the ladder.</p>
+        }
+      </section>
+    </div>
+  </div>
+</div>

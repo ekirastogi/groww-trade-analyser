@@ -287,6 +287,24 @@ export class RegistryStockService {
     }
   }
 
+  async ensureListed(symbol: string, extras?: Partial<RegistryStock>): Promise<RegistryStock> {
+    const existing = await this.getBySymbol(symbol);
+    if (existing) return existing;
+    const sym = symbol.trim().toUpperCase();
+    const stock: RegistryStock = {
+      symbol: sym,
+      name: extras?.name?.trim() || sym,
+      currentPrice: extras?.currentPrice ?? 0,
+      exchange: extras?.exchange ?? 'NSE',
+      source: extras?.source ?? 'manual',
+      supports: extras?.supports ?? [],
+      resistances: extras?.resistances ?? [],
+      updatedAt: Date.now(),
+    };
+    await this.save(stock);
+    return stock;
+  }
+
   async remove(symbol: string): Promise<void> {
     const uid = await this.auth.getDataUserId();
     if (!uid) throw new Error('Sign in to delete stocks');
