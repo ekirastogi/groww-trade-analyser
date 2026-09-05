@@ -728,7 +728,20 @@ export class TradePlanService {
     const entryLegs = TradePlanService.resolveEntryLegs(input.entryLegs, input.entryPrice, input.quantity);
     const validationError = TradePlanService.validatePlannedEntryLegs(entryLegs, segment, direction);
     if (validationError) throw new Error(validationError);
-    const targets = TradePlanService.sanitizeTargets(input.targets);
+    // Callers that don't know about ladders (the plan form) keep an existing one as long
+    // as they left the exit price alone; changing the exit means a single target now.
+    const existingTargets = TradePlanService.sanitizeTargets(existing?.targets);
+    const keepsExistingLadder =
+      input.targets === undefined &&
+      existingTargets.length > 0 &&
+      existing != null &&
+      Math.abs(input.targetPrice - existing.targetPrice) < 0.005;
+    const targets =
+      input.targets !== undefined
+        ? TradePlanService.sanitizeTargets(input.targets)
+        : keepsExistingLadder
+          ? existingTargets
+          : [];
     const targetPrice = targets.length
       ? TradePlanService.weightedAvgPrice(targets)
       : input.targetPrice;

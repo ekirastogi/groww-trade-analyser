@@ -6,8 +6,9 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, of, switchMap } from 'rxjs';
 import { OPEN_TRADES_PAGE_SIZE, TradePlanService } from '../../services/trade-plan.service';
 import { RegistryStockService } from '../../services/registry-stock.service';
+import { ChargesService } from '../../services/charges.service';
 import { PlannedTrade } from '../../models/trading-journal.models';
-import { formatCurrency, formatPctSigned, pnlClass, pnlBadgeClass } from '../../utils/format.utils';
+import { formatCurrency, formatPctSigned, formatPrice, pnlClass, pnlBadgeClass } from '../../utils/format.utils';
 import {
   isPastPlanDate,
   isUpcomingPlanDate,
@@ -131,6 +132,7 @@ interface PriceLevel {
 export class TradePlansComponent implements OnInit, OnDestroy {
   private planSvc = inject(TradePlanService);
   private registrySvc = inject(RegistryStockService);
+  private chargesSvc = inject(ChargesService);
   private route = inject(ActivatedRoute);
 
   tradeDate = signal(normalizePlanViewDate(todayIso()));
@@ -203,11 +205,27 @@ export class TradePlansComponent implements OnInit, OnDestroy {
   registry = toSignal(this.registrySvc.watchAll(), { initialValue: [] });
 
   fmt = formatCurrency;
+  fmtPrice = formatPrice;
   fmtPct = formatPctSigned;
   pnlClass = pnlClass;
   pnlBadgeClass = pnlBadgeClass;
 
   daySummary = computed(() => this.planSvc.summarizeDay(this.tradeDate(), this.trades()));
+
+  /** Estimated charges across every trade shown for the day. */
+  dayCharges = computed(() =>
+    this.sortedTrades().reduce((sum, t) => sum + this.tradeCharges(t), 0)
+  );
+
+  dayNetPnL = computed(() => this.daySummary().estimatedPnL - this.dayCharges());
+
+  openCharges = computed(() =>
+    this.sortedOpenTrades().reduce((sum, t) => sum + this.tradeCharges(t), 0)
+  );
+
+  openEstimatedPnL = computed(() =>
+    this.sortedOpenTrades().reduce((sum, t) => sum + t.estimatedPnL, 0)
+  );
 
   execPreviewPnL = computed(() => {
     const buyLegs = this.parseExecLegs(this.execBuyLegs());
@@ -662,6 +680,68 @@ export class TradePlansComponent implements OnInit, OnDestroy {
       return `${t.quantity} qty · ${legs} entries · avg ${this.fmt(t.entryPrice)}`;
     }
     return `${t.quantity} qty`;
+  }
+
+  /**
+   * Estimated round-trip charges. Executed trades are priced off their actual fills;
+   * everything else off the planned target ladder.
+   */
+  tradeCharges(t: PlannedTrade): number {
+    const execution = TradePlanService.executionSummary(t);
+    if (t.status === 'executed' && execution) {
+      const legs = [
+        ...execution.buyLegs.map((leg) => ({ ...leg, side: 'buy' as const })),
+        ...execution.sellLegs.map((leg) => ({ ...leg, side: 'sell' as const })),
+      ];
+      return legs.reduce(
+        (sum, leg) =>
+          sum +
+          this.chargesSvc.legCharges({
+            segment: t.segment,
+            side: leg.side,
+            price: leg.price,
+            quantity: leg.quantity,
+          }).total,
+        0
+      );
+    }
+
+    const targets = TradePlanService.resolveTargets(t);
+    if (!targets.length || !t.entryPrice) return 0;
+    return this.chargesSvc.ladder({
+      segment: t.segment,
+      direction: t.direction,
+      entryPrice: t.entryPrice,
+      totalQuantity: t.quantity,
+      slices: targets,
+    }).charges;
+  }
+
+  /** P&L after the estimated charges. */
+  tradeNetPnL(t: PlannedTrade): number {
+    return this.displayPnL(t) - this.tradeCharges(t);
+  }
+
+  /** Partial exit ladder with per-slice net P&L; empty when there is a single target. */
+  targetLadder(
+    t: PlannedTrade
+  ): { key: string; label: string; price: number; quantity: number; netPnL: number }[] {
+    const targets = TradePlanService.sanitizeTargets(t.targets);
+    if (targets.length < 2 || !t.entryPrice) return [];
+    const ladder = this.chargesSvc.ladder({
+      segment: t.segment,
+      direction: t.direction,
+      entryPrice: t.entryPrice,
+      totalQuantity: t.quantity,
+      slices: targets,
+    });
+    return ladder.slices.map((slice, index) => ({
+      key: `target-${index}`,
+      label: `T${index + 1}`,
+      price: slice.price,
+      quantity: slice.quantity,
+      netPnL: slice.netPnL,
+    }));
   }
 
   scaleInLevels(t: PlannedTrade): { key: string; label: string; price: number; quantity: number }[] {

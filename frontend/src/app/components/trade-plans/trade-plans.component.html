@@ -61,6 +61,25 @@
     </div>
 
     @if (sortedOpenTrades().length) {
+      <div class="grid gap-2 sm:grid-cols-3">
+        <div class="card px-3 py-2.5">
+          <p class="text-[11px] font-medium text-slate-500">Target P&L</p>
+          <p class="text-lg font-bold tabular-nums" [class]="pnlClass(openEstimatedPnL())">{{ fmt(openEstimatedPnL()) }}</p>
+        </div>
+        <div class="card px-3 py-2.5">
+          <p class="text-[11px] font-medium text-slate-500">Charges (all trades)</p>
+          <p class="text-lg font-bold tabular-nums text-red-600">−{{ fmtPrice(openCharges()) }}</p>
+        </div>
+        <div class="card px-3 py-2.5">
+          <p class="text-[11px] font-medium text-slate-500">Net after charges</p>
+          <p class="text-lg font-bold tabular-nums" [class]="pnlClass(openEstimatedPnL() - openCharges())">
+            {{ fmt(openEstimatedPnL() - openCharges()) }}
+          </p>
+        </div>
+      </div>
+    }
+
+    @if (sortedOpenTrades().length) {
       <div class="flex flex-wrap items-center justify-between gap-2">
         <p class="text-sm font-medium text-slate-600">{{ openPageLabel() }}</p>
         <div class="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5 text-xs">
@@ -114,6 +133,10 @@
                   </div>
                   <div class="shrink-0 text-right lg:hidden">
                     <p class="text-sm font-bold tabular-nums" [class]="pnlClass(t.estimatedPnL)">{{ fmt(t.estimatedPnL) }}</p>
+                    <p class="text-[10px] tabular-nums text-slate-500">
+                      −{{ fmtPrice(tradeCharges(t)) }} · net
+                      <span class="font-semibold" [class]="pnlClass(tradeNetPnL(t))">{{ fmt(tradeNetPnL(t)) }}</span>
+                    </p>
                   </div>
                 </div>
 
@@ -134,11 +157,22 @@
                       </div>
                     }
                   </div>
+                  @if (targetLadder(t).length) {
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                      @for (target of targetLadder(t); track target.key) {
+                        <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                          {{ target.label }} {{ fmt(target.price) }} · {{ target.quantity | number }} qty · net {{ fmt(target.netPnL) }}
+                        </span>
+                      }
+                    </div>
+                  }
                 </div>
 
                 <div class="hidden shrink-0 text-right lg:block lg:w-28">
                   <p class="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">Est. P&L</p>
                   <p class="text-base font-bold tabular-nums" [class]="pnlClass(t.estimatedPnL)">{{ fmt(t.estimatedPnL) }}</p>
+                  <p class="mt-1 text-[10px] font-medium tabular-nums text-red-600">−{{ fmtPrice(tradeCharges(t)) }} charges</p>
+                  <p class="text-xs font-bold tabular-nums" [class]="pnlClass(tradeNetPnL(t))">{{ fmt(tradeNetPnL(t)) }} net</p>
                 </div>
 
                 <div class="relative flex shrink-0 items-center gap-1.5 lg:w-36 lg:justify-end">
@@ -227,11 +261,18 @@
     <p class="-mt-2 text-xs text-slate-500">{{ carryForwardMessage() }}</p>
   }
 
-  <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+  <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
     <div class="card px-3 py-2.5">
       <p class="text-[11px] font-medium text-slate-500">Target P&L</p>
       <p class="text-lg font-bold tabular-nums" [class]="pnlClass(daySummary().estimatedPnL)">
         {{ fmt(daySummary().estimatedPnL) }}
+      </p>
+    </div>
+    <div class="card px-3 py-2.5">
+      <p class="text-[11px] font-medium text-slate-500">Charges (all trades)</p>
+      <p class="text-lg font-bold tabular-nums text-red-600">−{{ fmtPrice(dayCharges()) }}</p>
+      <p class="mt-0.5 text-[11px] text-slate-500">
+        Net <span class="font-semibold tabular-nums" [class]="pnlClass(dayNetPnL())">{{ fmt(dayNetPnL()) }}</span>
       </p>
     </div>
     <div class="card px-3 py-2.5">
@@ -326,6 +367,10 @@
                       <p class="text-xs font-semibold tabular-nums text-red-600">{{ fmt(slPnL) }}</p>
                     }
                   }
+                  <p class="text-[10px] tabular-nums text-slate-500">
+                    −{{ fmtPrice(tradeCharges(t)) }} · net
+                    <span class="font-semibold" [class]="pnlClass(tradeNetPnL(t))">{{ fmt(tradeNetPnL(t)) }}</span>
+                  </p>
                 </div>
               </div>
 
@@ -399,6 +444,15 @@
                     }
                   </div>
                 }
+                @if (targetLadder(t).length) {
+                  <div class="mt-2 flex flex-wrap gap-1.5">
+                    @for (target of targetLadder(t); track target.key) {
+                      <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                        {{ target.label }} {{ fmt(target.price) }} · {{ target.quantity | number }} qty · net {{ fmt(target.netPnL) }}
+                      </span>
+                    }
+                  </div>
+                }
               </div>
 
               <!-- P&L desktop -->
@@ -417,6 +471,8 @@
                     <p class="text-sm font-bold tabular-nums text-red-600">{{ fmt(slPnL) }}</p>
                   }
                 }
+                <p class="mt-1 text-[10px] font-medium tabular-nums text-red-600">−{{ fmtPrice(tradeCharges(t)) }} charges</p>
+                <p class="text-xs font-bold tabular-nums" [class]="pnlClass(tradeNetPnL(t))">{{ fmt(tradeNetPnL(t)) }} net</p>
               </div>
 
               <!-- Actions -->
