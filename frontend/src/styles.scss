@@ -754,9 +754,16 @@
   @apply mt-3 text-xs leading-relaxed text-slate-600;
 }
 
-/* Three columns so each metric's three views occupy their own row. */
+.screener-growth-metric-group {
+  @apply mt-4 first:mt-3;
+}
+
+.screener-growth-metric-heading {
+  @apply mb-2 text-xs font-bold uppercase tracking-wide text-slate-500;
+}
+
 .screener-growth-charts-grid {
-  @apply mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3;
+  @apply grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3;
 }
 
 .screener-growth-up {

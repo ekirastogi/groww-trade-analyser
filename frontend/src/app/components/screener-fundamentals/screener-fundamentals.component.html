@@ -160,17 +160,22 @@
             <section class="screener-analysis-section">
               <h3 class="screener-analysis-heading">Quarterly growth — last 5 quarters</h3>
               <p class="screener-divergence-note">{{ analysis().divergenceNote }}</p>
-              <div class="screener-growth-charts-grid">
-                @for (chart of growthCharts(); track chart.key) {
-                  <app-chart-card
-                    [config]="chart.config"
-                    [title]="chart.title"
-                    [subtitle]="chart.caption"
-                    [heightPx]="growthChartHeight()"
-                    emptyMessage="Not enough quarters to compare"
-                  />
-                }
-              </div>
+              @for (group of growthChartGroups(); track group.metric) {
+                <section class="screener-growth-metric-group">
+                  <h4 class="screener-growth-metric-heading">{{ group.metric }}</h4>
+                  <div class="screener-growth-charts-grid">
+                    @for (chart of group.charts; track chart.key) {
+                      <app-chart-card
+                        [config]="chart.config"
+                        [title]="chart.title"
+                        [subtitle]="chart.caption"
+                        [heightPx]="growthChartHeight()"
+                        emptyMessage="Not enough quarters to compare"
+                      />
+                    }
+                  </div>
+                </section>
+              }
             </section>
           }
 

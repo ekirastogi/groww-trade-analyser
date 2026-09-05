@@ -30,14 +30,21 @@ interface GrowthChartView {
   config: ChartConfiguration<'bar'>;
 }
 
+interface GrowthChartGroup {
+  metric: string;
+  charts: GrowthChartView[];
+}
+
 const GROWTH_UP_FILL = 'rgba(16,185,129,0.85)';
 const GROWTH_DOWN_FILL = 'rgba(239,68,68,0.85)';
+const GROWTH_FLAT_FILL = 'rgba(148,163,184,0.70)';
 const GROWTH_UP_BORDER = '#047857';
 const GROWTH_DOWN_BORDER = '#b91c1c';
+const GROWTH_FLAT_BORDER = '#475569';
 
 interface GrowthLabelMeta {
   growthLabels?: string[];
-  growthUp?: boolean[];
+  growthUp?: (boolean | null)[];
 }
 
 /** Draws the % change just past the end of each bar. */
@@ -93,15 +100,24 @@ export class ScreenerFundamentalsComponent {
     return isMobileChart() ? 235 : 270;
   });
 
-  /** One growth chart per metric per basis (Sales/PAT/OPM × QoQ/YoY). */
-  growthCharts = computed<GrowthChartView[]>(() => {
+  /** Growth charts grouped by metric so Sales, then PAT, then OPM stay together. */
+  growthChartGroups = computed<GrowthChartGroup[]>(() => {
     this.viewportVersion();
-    return this.analysis().quarterlyCharts.map((chart) => ({
-      key: chart.key,
-      title: chart.title,
-      caption: chart.caption,
-      config: this.buildGrowthChartConfig(chart),
-    }));
+    const groups: GrowthChartGroup[] = [];
+
+    for (const chart of this.analysis().quarterlyCharts) {
+      const view: GrowthChartView = {
+        key: chart.key,
+        title: chart.title,
+        caption: chart.caption,
+        config: this.buildGrowthChartConfig(chart),
+      };
+      const group = groups.find((g) => g.metric === chart.metric);
+      if (group) group.charts.push(view);
+      else groups.push({ metric: chart.metric, charts: [view] });
+    }
+
+    return groups;
   });
 
   @HostListener('window:resize')
@@ -113,7 +129,8 @@ export class ScreenerFundamentalsComponent {
     const mobile = isMobileChart();
     // Bars show the actual metric value; growth only drives the colour and the label.
     const values = chart.bars.map((b) => b.value);
-    const growthUp = chart.bars.map((b) => b.growthPct >= 0);
+    // null = no preceding period, so the bar stays neutral rather than implying a gain.
+    const growthUp = chart.bars.map((b) => (b.growthPct == null ? null : b.growthPct >= 0));
     const labelGutter = mobile ? 18 : 22;
     const hasNegativeBar = values.some((v) => (v ?? 0) < 0);
 
@@ -127,11 +144,15 @@ export class ScreenerFundamentalsComponent {
             data: values,
             growthLabels: chart.bars.map((b) => b.growthLabel),
             growthUp,
-            backgroundColor: growthUp.map((up) => (up ? GROWTH_UP_FILL : GROWTH_DOWN_FILL)),
-            hoverBackgroundColor: growthUp.map((up) =>
-              up ? CHART_COLORS.success : CHART_COLORS.danger
+            backgroundColor: growthUp.map((up) =>
+              up == null ? GROWTH_FLAT_FILL : up ? GROWTH_UP_FILL : GROWTH_DOWN_FILL
             ),
-            borderColor: growthUp.map((up) => (up ? GROWTH_UP_BORDER : GROWTH_DOWN_BORDER)),
+            hoverBackgroundColor: growthUp.map((up) =>
+              up == null ? CHART_COLORS.neutral : up ? CHART_COLORS.success : CHART_COLORS.danger
+            ),
+            borderColor: growthUp.map((up) =>
+              up == null ? GROWTH_FLAT_BORDER : up ? GROWTH_UP_BORDER : GROWTH_DOWN_BORDER
+            ),
             borderWidth: 1.5,
             borderRadius: 3,
             // Bars sit flush against each other.
@@ -160,11 +181,12 @@ export class ScreenerFundamentalsComponent {
               label: (ctx) => {
                 const bar = chart.bars[ctx.dataIndex];
                 if (!bar) return '';
-                return [
-                  `${chart.basis}: ${bar.growthLabel}`,
-                  `${chart.metric}: ${bar.displayValue}`,
-                  `vs ${bar.basePeriod}: ${bar.baseDisplayValue}`,
-                ];
+                const lines = [`${chart.metric}: ${bar.displayValue}`];
+                if (bar.growthLabel) {
+                  lines.unshift(`${chart.basis}: ${bar.growthLabel}`);
+                  lines.push(`vs ${bar.basePeriod}: ${bar.baseDisplayValue}`);
+                }
+                return lines;
               },
             },
           },

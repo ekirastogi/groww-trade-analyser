@@ -85,8 +85,9 @@ export interface QuarterBar {
   displayValue: string;
   /** Indian shorthand shown under the bar, e.g. `₹1,500 Cr`. */
   compactValue: string;
-  /** Percent change vs the comparison quarter (percentage points for OPM). */
-  growthPct: number;
+  /** Percent change vs the preceding period, or null for the oldest bar shown. */
+  growthPct: number | null;
+  /** Empty when there is no preceding period to compare against. */
   growthLabel: string;
   basePeriod: string;
   baseDisplayValue: string;
@@ -216,106 +217,122 @@ interface MetricPair {
 
 type PeriodLabelStyle = 'quarter' | 'quarter-year' | 'year';
 
-interface GrowthChartSpec {
-  suffix: string;
-  basis: 'QoQ' | 'YoY';
-  titleSuffix: string;
-  caption: string;
-  source: 'quarterly' | 'annual';
-  labelStyle: PeriodLabelStyle;
-  /** Series stride between bars: 1 = consecutive, 4 = same quarter each year. */
-  sampleEvery: number;
-  /** Series distance back to the bar's comparison period. */
-  compareLag: number;
-}
+/** Indian fiscal quarter ends, in fiscal-year order (Q1…Q4). */
+const FISCAL_QUARTER_MONTHS = ['Jun', 'Sep', 'Dec', 'Mar'];
 
-/** Three views per metric: consecutive quarters, the same quarter across years, then years. */
-const GROWTH_CHART_SPECS: GrowthChartSpec[] = [
-  {
-    suffix: 'qoq',
-    basis: 'QoQ',
-    titleSuffix: 'Quarterly (QoQ)',
-    caption: 'Consecutive quarters · % vs previous quarter',
-    source: 'quarterly',
-    labelStyle: 'quarter',
-    sampleEvery: 1,
-    compareLag: 1,
-  },
-  {
-    suffix: 'same-quarter',
-    basis: 'YoY',
-    titleSuffix: 'Same quarter, year on year',
-    caption: 'Same quarter each year · % vs previous year',
-    source: 'quarterly',
-    labelStyle: 'quarter-year',
-    sampleEvery: 4,
-    compareLag: 4,
-  },
-  {
-    suffix: 'yoy',
-    basis: 'YoY',
-    titleSuffix: 'Yearly (YoY)',
-    caption: 'Financial years · % vs previous year',
-    source: 'annual',
-    labelStyle: 'year',
-    sampleEvery: 1,
-    compareLag: 1,
-  },
-];
-
+/**
+ * Per metric: consecutive quarters, then one chart per fiscal quarter compared across
+ * years (Jun 2022 → Jun 2026, Sep 2022 → Sep 2026, …), then financial years.
+ */
 function buildQuarterlyCharts(pairs: MetricPair[]): QuarterlyMetricChart[] {
   const charts: QuarterlyMetricChart[] = [];
+
   for (const pair of pairs) {
-    for (const spec of GROWTH_CHART_SPECS) {
-      const metric = spec.source === 'annual' ? pair.annual : pair.quarterly;
-      if (!metric) continue;
-      const chart = buildPeriodGrowthChart(metric, pair, spec);
-      if (chart.bars.length) charts.push(chart);
+    const quarterly = pair.quarterly;
+    if (quarterly) {
+      pushChart(
+        charts,
+        buildGrowthChart(quarterly, pair, {
+          suffix: 'qoq',
+          basis: 'QoQ',
+          titleSuffix: 'Quarterly (QoQ)',
+          caption: 'Consecutive quarters · % vs previous quarter',
+          labelStyle: 'quarter',
+          points: quarterly.series,
+        })
+      );
+
+      for (const month of quarterMonthsInSeries(quarterly.series)) {
+        const points = quarterly.series.filter((p) => periodMonth(p.period) === month);
+        pushChart(
+          charts,
+          buildGrowthChart(quarterly, pair, {
+            suffix: `q-${month.toLowerCase()}`,
+            basis: 'YoY',
+            titleSuffix: `${month} quarter (YoY)`,
+            caption: `${month} quarter each year · % vs previous year`,
+            labelStyle: 'quarter-year',
+            points,
+          })
+        );
+      }
+    }
+
+    if (pair.annual) {
+      pushChart(
+        charts,
+        buildGrowthChart(pair.annual, pair, {
+          suffix: 'yoy',
+          basis: 'YoY',
+          titleSuffix: 'Yearly (YoY)',
+          caption: 'Financial years · % vs previous year',
+          labelStyle: 'year',
+          // Annual tables end with a TTM column, which is not a comparable full year.
+          points: pair.annual.series.filter((p) => !/ttm/i.test(p.period)),
+        })
+      );
     }
   }
+
   return charts;
 }
 
+function pushChart(charts: QuarterlyMetricChart[], chart: QuarterlyMetricChart): void {
+  if (chart.bars.length) charts.push(chart);
+}
+
+/** Distinct quarter-end months present in the data, ordered Q1→Q4 where recognised. */
+function quarterMonthsInSeries(series: { period: string }[]): string[] {
+  const seen = new Set<string>();
+  for (const point of series) {
+    const month = periodMonth(point.period);
+    if (month) seen.add(month);
+  }
+  const known = FISCAL_QUARTER_MONTHS.filter((m) => seen.has(m));
+  const others = [...seen].filter((m) => !FISCAL_QUARTER_MONTHS.includes(m));
+  return [...known, ...others];
+}
+
+function periodMonth(period: string): string {
+  return period.trim().split(/\s+/)[0] ?? '';
+}
+
 /**
- * Bars for the last {@link QUARTER_BAR_COUNT} sampled periods, oldest first. Each bar
- * carries its own value; the percentage is the change against its comparison period.
+ * Bars for the last {@link QUARTER_BAR_COUNT} points, oldest first. Each bar carries its
+ * own value and the percentage change against the point preceding it in `points`, so the
+ * comparison follows whatever cadence the caller selected (quarter, same quarter, year).
  */
-function buildPeriodGrowthChart(
+function buildGrowthChart(
   metric: MetricAnalysis,
   pair: MetricPair,
-  spec: GrowthChartSpec
-): QuarterlyMetricChart {
-  // Annual tables end with a TTM column, which is not a comparable full year.
-  const all =
-    spec.source === 'annual'
-      ? metric.series.filter((p) => !/ttm/i.test(p.period))
-      : metric.series;
-
-  // Walk back from the newest period so the sampled stride anchors on the latest quarter.
-  const indices: number[] = [];
-  for (let i = all.length - 1; i >= spec.compareLag; i -= spec.sampleEvery) {
-    indices.push(i);
-    if (indices.length === QUARTER_BAR_COUNT) break;
+  spec: {
+    suffix: string;
+    basis: 'QoQ' | 'YoY';
+    titleSuffix: string;
+    caption: string;
+    labelStyle: PeriodLabelStyle;
+    points: { period: string; value: number }[];
   }
-  indices.reverse();
+): QuarterlyMetricChart {
+  const points = spec.points;
+  const computed: QuarterBar[] = [];
 
-  const bars: QuarterBar[] = [];
-  for (const i of indices) {
-    const point = all[i];
-    const base = all[i - spec.compareLag]?.value ?? null;
-    const growthPct = relativeChange(point.value, base);
-    if (growthPct == null) continue;
-    bars.push({
+  // Growth spans the whole list, so a bar keeps its % even when its base scrolls out of view.
+  for (let i = 0; i < points.length; i++) {
+    const point = points[i];
+    const base = i > 0 ? points[i - 1] : null;
+    const growthPct = base ? relativeChange(point.value, base.value) : null;
+    computed.push({
       period: point.period,
       shortLabel: periodLabel(point.period, spec.labelStyle),
       value: point.value,
       displayValue: formatMetricValue(point.value, metric.unit),
       compactValue: formatIndianCompact(point.value, metric.unit),
       growthPct,
-      growthLabel: formatRelativeChange(growthPct),
-      basePeriod: all[i - spec.compareLag]?.period ?? '—',
-      baseDisplayValue: formatMetricValue(base, metric.unit),
-      isLatest: i === all.length - 1,
+      growthLabel: growthPct == null ? '' : formatRelativeChange(growthPct),
+      basePeriod: base?.period ?? '—',
+      baseDisplayValue: formatMetricValue(base?.value ?? null, metric.unit),
+      isLatest: i === points.length - 1,
       hasData: true,
     });
   }
@@ -337,7 +354,7 @@ function buildPeriodGrowthChart(
     title: `${pair.title} · ${spec.titleSuffix}`,
     caption: spec.caption,
     unit: metric.unit,
-    bars,
+    bars: computed.slice(-QUARTER_BAR_COUNT),
     summary: growthMetricSummary(row),
   };
 }
