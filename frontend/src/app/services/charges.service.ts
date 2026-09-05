@@ -91,9 +91,8 @@ export class ChargesService {
   }
 
   /**
-   * Charges for realized statement trades, grouped into orders so the per-order brokerage
-   * cap and per-scrip DP fee are applied once. Keyed by the caller's row key; rows the
-   * equity card cannot price (F&O) are absent.
+   * Charges for realized statement trades, grouped into executed orders. F&O rows get
+   * a flat ₹20 + GST per order; remaining statement charges are applied by the caller.
    */
   realized(rows: RealizedTradeRow[]): Map<string, ChargeBreakdown> {
     return calcRealizedCharges(rows, this.ratesState());

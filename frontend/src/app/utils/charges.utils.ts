@@ -175,21 +175,20 @@ export function calcLegCharges(
   const isBuy = input.side === 'buy';
   const brokerage = calcBrokerage(turnover, segment, rates);
 
-  const stt = pctOf(turnover, isBuy ? segment.sttBuyPct : segment.sttSellPct);
-  const exchangeTxn = pctOf(turnover, segment.exchangeTxnPct);
-  const ipft = pctOf(turnover, segment.ipftPct);
-  const sebi = pctOf(turnover, rates.sebiPct);
-  const stampDuty = isBuy ? pctOf(turnover, segment.stampDutyBuyPct) : 0;
+  const stt = roundRupee(pctOf(turnover, isBuy ? segment.sttBuyPct : segment.sttSellPct));
+  const exchangeTxn = roundPaise(pctOf(turnover, segment.exchangeTxnPct));
+  const ipft = roundPaise(pctOf(turnover, segment.ipftPct));
+  const sebi = roundPaise(pctOf(turnover, rates.sebiPct));
+  const stampDuty = isBuy ? roundRupee(pctOf(turnover, segment.stampDutyBuyPct)) : 0;
   const dpCharges = isBuy ? 0 : calcDpCharge(turnover, segment);
   const pledgeCharges = isBuy ? segment.pledgePerBuy : segment.unpledgePerSell;
-  const gst = pctOf(
-    brokerage + exchangeTxn + ipft + sebi + dpCharges + pledgeCharges,
-    rates.gstPct
+  const gst = roundPaise(
+    pctOf(brokerage + exchangeTxn + ipft + sebi + dpCharges + pledgeCharges, rates.gstPct)
   );
 
   return {
     turnover,
-    brokerage,
+    brokerage: roundPaise(brokerage),
     stt,
     exchangeTxn,
     sebi,
@@ -199,17 +198,27 @@ export function calcLegCharges(
     pledgeCharges,
     interest: 0,
     gst,
-    total:
+    total: roundPaise(
       brokerage +
-      stt +
-      exchangeTxn +
-      ipft +
-      sebi +
-      stampDuty +
-      dpCharges +
-      pledgeCharges +
-      gst,
+        stt +
+        exchangeTxn +
+        ipft +
+        sebi +
+        stampDuty +
+        dpCharges +
+        pledgeCharges +
+        gst
+    ),
   };
+}
+
+/** Statutory STT and stamp duty are billed in whole rupees. */
+function roundRupee(value: number): number {
+  return Math.round(value);
+}
+
+function roundPaise(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 export function addBreakdowns(a: ChargeBreakdown, b: ChargeBreakdown): ChargeBreakdown {
@@ -425,18 +434,38 @@ interface OrderGroup {
   quantity: number;
   value: number;
   members: { key: string; value: number }[];
+  billing: 'rate-card' | 'fno-flat';
+}
+
+function fnoOrderCharges(turnover: number): ChargeBreakdown {
+  const brokerage = 20;
+  const gst = roundPaise(brokerage * 0.18);
+  return {
+    turnover,
+    brokerage,
+    stt: 0,
+    exchangeTxn: 0,
+    sebi: 0,
+    ipft: 0,
+    stampDuty: 0,
+    dpCharges: 0,
+    pledgeCharges: 0,
+    interest: 0,
+    gst,
+    total: roundPaise(brokerage + gst),
+  };
 }
 
 /**
  * Charges for realized trades from a P&L statement, billed the way a broker actually
  * bills them rather than as a flat percentage of turnover.
  *
- * Statement rows are matched buy/sell legs, not orders, so rows sharing a scrip, date and
- * side are treated as one order. That matters because brokerage is capped at ₹20 per order
- * and the DP fee is a flat per-scrip-per-day charge: pricing each row separately would
- * multiply both. Each order's charges are then split across its rows pro rata by value.
+ * Statement rows are matched buy/sell legs, not orders. Rows that share a scrip, date,
+ * side and price are treated as one executed order so the ₹20 brokerage cap and DP fee
+ * apply once per order. Different prices are billed as separate orders.
  *
- * Rows whose trade type has no equity rate card (F&O) are omitted from the result.
+ * F&O rows get a flat ₹20 + GST per order; remaining statutory F&O charges come from
+ * the Groww statement total when callers scale with `allocateToStatementCharges`.
  */
 export function calcRealizedCharges(
   rows: RealizedTradeRow[],
@@ -449,46 +478,60 @@ export function calcRealizedCharges(
     segment: ChargeSegment,
     side: ChargeSide,
     date: string,
-    price: number
+    price: number,
+    billing: OrderGroup['billing']
   ) => {
     const value = price * row.quantity;
-    if (!(value > 0)) return;
-    const id = `${side}|${segment}|${row.isin}|${date}`;
+    if (!(value > 0) && billing === 'rate-card') return;
+    const qty = Math.max(0, row.quantity);
+    if (!(qty > 0)) return;
+    const id = `${billing}|${side}|${segment}|${row.isin}|${date}|${price.toFixed(2)}`;
     const group = groups.get(id);
+    const memberValue = value > 0 ? value : qty;
     if (group) {
-      group.quantity += row.quantity;
-      group.value += value;
-      group.members.push({ key: row.key, value });
+      group.quantity += qty;
+      group.value += memberValue;
+      group.members.push({ key: row.key, value: memberValue });
       return;
     }
     groups.set(id, {
       segment,
       side,
-      quantity: row.quantity,
-      value,
-      members: [{ key: row.key, value }],
+      quantity: qty,
+      value: memberValue,
+      members: [{ key: row.key, value: memberValue }],
+      billing,
     });
   };
 
   for (const row of rows) {
+    if (!(row.quantity > 0)) continue;
     const segment = chargeSegmentForTradeType(row.tradeType);
-    if (!segment || !(row.quantity > 0)) continue;
-    addLeg(row, segment, 'buy', row.buyDate, row.buyPrice);
-    addLeg(row, segment, 'sell', row.sellDate, row.sellPrice);
+    if (segment) {
+      addLeg(row, segment, 'buy', row.buyDate, row.buyPrice, 'rate-card');
+      addLeg(row, segment, 'sell', row.sellDate, row.sellPrice, 'rate-card');
+      continue;
+    }
+    if (row.tradeType === 'fno') {
+      addLeg(row, 'intraday', 'buy', row.buyDate, row.buyPrice, 'fno-flat');
+      addLeg(row, 'intraday', 'sell', row.sellDate, row.sellPrice, 'fno-flat');
+    }
   }
 
   const totals = new Map<string, ChargeBreakdown>();
   for (const group of groups.values()) {
-    // Charge the whole order once at its average price, then share it out by value.
-    const legCharges = calcLegCharges(
-      {
-        segment: group.segment,
-        side: group.side,
-        price: group.value / group.quantity,
-        quantity: group.quantity,
-      },
-      rates
-    );
+    const legCharges =
+      group.billing === 'fno-flat'
+        ? fnoOrderCharges(group.value)
+        : calcLegCharges(
+            {
+              segment: group.segment,
+              side: group.side,
+              price: group.value / group.quantity,
+              quantity: group.quantity,
+            },
+            rates
+          );
 
     for (const member of group.members) {
       const share = group.value > 0 ? member.value / group.value : 0;

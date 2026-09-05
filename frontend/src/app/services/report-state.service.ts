@@ -200,6 +200,15 @@ export class ReportStateService {
     const uid = await this.auth.getDataUserId();
     if (!uid) return;
 
+    const chargesRebuilt = await this.ledger.ensureChargesEngine();
+    if (chargesRebuilt && typeof sessionStorage !== 'undefined') {
+      const prefix = FIREBASE_REPORT_CACHE_PREFIX + ':';
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i);
+        if (key?.startsWith(prefix)) sessionStorage.removeItem(key);
+      }
+    }
+
     const selected = this.clientSvc.selectedClientCode();
     if (selected && !forceRefresh) {
       const cached = this.restoreFirebaseReportFromCache(uid, selected);

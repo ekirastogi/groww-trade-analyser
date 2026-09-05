@@ -84,14 +84,15 @@ interface TradeWithCharges extends Trade {
 }
 
 /**
- * Per-trade charges from the Groww rate card, aligned with the input array. Entries are
- * undefined for rows the equity card cannot price (F&O), so callers fall back to the
- * statement's blended ratio for those.
+ * Per-trade charges from the Groww rate card, aligned with the input array.
+ * When `statementTotal` is the charges line from the P&L Excel, results are scaled so
+ * the book matches what Groww actually billed for that statement.
  */
 export function computeTradeCharges(
   trades: Trade[],
-  chargesSvc: Pick<ChargesService, 'realized'>
-): (number | undefined)[] {
+  chargesSvc: Pick<ChargesService, 'realized'>,
+  statementTotal = 0
+): number[] {
   const rows: RealizedTradeRow[] = trades.map((trade, index) => ({
     key: String(index),
     isin: trade.isin || trade.stockName,
@@ -104,19 +105,56 @@ export function computeTradeCharges(
   }));
 
   const breakdowns = chargesSvc.realized(rows);
-  return trades.map((_, index) => breakdowns.get(String(index))?.total);
+  const estimated = trades.map((_, index) => breakdowns.get(String(index))?.total ?? 0);
+  return allocateToStatementCharges(estimated, trades, statementTotal);
 }
 
 /**
- * Attaches charges to a trade. `rateCardCharges` comes from `computeTradeCharges`; when a
- * row is missing (F&O), the statement's blended turnover ratio is used instead.
+ * Stretch estimated charges so they sum to Groww's billed total. Equity-only files are
+ * scaled uniformly. When F&O rows exist, equity keeps the rate card and leftover
+ * statement charges go to F&O by sell value (that is where option STT lives).
+ */
+export function allocateToStatementCharges(
+  estimated: number[],
+  trades: Trade[],
+  statementTotal: number
+): number[] {
+  if (estimated.length !== trades.length) return estimated;
+  if (!(statementTotal > 0) || !trades.length) return estimated;
+
+  const isFno = trades.map((trade) => effectiveTradeType(trade) === 'fno');
+  const equitySum = estimated.reduce((sum, value, i) => sum + (isFno[i] ? 0 : value), 0);
+  const fnoCount = isFno.filter(Boolean).length;
+
+  if (fnoCount && equitySum <= statementTotal) {
+    const leftover = statementTotal - equitySum;
+    const fnoSell = trades.reduce((sum, trade, i) => sum + (isFno[i] ? trade.sellValue : 0), 0);
+    const fnoQty = trades.reduce((sum, trade, i) => sum + (isFno[i] ? trade.quantity : 0), 0);
+    return estimated.map((value, i) => {
+      if (!isFno[i]) return value;
+      if (fnoSell > 0) return leftover * (trades[i].sellValue / fnoSell);
+      if (fnoQty > 0) return leftover * (trades[i].quantity / fnoQty);
+      return leftover / fnoCount;
+    });
+  }
+
+  const estimatedSum = estimated.reduce((sum, value) => sum + value, 0);
+  if (!(estimatedSum > 0)) {
+    const sell = trades.reduce((sum, trade) => sum + trade.sellValue, 0);
+    if (!(sell > 0)) return estimated.map(() => statementTotal / trades.length);
+    return trades.map((trade) => statementTotal * (trade.sellValue / sell));
+  }
+  const scale = statementTotal / estimatedSum;
+  return estimated.map((value) => value * scale);
+}
+
+/**
+ * Attaches charges to a trade from the rate-card / statement allocation.
  */
 export function enrichTradeWithCharges(
   trade: Trade,
-  chargeRatio: number,
-  rateCardCharges?: number
+  allocatedCharges: number
 ): TradeWithCharges {
-  const allocatedCharges = rateCardCharges ?? trade.sellValue * chargeRatio;
   return {
     ...trade,
     allocatedCharges,
