@@ -37,7 +37,7 @@
         <p class="avg-kpi-value text-base sm:text-lg">
           {{ summary().remainingQty ? (summary().remainingQty | number) : '0' }}
           @if (summary().remainingAvg != null) {
-            <span class="block text-xs font-medium text-slate-400">@ {{ formatPrice(summary().remainingAvg!) }}</span>
+            <span class="block text-xs font-medium text-slate-400">at {{ formatPrice(summary().remainingAvg!) }}</span>
           }
         </p>
       </div>
