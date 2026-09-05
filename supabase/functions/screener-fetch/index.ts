@@ -47,6 +47,8 @@ export interface ScreenerSnapshot {
   otherHolding?: number;
   quarterlyResults: FinancialTable;
   profitLoss: FinancialTable;
+  balanceSheet: FinancialTable;
+  cashFlow: FinancialTable;
   shareholding: FinancialTable;
   fetchedAt: number;
 }
@@ -216,6 +218,8 @@ function parseScreenerHtml(html: string, url: string, symbol: string, fallbackNa
   const cagr = parseRangesTable($, 'Stock Price CAGR');
   const quarterlyResults = parseSectionTable($, 'quarters');
   const profitLoss = parseSectionTable($, 'profit-loss');
+  const balanceSheet = parseSectionTable($, 'balance-sheet');
+  const cashFlow = parseSectionTable($, 'cash-flow');
   const shareholding = parseSectionTable($, 'quarterly-shp');
   const shp = shareholding.rows.length ? shareholding : parseSectionTable($, 'shareholding');
 
@@ -254,6 +258,8 @@ function parseScreenerHtml(html: string, url: string, symbol: string, fallbackNa
     otherHolding: latestHolding(shp, 'Others'),
     quarterlyResults,
     profitLoss,
+    balanceSheet,
+    cashFlow,
     shareholding: shp,
     fetchedAt: Date.now(),
   };

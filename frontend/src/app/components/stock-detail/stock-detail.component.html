@@ -15,21 +15,6 @@
             Fetch Screener data
           }
         </button>
-        <button
-          type="button"
-          class="btn-secondary !py-1.5 !text-xs"
-          [disabled]="backfillBusy() || !auth.hasAccess"
-          (click)="backfillStock()"
-        >
-          @if (backfillBusy()) {
-            Backfilling…
-          } @else {
-            Backfill stock data
-          }
-        </button>
-        @if (!workerOnline()) {
-          <span class="text-[10px] text-amber-600">Worker offline</span>
-        }
       </div>
       <div class="w-full text-right sm:ml-auto sm:w-auto">
         <div class="text-2xl font-bold" [class.text-emerald-600]="s.change >= 0" [class.text-red-600]="s.change < 0">
@@ -53,12 +38,6 @@
       </div>
     </div>
 
-    @if (backfillError()) {
-      <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ backfillError() }}</div>
-    }
-    @if (backfillSuccess()) {
-      <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ backfillSuccess() }}</div>
-    }
     @if (screenerError()) {
       <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ screenerError() }}</div>
     }
@@ -230,11 +209,11 @@
   <div class="space-y-4 py-12">
     <div class="text-center">
       <p class="text-slate-500">Waiting for market data from local backend…</p>
-      <p class="text-sm text-slate-400">Symbol {{ symbol() }} will hydrate from universe + P&amp;L upload.</p>
+      <p class="text-sm text-slate-400">Symbol {{ symbol() }} — fetch Screener fundamentals below.</p>
       <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
-          class="btn-secondary"
+          class="btn-primary"
           [disabled]="screenerBusy() || !auth.hasAccess"
           (click)="fetchScreener()"
         >
@@ -244,21 +223,6 @@
             Fetch Screener data
           }
         </button>
-        <button
-          type="button"
-          class="btn-primary"
-          [disabled]="backfillBusy() || !auth.hasAccess"
-          (click)="backfillStock()"
-        >
-          @if (backfillBusy()) {
-            Backfilling {{ symbol() }}…
-          } @else {
-            Backfill {{ symbol() }} via backend
-          }
-        </button>
-        @if (!workerOnline()) {
-          <span class="text-xs text-amber-600">Worker offline</span>
-        }
       </div>
       @if (screenerError()) {
         <p class="mt-2 text-sm text-red-600">{{ screenerError() }}</p>
@@ -266,15 +230,9 @@
       @if (screenerSuccess()) {
         <p class="mt-2 text-sm text-emerald-700">{{ screenerSuccess() }}</p>
       }
-      @if (backfillError()) {
-        <p class="text-sm text-red-600">{{ backfillError() }}</p>
-      }
-      @if (backfillSuccess()) {
-        <p class="text-sm text-emerald-700">{{ backfillSuccess() }}</p>
-      }
     </div>
     @if (registryStock(); as reg) {
-      <div class="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white p-4">
+      <div class="mx-auto max-w-5xl">
         <app-screener-fundamentals [stock]="reg" />
       </div>
     }

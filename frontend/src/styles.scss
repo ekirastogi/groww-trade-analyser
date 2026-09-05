@@ -574,3 +574,140 @@
     @apply ml-auto flex items-center gap-1;
   }
 }
+
+/* Screener-style fundamentals view (project theme) */
+.screener-view {
+  @apply space-y-4 rounded-xl border border-slate-200 bg-white p-4 sm:p-5;
+}
+
+.screener-header {
+  @apply flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4;
+}
+
+.screener-title {
+  @apply text-lg font-bold text-slate-900;
+}
+
+.screener-subtitle {
+  @apply text-xs font-medium uppercase tracking-wide text-slate-400;
+}
+
+.screener-meta {
+  @apply text-xs text-slate-500;
+}
+
+.screener-meta-sep {
+  @apply mx-1 text-slate-300;
+}
+
+.screener-link {
+  @apply font-medium text-kairo-600 underline hover:text-kairo-700;
+}
+
+.screener-ratios {
+  @apply grid gap-2 sm:grid-cols-2 lg:grid-cols-4;
+}
+
+.screener-ratio-card {
+  @apply flex flex-col gap-0.5 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5;
+}
+
+.screener-ratio-label {
+  @apply text-[10px] font-semibold uppercase tracking-wide text-slate-400;
+}
+
+.screener-ratio-value {
+  @apply text-sm font-bold tabular-nums text-slate-900;
+}
+
+.screener-ratio-value-sm {
+  @apply text-xs font-semibold;
+}
+
+.screener-section-tabs {
+  @apply flex flex-wrap gap-1 border-b border-slate-200 pb-1;
+}
+
+.screener-section-tab {
+  @apply rounded-t-lg px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-800;
+}
+
+.screener-section-tab-active {
+  @apply border-b-2 border-kairo-500 bg-kairo-50/50 text-kairo-700;
+}
+
+.screener-section-tab-muted {
+  @apply opacity-60;
+}
+
+.screener-table-wrap {
+  @apply -mx-1 overflow-x-auto;
+}
+
+.screener-data-table {
+  @apply min-w-full border-collapse text-xs;
+
+  th {
+    @apply whitespace-nowrap border-b border-slate-200 bg-slate-800 px-2.5 py-2 text-left font-semibold text-white;
+  }
+
+  td {
+    @apply whitespace-nowrap border-b border-slate-100 px-2.5 py-1.5 text-right text-slate-700;
+  }
+
+  tbody tr:hover td {
+    @apply bg-kairo-50/40;
+  }
+
+  .screener-sticky-col {
+    @apply sticky left-0 z-[1] min-w-[10rem] max-w-[14rem] border-r border-slate-200 bg-white text-left font-medium text-slate-800;
+  }
+
+  thead .screener-sticky-col {
+    @apply z-[2] bg-slate-800 text-white;
+  }
+
+  tbody tr:hover .screener-sticky-col {
+    @apply bg-kairo-50/90;
+  }
+}
+
+.screener-growth-grid {
+  @apply grid gap-3 lg:grid-cols-3;
+}
+
+.screener-growth-card {
+  @apply rounded-lg border border-slate-100 bg-slate-50/50 p-3;
+}
+
+.screener-growth-title {
+  @apply mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500;
+}
+
+.screener-growth-dl {
+  @apply space-y-2 text-sm;
+
+  div {
+    @apply grid gap-1;
+  }
+
+  dt {
+    @apply text-[10px] font-semibold uppercase tracking-wide text-slate-400;
+  }
+
+  dd {
+    @apply font-medium tabular-nums text-slate-800;
+  }
+}
+
+.screener-growth-dl-2col {
+  @apply grid grid-cols-2 gap-x-3 gap-y-2;
+
+  div {
+    @apply block;
+  }
+}
+
+.screener-empty {
+  @apply rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500;
+}

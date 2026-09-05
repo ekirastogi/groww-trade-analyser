@@ -288,6 +288,8 @@ export class StockRegistryComponent implements OnInit {
       otherHolding: data.otherHolding,
       quarterlyResults: data.quarterlyResults,
       profitLoss: data.profitLoss,
+      balanceSheet: data.balanceSheet,
+      cashFlow: data.cashFlow,
       shareholding: data.shareholding,
       screenerUrl: data.url,
       screenerFetchedAt: data.fetchedAt,

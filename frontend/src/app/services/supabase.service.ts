@@ -73,7 +73,9 @@ export function rowsToCamel<T>(rows: Record<string, unknown>[]): T[] {
 }
 
 export function snakeToCamel(key: string): string {
-  const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+  const camel = key
+    .replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+    .replace(/_([0-9])/g, '$1');
   // Match app models: realised_pnl → realisedPnL (not realisedPnl).
   return camel.replace(/PnlPct/g, 'PnLPct').replace(/Pnl/g, 'PnL');
 }
@@ -88,10 +90,12 @@ export function numField(row: Record<string, unknown>, ...keys: string[]): numbe
 }
 
 export function camelToSnake(key: string): string {
-  // Keep PnL as one word (reportRealisedPnL → report_realised_pnl, not report_realised_pn_l).
   return key
     .replace(/PnL/g, 'Pnl')
-    .replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z])([0-9])/g, '$1_$2')
+    .toLowerCase();
 }
 
 /** Convert object keys from camelCase to snake_case (shallow). */

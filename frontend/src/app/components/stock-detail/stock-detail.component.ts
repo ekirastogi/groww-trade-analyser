@@ -6,7 +6,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { switchMap, of } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { StockLevelsService } from '../../services/stock-levels.service';
-import { WorkerJobService } from '../../services/worker-job.service';
 import { AuthService } from '../../services/auth.service';
 import { TradeLedgerService } from '../../services/trade-ledger.service';
 import { ReportStateService } from '../../services/report-state.service';
@@ -31,7 +30,6 @@ export class StockDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private stockSvc = inject(StockFirestoreService);
   private levelsSvc = inject(StockLevelsService);
-  private workerJobs = inject(WorkerJobService);
   readonly auth = inject(AuthService);
   private location = inject(Location);
   private pageShell = inject(PageShellService);
@@ -46,13 +44,9 @@ export class StockDetailComponent implements OnInit {
   newLevelType: 'support' | 'resistance' = 'support';
   levelError = signal<string | null>(null);
 
-  backfillBusy = signal(false);
-  backfillError = signal<string | null>(null);
-  backfillSuccess = signal<string | null>(null);
   screenerBusy = signal(false);
   screenerError = signal<string | null>(null);
   screenerSuccess = signal<string | null>(null);
-  workerOnline = signal(false);
   registryStock = signal<RegistryStock | null>(null);
 
   formatFetchedAt = formatFetchedAt;
@@ -210,7 +204,6 @@ export class StockDetailComponent implements OnInit {
 
   ngOnInit(): void {
     void this.reportState.ensureLoadedFromFirebase();
-    void this.workerJobs.getWorkerOnline().then((online) => this.workerOnline.set(online));
   }
 
   async fetchScreener(): Promise<void> {
@@ -263,6 +256,8 @@ export class StockDetailComponent implements OnInit {
         otherHolding: data.otherHolding,
         quarterlyResults: data.quarterlyResults,
         profitLoss: data.profitLoss,
+        balanceSheet: data.balanceSheet,
+        cashFlow: data.cashFlow,
         shareholding: data.shareholding,
         screenerUrl: data.url,
         screenerFetchedAt: data.fetchedAt,
@@ -275,38 +270,6 @@ export class StockDetailComponent implements OnInit {
       this.screenerError.set(e instanceof Error ? e.message : 'Screener fetch failed');
     } finally {
       this.screenerBusy.set(false);
-    }
-  }
-
-  async backfillStock(): Promise<void> {
-    const sym = this.symbol();
-    if (!sym || this.backfillBusy()) return;
-
-    this.backfillBusy.set(true);
-    this.backfillError.set(null);
-    this.backfillSuccess.set(null);
-
-    try {
-      await this.auth.whenReady();
-      if (!this.auth.hasAccess) {
-        throw new Error('Sign in to request a backfill');
-      }
-
-      const online = await this.workerJobs.getWorkerOnline();
-      if (!online) {
-        throw new Error('Worker is offline — start it locally (cd backend && go run .)');
-      }
-
-      const jobId = await this.workerJobs.requestSymbolIngest(sym);
-      const job = await this.workerJobs.waitForJob(jobId);
-      if (job.status === 'failed') {
-        throw new Error(job.error ?? 'Backfill failed');
-      }
-      this.backfillSuccess.set(`Backfill complete for ${sym}. Chart and quote will update from Firestore.`);
-    } catch (e) {
-      this.backfillError.set(e instanceof Error ? e.message : 'Backfill failed');
-    } finally {
-      this.backfillBusy.set(false);
     }
   }
 

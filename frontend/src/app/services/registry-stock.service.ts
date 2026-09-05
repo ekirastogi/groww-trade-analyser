@@ -272,6 +272,8 @@ export class RegistryStockService {
       otherHolding: stock.otherHolding,
       quarterlyResults: stock.quarterlyResults ?? {},
       profitLoss: stock.profitLoss ?? {},
+      balanceSheet: stock.balanceSheet ?? {},
+      cashFlow: stock.cashFlow ?? {},
       shareholding: stock.shareholding ?? {},
       screenerUrl: stock.screenerUrl,
       screenerFetchedAt: stock.screenerFetchedAt,

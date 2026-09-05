@@ -36,6 +36,8 @@ export interface ScreenerSnapshot {
   otherHolding?: number;
   quarterlyResults: RegistryFinancialTable;
   profitLoss: RegistryFinancialTable;
+  balanceSheet: RegistryFinancialTable;
+  cashFlow: RegistryFinancialTable;
   shareholding: RegistryFinancialTable;
   fetchedAt: number;
 }

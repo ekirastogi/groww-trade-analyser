@@ -1,116 +1,126 @@
-<div class="space-y-4">
-  @if (stock.screenerFetchedAt) {
-    <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-      <span class="font-medium text-slate-900">Screener data:</span>
-      fetched {{ formatFetchedAt(stock.screenerFetchedAt) }}
-      <span class="text-slate-400">·</span>
-      {{ formatDataAge(stock.screenerFetchedAt) }}
-      @if (stock.screenerUrl) {
-        <span class="text-slate-400">·</span>
-        <a class="text-kairo-600 underline" [href]="stock.screenerUrl" target="_blank" rel="noopener">Open on Screener</a>
-      }
+<div class="screener-view">
+  <div class="screener-header">
+    <div>
+      <h2 class="screener-title">{{ stock.name }}</h2>
+      <p class="screener-subtitle">{{ stock.symbol }}</p>
     </div>
-  } @else {
-    <p class="text-sm text-slate-500">No Screener fundamentals fetched yet.</p>
-  }
+    @if (stock.screenerFetchedAt) {
+      <div class="screener-meta">
+        <span>Screener data fetched {{ formatFetchedAt(stock.screenerFetchedAt) }}</span>
+        <span class="screener-meta-sep">·</span>
+        <span>{{ formatDataAge(stock.screenerFetchedAt) }}</span>
+        @if (stock.screenerUrl) {
+          <span class="screener-meta-sep">·</span>
+          <a class="screener-link" [href]="stock.screenerUrl" target="_blank" rel="noopener">Open on Screener</a>
+        }
+      </div>
+    } @else {
+      <p class="screener-meta">No Screener fundamentals fetched yet.</p>
+    }
+  </div>
 
-  <div class="grid gap-4 lg:grid-cols-3">
-    <div>
-      <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Fundamentals</p>
-      <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-        <dt class="text-slate-500">High / Low</dt>
-        <dd>{{ stock.highLow || '—' }}</dd>
-        <dt class="text-slate-500">Book value</dt>
-        <dd>{{ stock.bookValue ?? '—' }}</dd>
-        <dt class="text-slate-500">Div yield</dt>
-        <dd>{{ formatPct(stock.dividendYield) }}</dd>
-        <dt class="text-slate-500">ROCE</dt>
-        <dd>{{ formatPct(stock.roce) }}</dd>
-        <dt class="text-slate-500">ROE</dt>
-        <dd>{{ formatPct(stock.roe) }}</dd>
-        <dt class="text-slate-500">Face value</dt>
-        <dd>{{ stock.faceValue ?? '—' }}</dd>
-      </dl>
+  <div class="screener-ratios">
+    <div class="screener-ratio-card">
+      <span class="screener-ratio-label">Current price</span>
+      <span class="screener-ratio-value">{{ formatPrice(stock.currentPrice) }}</span>
     </div>
-    <div>
-      <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Compound growth</p>
-      <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-        <dt class="text-slate-500">Sales 10Y / 5Y / 3Y / TTM</dt>
-        <dd>{{ formatPct(stock.salesGrowth10y) }} / {{ formatPct(stock.salesGrowth5y) }} / {{ formatPct(stock.salesGrowth3y) }} / {{ formatPct(stock.salesGrowthTtm) }}</dd>
-        <dt class="text-slate-500">Profit 10Y / 5Y / 3Y / TTM</dt>
-        <dd>{{ formatPct(stock.profitGrowth10y) }} / {{ formatPct(stock.profitGrowth5y) }} / {{ formatPct(stock.profitGrowth3y) }} / {{ formatPct(stock.profitGrowthTtm) }}</dd>
-        <dt class="text-slate-500">Stock CAGR 10Y / 5Y / 3Y / 1Y</dt>
-        <dd>{{ formatPct(stock.stockCagr10y) }} / {{ formatPct(stock.stockCagr5y) }} / {{ formatPct(stock.stockCagr3y) }} / {{ formatPct(stock.stockCagr1y) }}</dd>
-      </dl>
+    <div class="screener-ratio-card">
+      <span class="screener-ratio-label">Market cap</span>
+      <span class="screener-ratio-value">{{ formatMarketCap(stock.marketCap) }}</span>
     </div>
-    <div>
-      <p class="mb-2 text-xs font-semibold uppercase text-slate-500">Shareholding (latest)</p>
-      <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-        <dt class="text-slate-500">Promoters</dt>
-        <dd>{{ formatPct(stock.promoterHolding) }}</dd>
-        <dt class="text-slate-500">FIIs</dt>
-        <dd>{{ formatPct(stock.fiiHolding) }}</dd>
-        <dt class="text-slate-500">DIIs</dt>
-        <dd>{{ formatPct(stock.diiHolding) }}</dd>
-        <dt class="text-slate-500">Public</dt>
-        <dd>{{ formatPct(stock.publicHolding) }}</dd>
-        <dt class="text-slate-500">Government</dt>
-        <dd>{{ formatPct(stock.governmentHolding) }}</dd>
-        <dt class="text-slate-500">Others</dt>
-        <dd>{{ formatPct(stock.otherHolding) }}</dd>
-      </dl>
+    <div class="screener-ratio-card">
+      <span class="screener-ratio-label">Stock P/E</span>
+      <span class="screener-ratio-value">{{ stock.pe ?? '—' }}</span>
+    </div>
+    <div class="screener-ratio-card">
+      <span class="screener-ratio-label">Book value</span>
+      <span class="screener-ratio-value">{{ stock.bookValue ?? '—' }}</span>
+    </div>
+    <div class="screener-ratio-card">
+      <span class="screener-ratio-label">Dividend yield</span>
+      <span class="screener-ratio-value">{{ formatPct(stock.dividendYield) }}</span>
+    </div>
+    <div class="screener-ratio-card">
+      <span class="screener-ratio-label">ROCE</span>
+      <span class="screener-ratio-value">{{ formatPct(stock.roce) }}</span>
+    </div>
+    <div class="screener-ratio-card">
+      <span class="screener-ratio-label">ROE</span>
+      <span class="screener-ratio-value">{{ formatPct(stock.roe) }}</span>
+    </div>
+    <div class="screener-ratio-card">
+      <span class="screener-ratio-label">High / Low</span>
+      <span class="screener-ratio-value screener-ratio-value-sm">{{ stock.highLow || '—' }}</span>
     </div>
   </div>
 
-  @if (stock.profitLoss?.rows?.length) {
-    <p class="mb-1 text-xs font-semibold uppercase text-slate-500">Profit &amp; loss (annual)</p>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-xs">
-        <thead>
-          <tr>
-            <th class="px-1 py-1 text-left">Item</th>
-            @for (h of stock.profitLoss!.headers.slice(-6); track h) {
-              <th class="px-1 py-1 text-right">{{ h }}</th>
-            }
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of stock.profitLoss!.rows.slice(0, 8); track row.label) {
-            <tr>
-              <td class="px-1 py-1">{{ row.label }}</td>
-              @for (v of row.values.slice(-6); track $index) {
-                <td class="px-1 py-1 text-right tabular-nums">{{ v }}</td>
-              }
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  }
+  <div class="screener-section-tabs">
+    @for (tab of ['quarterly', 'annual', 'balance', 'cashflow', 'shareholding', 'growth']; track tab) {
+      <button
+        type="button"
+        class="screener-section-tab"
+        [class.screener-section-tab-active]="activeTab() === tab"
+        [class.screener-section-tab-muted]="!hasTabData($any(tab))"
+        (click)="setTab($any(tab))"
+      >
+        {{ tabLabel($any(tab)) }}
+      </button>
+    }
+  </div>
 
-  @if (stock.quarterlyResults?.rows?.length) {
-    <p class="mb-1 text-xs font-semibold uppercase text-slate-500">Quarterly results</p>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-xs">
+  @if (activeTab() === 'growth') {
+    <div class="screener-growth-grid">
+      <div class="screener-growth-card">
+        <h3 class="screener-growth-title">Compound growth</h3>
+        <dl class="screener-growth-dl">
+          <div><dt>Sales 10Y / 5Y / 3Y / TTM</dt><dd>{{ formatPct(stock.salesGrowth10y) }} / {{ formatPct(stock.salesGrowth5y) }} / {{ formatPct(stock.salesGrowth3y) }} / {{ formatPct(stock.salesGrowthTtm) }}</dd></div>
+          <div><dt>Profit 10Y / 5Y / 3Y / TTM</dt><dd>{{ formatPct(stock.profitGrowth10y) }} / {{ formatPct(stock.profitGrowth5y) }} / {{ formatPct(stock.profitGrowth3y) }} / {{ formatPct(stock.profitGrowthTtm) }}</dd></div>
+          <div><dt>Stock CAGR 10Y / 5Y / 3Y / 1Y</dt><dd>{{ formatPct(stock.stockCagr10y) }} / {{ formatPct(stock.stockCagr5y) }} / {{ formatPct(stock.stockCagr3y) }} / {{ formatPct(stock.stockCagr1y) }}</dd></div>
+        </dl>
+      </div>
+      <div class="screener-growth-card">
+        <h3 class="screener-growth-title">Shareholding (latest)</h3>
+        <dl class="screener-growth-dl screener-growth-dl-2col">
+          <div><dt>Promoters</dt><dd>{{ formatPct(stock.promoterHolding) }}</dd></div>
+          <div><dt>FIIs</dt><dd>{{ formatPct(stock.fiiHolding) }}</dd></div>
+          <div><dt>DIIs</dt><dd>{{ formatPct(stock.diiHolding) }}</dd></div>
+          <div><dt>Public</dt><dd>{{ formatPct(stock.publicHolding) }}</dd></div>
+          <div><dt>Government</dt><dd>{{ formatPct(stock.governmentHolding) }}</dd></div>
+          <div><dt>Others</dt><dd>{{ formatPct(stock.otherHolding) }}</dd></div>
+        </dl>
+      </div>
+      <div class="screener-growth-card">
+        <h3 class="screener-growth-title">Other ratios</h3>
+        <dl class="screener-growth-dl screener-growth-dl-2col">
+          <div><dt>Face value</dt><dd>{{ stock.faceValue ?? '—' }}</dd></div>
+          <div><dt>High / Low</dt><dd>{{ stock.highLow || '—' }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  } @else if (activeTable(); as table) {
+    <div class="screener-table-wrap">
+      <table class="screener-data-table">
         <thead>
           <tr>
-            <th class="px-1 py-1 text-left">Item</th>
-            @for (h of stock.quarterlyResults!.headers.slice(-6); track h) {
-              <th class="px-1 py-1 text-right">{{ h }}</th>
+            <th class="screener-sticky-col">{{ tabLabel(activeTab()) }}</th>
+            @for (h of table.headers; track h) {
+              <th>{{ h }}</th>
             }
           </tr>
         </thead>
         <tbody>
-          @for (row of stock.quarterlyResults!.rows.slice(0, 8); track row.label) {
+          @for (row of table.rows; track row.label) {
             <tr>
-              <td class="px-1 py-1">{{ row.label }}</td>
-              @for (v of row.values.slice(-6); track $index) {
-                <td class="px-1 py-1 text-right tabular-nums">{{ v }}</td>
+              <td class="screener-sticky-col">{{ row.label }}</td>
+              @for (v of row.values; track $index) {
+                <td class="tabular-nums">{{ v }}</td>
               }
             </tr>
           }
         </tbody>
       </table>
     </div>
+  } @else {
+    <p class="screener-empty">No {{ tabLabel(activeTab()).toLowerCase() }} data available. Fetch Screener data to populate.</p>
   }
 </div>

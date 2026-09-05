@@ -47,6 +47,8 @@ export interface RegistryStock {
   otherHolding?: number;
   quarterlyResults?: RegistryFinancialTable;
   profitLoss?: RegistryFinancialTable;
+  balanceSheet?: RegistryFinancialTable;
+  cashFlow?: RegistryFinancialTable;
   shareholding?: RegistryFinancialTable;
   screenerUrl?: string;
   screenerFetchedAt?: number;
