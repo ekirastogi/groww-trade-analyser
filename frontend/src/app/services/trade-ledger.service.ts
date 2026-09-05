@@ -407,8 +407,16 @@ export class TradeLedgerService {
 
     const symbols = new Set<string>();
     for (const client of await this.clientSvc.listClients()) {
-      for (const profile of await this.getStockProfiles(client.clientCode)) {
-        if (profile.symbol) symbols.add(profile.symbol.toUpperCase());
+      const profiles = await this.getStockProfiles(client.clientCode);
+      if (profiles.length) {
+        for (const profile of profiles) {
+          if (profile.symbol) symbols.add(profile.symbol.toUpperCase());
+        }
+        continue;
+      }
+      // Ledgers imported before profiles were written still carry a symbol per trade.
+      for (const trade of await this.getAllTrades(client.clientCode)) {
+        if (trade.symbol) symbols.add(trade.symbol.toUpperCase());
       }
     }
 
