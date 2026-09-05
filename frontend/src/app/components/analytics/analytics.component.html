@@ -87,16 +87,16 @@
           <div class="card p-4 sm:p-5">
             <h3 class="text-sm font-semibold text-slate-900">Calendar day heatmap</h3>
             <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L aggregated by date of month (1–31)</p>
-            <div class="mt-5 grid grid-cols-7 gap-2 sm:grid-cols-10 sm:gap-2.5 lg:grid-cols-11 lg:gap-3">
+            <div class="mt-4 grid grid-cols-7 gap-1 sm:mt-5 sm:grid-cols-10 sm:gap-2 lg:grid-cols-11 lg:gap-2.5">
               @for (bucket of dayOfMonthBuckets(); track bucket.key) {
                 <div
                   class="heat-cell overview-calendar-cell"
                   [class]="bucket.tradeCount ? heatClass(bucket.netPnL, dayOfMonthMaxAbs()) : 'heat-neutral opacity-40'"
                   [title]="bucket.tradeCount ? bucket.label + ': ' + formatCurrency(bucket.netPnL) : 'No trades'"
                 >
-                  <span class="text-xs font-bold sm:text-sm">{{ bucket.label }}</span>
+                  <span class="heat-day">{{ bucket.label }}</span>
                   @if (bucket.tradeCount) {
-                    <span class="mt-1 text-[10px] font-semibold tabular-nums leading-tight sm:text-xs">{{ formatCurrency(bucket.netPnL) }}</span>
+                    <span class="heat-pnl">{{ formatCompactCurrency(bucket.netPnL) }}</span>
                   }
                 </div>
               }
@@ -106,12 +106,19 @@
           <div class="card p-4 sm:p-5">
             <h3 class="text-sm font-semibold text-slate-900">Weekday heatmap</h3>
             <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L and trade count for each weekday</p>
-            <div class="mt-5 grid grid-cols-7 gap-2 sm:gap-3">
+            <div class="mt-4 grid grid-cols-7 gap-1 sm:mt-5 sm:gap-2.5">
               @for (bucket of weekdayBuckets(); track bucket.key) {
-                <div class="heat-cell overview-weekday-cell" [class]="heatClass(bucket.netPnL, weekdayMaxAbs())">
-                  <span class="text-xs font-bold uppercase sm:text-sm">{{ bucket.label }}</span>
-                  <span class="mt-1 text-xs font-semibold tabular-nums sm:text-sm">{{ bucket.tradeCount ? formatCurrency(bucket.netPnL) : '—' }}</span>
-                  <span class="text-[10px] text-slate-500 sm:text-xs">{{ bucket.tradeCount }}t</span>
+                <div
+                  class="heat-cell overview-weekday-cell"
+                  [class]="heatClass(bucket.netPnL, weekdayMaxAbs())"
+                  [title]="bucket.label + ': ' + (bucket.tradeCount ? formatCurrency(bucket.netPnL) : 'No trades')"
+                >
+                  <span class="heat-day uppercase">
+                    <span class="sm:hidden">{{ bucket.label.slice(0, 2) }}</span>
+                    <span class="hidden sm:inline">{{ bucket.label }}</span>
+                  </span>
+                  <span class="heat-pnl">{{ bucket.tradeCount ? formatCompactCurrency(bucket.netPnL) : '—' }}</span>
+                  <span class="text-[9px] leading-none text-slate-500 sm:text-[10px]">{{ bucket.tradeCount }}t</span>
                 </div>
               }
             </div>
@@ -202,12 +209,19 @@
         <div class="card p-4">
           <h3 class="text-sm font-semibold text-slate-900">Weekday heatmap</h3>
           <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L and trade count for each weekday</p>
-          <div class="mt-4 grid grid-cols-7 gap-2">
+          <div class="mt-4 grid grid-cols-7 gap-1 sm:gap-2">
             @for (bucket of weekdayBuckets(); track bucket.key) {
-              <div class="heat-cell" [class]="heatClass(bucket.netPnL, weekdayMaxAbs())">
-                <span class="text-[10px] font-bold uppercase">{{ bucket.label }}</span>
-                <span class="mt-0.5 text-xs font-semibold tabular-nums">{{ bucket.tradeCount ? formatCurrency(bucket.netPnL) : '—' }}</span>
-                <span class="text-[10px] text-slate-500">{{ bucket.tradeCount }}t</span>
+              <div
+                class="heat-cell overview-weekday-cell"
+                [class]="heatClass(bucket.netPnL, weekdayMaxAbs())"
+                [title]="bucket.label + ': ' + (bucket.tradeCount ? formatCurrency(bucket.netPnL) : 'No trades')"
+              >
+                <span class="heat-day uppercase">
+                  <span class="sm:hidden">{{ bucket.label.slice(0, 2) }}</span>
+                  <span class="hidden sm:inline">{{ bucket.label }}</span>
+                </span>
+                <span class="heat-pnl">{{ bucket.tradeCount ? formatCompactCurrency(bucket.netPnL) : '—' }}</span>
+                <span class="text-[9px] leading-none text-slate-500 sm:text-[10px]">{{ bucket.tradeCount }}t</span>
               </div>
             }
           </div>
@@ -237,16 +251,16 @@
         <div class="card p-4">
           <h3 class="text-sm font-semibold text-slate-900">Calendar day heatmap</h3>
           <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L aggregated by date of month (1–31)</p>
-          <div class="mt-4 grid grid-cols-7 gap-1.5 sm:grid-cols-10 lg:grid-cols-11">
+          <div class="mt-4 grid grid-cols-7 gap-1 sm:grid-cols-10 sm:gap-2 lg:grid-cols-11">
             @for (bucket of dayOfMonthBuckets(); track bucket.key) {
               <div
-                class="heat-cell min-h-[3rem]"
+                class="heat-cell overview-calendar-cell"
                 [class]="bucket.tradeCount ? heatClass(bucket.netPnL, dayOfMonthMaxAbs()) : 'heat-neutral opacity-40'"
                 [title]="bucket.tradeCount ? bucket.label + ': ' + formatCurrency(bucket.netPnL) : 'No trades'"
               >
-                <span class="text-[10px] font-bold">{{ bucket.label }}</span>
+                <span class="heat-day">{{ bucket.label }}</span>
                 @if (bucket.tradeCount) {
-                  <span class="mt-0.5 text-[9px] font-semibold tabular-nums leading-tight">{{ formatCurrency(bucket.netPnL) }}</span>
+                  <span class="heat-pnl">{{ formatCompactCurrency(bucket.netPnL) }}</span>
                 }
               </div>
             }

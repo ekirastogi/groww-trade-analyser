@@ -94,7 +94,9 @@ export function camelToSnake(key: string): string {
     .replace(/PnL/g, 'Pnl')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .replace(/([A-Z])([A-Z][a-z])/g, '$1_$2')
-    .replace(/([a-z])([0-9])/g, '$1_$2')
+    // Only split before digit runs followed by a letter (e.g. growth10y → growth_10y).
+    // Leave indicator names intact (sma20, week52High → week52_high).
+    .replace(/([a-z])([0-9]+)(?=[a-z])/g, '$1_$2')
     .toLowerCase();
 }
 

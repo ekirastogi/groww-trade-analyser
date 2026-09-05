@@ -12,7 +12,7 @@ import { ChartConfiguration } from 'chart.js';
 import { ReportStateService } from '../../services/report-state.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
-import { formatCurrency, pnlClass } from '../../utils/format.utils';
+import { formatCompactCurrency, formatCurrency, pnlClass } from '../../utils/format.utils';
 import {
   CHART_COLORS,
   abbreviateLabel,
@@ -86,13 +86,19 @@ type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
       @apply border-red-200 bg-red-50/40;
     }
     .heat-cell {
-      @apply flex min-h-[2.75rem] flex-col items-center justify-center rounded-lg border border-slate-200/80 px-1 py-1.5 text-center transition;
+      @apply flex min-h-[2.75rem] flex-col items-center justify-center overflow-hidden rounded-lg border border-slate-200/80 px-0.5 py-1 text-center transition;
     }
     .overview-calendar-cell {
-      @apply min-h-[4.5rem] px-1.5 py-2 sm:min-h-[5.5rem] sm:px-2 sm:py-2.5;
+      @apply min-h-[3.35rem] gap-0.5 px-0.5 py-1.5 sm:min-h-[5rem] sm:px-2 sm:py-2.5;
     }
     .overview-weekday-cell {
-      @apply min-h-[5.5rem] px-2 py-3 sm:min-h-[6.5rem] sm:px-3 sm:py-4;
+      @apply min-h-[3.75rem] gap-0.5 px-0.5 py-1.5 sm:min-h-[6rem] sm:px-3 sm:py-3.5;
+    }
+    .heat-pnl {
+      @apply max-w-full truncate text-[10px] font-semibold tabular-nums leading-none tracking-tight sm:text-xs;
+    }
+    .heat-day {
+      @apply text-[10px] font-bold leading-none text-current sm:text-sm;
     }
     .heat-neutral { @apply bg-slate-50 text-slate-400; }
     .heat-pos-soft { @apply bg-emerald-50 text-emerald-700; }
@@ -116,6 +122,7 @@ export class AnalyticsComponent implements OnInit {
   readonly state = inject(ReportStateService);
   readonly filteredStocks = inject(FilteredStockService);
   readonly formatCurrency = formatCurrency;
+  readonly formatCompactCurrency = formatCompactCurrency;
   readonly pnlClass = pnlClass;
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
   readonly tabs: { id: AnalyticsTab; label: string }[] = [
