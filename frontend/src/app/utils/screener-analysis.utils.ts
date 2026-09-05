@@ -75,6 +75,8 @@ export interface QuarterlyMetricChart {
   caption: string;
   unit: 'currency' | 'percent';
   bars: QuarterBar[];
+  /** Bar sets keyed by fiscal quarter month (Jun/Sep/Dec/Mar) for the switchable chart. */
+  quarterBars?: Record<string, QuarterBar[]>;
   summary: string;
 }
 
@@ -105,6 +107,10 @@ export interface StockFundamentalAnalysis {
   compoundGrowth: CompoundGrowthRow[];
   growthTable: GrowthComparisonRow[];
   quarterlyCharts: QuarterlyMetricChart[];
+  /** Fiscal quarters available for the same-quarter chart, ordered Q1→Q4. */
+  quarterMonths: string[];
+  /** Newest reported quarter, used as the default selection. */
+  latestQuarterMonth: string | null;
   pricePosition: PricePosition | null;
   divergenceNote: string;
   verdicts: AnalysisVerdict[];
@@ -138,6 +144,9 @@ export function buildStockAnalysis(stock: RegistryStock): StockFundamentalAnalys
     }
   }
 
+  // Every quarterly metric shares the same column headers, so any one gives the periods.
+  const quarterlySeries = (sales ?? netProfit ?? opm)?.series ?? null;
+
   const growthTable = buildGrowthTable(sales, netProfit, opm);
   const quarterlyCharts = buildQuarterlyCharts([
     { title: 'Sales', key: 'sales', quarterly: sales, annual: salesAnnual },
@@ -158,6 +167,8 @@ export function buildStockAnalysis(stock: RegistryStock): StockFundamentalAnalys
     compoundGrowth: buildCompoundGrowthRows(stock),
     growthTable,
     quarterlyCharts,
+    quarterMonths: quarterlySeries ? quarterMonthsInSeries(quarterlySeries) : [],
+    latestQuarterMonth: quarterlySeries ? latestQuarterMonth(quarterlySeries) : null,
     pricePosition,
     divergenceNote,
     verdicts,
@@ -221,8 +232,9 @@ type PeriodLabelStyle = 'quarter' | 'quarter-year' | 'year';
 const FISCAL_QUARTER_MONTHS = ['Jun', 'Sep', 'Dec', 'Mar'];
 
 /**
- * Per metric: consecutive quarters, then one chart per fiscal quarter compared across
- * years (Jun 2022 → Jun 2026, Sep 2022 → Sep 2026, …), then financial years.
+ * Three charts per metric: consecutive quarters, the same quarter across years, then
+ * financial years. The same-quarter chart carries a bar set per fiscal quarter so the UI
+ * can switch between Jun/Sep/Dec/Mar in one chart instead of rendering four.
  */
 function buildQuarterlyCharts(pairs: MetricPair[]): QuarterlyMetricChart[] {
   const charts: QuarterlyMetricChart[] = [];
@@ -242,19 +254,39 @@ function buildQuarterlyCharts(pairs: MetricPair[]): QuarterlyMetricChart[] {
         })
       );
 
-      for (const month of quarterMonthsInSeries(quarterly.series)) {
+      const months = quarterMonthsInSeries(quarterly.series);
+      const quarterBars: Record<string, QuarterBar[]> = {};
+      for (const month of months) {
         const points = quarterly.series.filter((p) => periodMonth(p.period) === month);
-        pushChart(
-          charts,
-          buildGrowthChart(quarterly, pair, {
-            suffix: `q-${month.toLowerCase()}`,
-            basis: 'YoY',
-            titleSuffix: `${month} quarter (YoY)`,
-            caption: `${month} quarter each year · % vs previous year`,
-            labelStyle: 'quarter-year',
-            points,
-          })
-        );
+        const bars = buildGrowthChart(quarterly, pair, {
+          suffix: `q-${month.toLowerCase()}`,
+          basis: 'YoY',
+          titleSuffix: `${month} quarter (YoY)`,
+          caption: '',
+          labelStyle: 'quarter-year',
+          points,
+        }).bars;
+        if (bars.length) quarterBars[month] = bars;
+      }
+
+      const defaultMonth = latestQuarterMonth(quarterly.series);
+      const defaultBars =
+        (defaultMonth ? quarterBars[defaultMonth] : null) ??
+        Object.values(quarterBars)[0] ??
+        [];
+
+      if (defaultBars.length) {
+        charts.push({
+          key: `${pair.key}-same-quarter`,
+          metric: pair.title,
+          basis: 'YoY',
+          title: `${pair.title} · Same quarter (YoY)`,
+          caption: 'Same quarter each year · % vs previous year',
+          unit: quarterly.unit,
+          bars: defaultBars,
+          quarterBars,
+          summary: '',
+        });
       }
     }
 
@@ -275,6 +307,12 @@ function buildQuarterlyCharts(pairs: MetricPair[]): QuarterlyMetricChart[] {
   }
 
   return charts;
+}
+
+/** Quarter-end month of the newest quarterly column, used as the default selection. */
+function latestQuarterMonth(series: { period: string }[]): string | null {
+  const last = series[series.length - 1];
+  return last ? periodMonth(last.period) || null : null;
 }
 
 function pushChart(charts: QuarterlyMetricChart[], chart: QuarterlyMetricChart): void {

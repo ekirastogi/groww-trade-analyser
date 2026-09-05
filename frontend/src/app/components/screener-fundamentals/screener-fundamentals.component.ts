@@ -100,18 +100,43 @@ export class ScreenerFundamentalsComponent {
     return isMobileChart() ? 235 : 270;
   });
 
+  /** Fiscal quarter chosen for the same-quarter charts; null follows the latest quarter. */
+  private pickedQuarter = signal<string | null>(null);
+
+  quarterMonths = computed(() => this.analysis().quarterMonths);
+
+  activeQuarter = computed(() => {
+    const picked = this.pickedQuarter();
+    const months = this.quarterMonths();
+    if (picked && months.includes(picked)) return picked;
+    return this.analysis().latestQuarterMonth ?? months[months.length - 1] ?? null;
+  });
+
+  setQuarter(month: string): void {
+    this.pickedQuarter.set(month);
+  }
+
   /** Growth charts grouped by metric so Sales, then PAT, then OPM stay together. */
   growthChartGroups = computed<GrowthChartGroup[]>(() => {
     this.viewportVersion();
+    const quarter = this.activeQuarter();
     const groups: GrowthChartGroup[] = [];
 
     for (const chart of this.analysis().quarterlyCharts) {
+      // The same-quarter chart swaps its bars based on the selected fiscal quarter.
+      const selected = quarter ? chart.quarterBars?.[quarter] : null;
+      const resolved = selected?.length ? { ...chart, bars: selected } : chart;
+
       const view: GrowthChartView = {
         key: chart.key,
-        title: chart.title,
-        caption: chart.caption,
-        config: this.buildGrowthChartConfig(chart),
+        title: chart.quarterBars && quarter ? `${chart.metric} · ${quarter} quarter (YoY)` : chart.title,
+        caption:
+          chart.quarterBars && quarter
+            ? `${quarter} quarter each year · % vs previous year`
+            : chart.caption,
+        config: this.buildGrowthChartConfig(resolved),
       };
+
       const group = groups.find((g) => g.metric === chart.metric);
       if (group) group.charts.push(view);
       else groups.push({ metric: chart.metric, charts: [view] });

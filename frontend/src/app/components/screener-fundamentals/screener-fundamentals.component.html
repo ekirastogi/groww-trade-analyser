@@ -158,8 +158,27 @@
 
           @if (analysis().quarterlyCharts.length) {
             <section class="screener-analysis-section">
-              <h3 class="screener-analysis-heading">Quarterly growth — last 5 quarters</h3>
+              <h3 class="screener-analysis-heading">Quarterly growth — last 5 periods</h3>
               <p class="screener-divergence-note">{{ analysis().divergenceNote }}</p>
+
+              @if (quarterMonths().length > 1) {
+                <div class="screener-quarter-picker">
+                  <span class="screener-quarter-picker-label">Same-quarter chart</span>
+                  <div class="screener-quarter-picker-chips" role="group" aria-label="Select fiscal quarter">
+                    @for (month of quarterMonths(); track month) {
+                      <button
+                        type="button"
+                        class="screener-quarter-chip-btn"
+                        [class.screener-quarter-chip-btn-active]="activeQuarter() === month"
+                        [attr.aria-pressed]="activeQuarter() === month"
+                        (click)="setQuarter(month)"
+                      >
+                        {{ month }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
               @for (group of growthChartGroups(); track group.metric) {
                 <section class="screener-growth-metric-group">
                   <h4 class="screener-growth-metric-heading">{{ group.metric }}</h4>
