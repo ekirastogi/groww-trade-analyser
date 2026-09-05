@@ -118,7 +118,8 @@
                     <span class="sm:hidden">{{ bucket.label.slice(0, 2) }}</span>
                     <span class="hidden sm:inline">{{ bucket.label }}</span>
                   </span>
-                  <span class="heat-pnl">{{ bucket.tradeCount ? formatCompactCurrency(bucket.netPnL) : '—' }}</span>
+                  <span class="heat-pnl lg:hidden">{{ bucket.tradeCount ? formatCompactCurrency(bucket.netPnL) : '—' }}</span>
+                  <span class="heat-pnl hidden lg:inline">{{ bucket.tradeCount ? formatCurrency(bucket.netPnL) : '—' }}</span>
                   <span class="text-[9px] leading-none text-slate-500 sm:text-[10px]">{{ bucket.tradeCount }}t</span>
                 </div>
               }

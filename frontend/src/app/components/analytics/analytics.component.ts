@@ -95,7 +95,7 @@ type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
       @apply min-h-[3.75rem] gap-0.5 px-0.5 py-1.5 sm:min-h-[6rem] sm:px-3 sm:py-3.5;
     }
     .heat-pnl {
-      @apply max-w-full truncate text-[10px] font-semibold tabular-nums leading-none tracking-tight sm:text-xs;
+      @apply max-w-full truncate text-[10px] font-semibold tabular-nums leading-none tracking-tight lg:text-[11px] lg:leading-tight;
     }
     .heat-day {
       @apply text-[10px] font-bold leading-none text-current sm:text-sm;
