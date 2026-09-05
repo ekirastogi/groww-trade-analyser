@@ -80,13 +80,6 @@
 
       <!-- OVERVIEW -->
       @if (activeTab() === 'overview') {
-        <app-chart-card
-          [config]="cumulativeChartConfig()"
-          title="Equity curve"
-          subtitle="Cumulative net P&amp;L over your trading history"
-          size="lg"
-        />
-
         <div class="card p-4 sm:p-5">
           <h3 class="text-sm font-semibold text-slate-900">Calendar day heatmap</h3>
           <p class="mt-0.5 text-xs text-slate-500">Net P&amp;L aggregated by date of month (1–31)</p>
@@ -119,6 +112,13 @@
             }
           </div>
         </div>
+
+        <app-chart-card
+          [config]="cumulativeChartConfig()"
+          title="Equity curve"
+          subtitle="Cumulative net P&amp;L over your trading history"
+          size="lg"
+        />
 
         <app-chart-card
           [config]="dailyNetPnLChartConfig()"
