@@ -83,6 +83,8 @@ export interface QuarterBar {
   shortLabel: string;
   value: number | null;
   displayValue: string;
+  /** Indian shorthand shown under the bar, e.g. `₹1,500 Cr`. */
+  compactValue: string;
   /** Percent change vs the comparison quarter (percentage points for OPM). */
   growthPct: number;
   growthLabel: string;
@@ -107,15 +109,25 @@ export interface StockFundamentalAnalysis {
   verdicts: AnalysisVerdict[];
 }
 
+const SALES_HINTS = ['Sales', 'Revenue'];
+const PROFIT_HINTS = ['Net Profit', 'Profit after tax'];
+const OPM_HINTS = ['OPM %', 'OPM'];
+
 export function buildStockAnalysis(stock: RegistryStock): StockFundamentalAnalysis {
   const quarterly = stock.quarterlyResults;
+  const annual = stock.profitLoss;
   const shareholding = stock.shareholding;
 
-  const sales = quarterly ? analyzeMetric(quarterly, ['Sales'], 'currency', stock.salesGrowth3y, stock.salesGrowth5y, stock.salesGrowth10y) : null;
+  const sales = quarterly ? analyzeMetric(quarterly, SALES_HINTS, 'currency', stock.salesGrowth3y, stock.salesGrowth5y, stock.salesGrowth10y) : null;
   const netProfit = quarterly
-    ? analyzeMetric(quarterly, ['Net Profit', 'Profit after tax'], 'currency', stock.profitGrowth3y, stock.profitGrowth5y, stock.profitGrowth10y)
+    ? analyzeMetric(quarterly, PROFIT_HINTS, 'currency', stock.profitGrowth3y, stock.profitGrowth5y, stock.profitGrowth10y)
     : null;
-  const opm = quarterly ? analyzeMetric(quarterly, ['OPM %', 'OPM'], 'percent') : null;
+  const opm = quarterly ? analyzeMetric(quarterly, OPM_HINTS, 'percent') : null;
+
+  // Annual P&L drives the yearly (YoY) charts.
+  const salesAnnual = annual ? analyzeMetric(annual, SALES_HINTS, 'currency') : null;
+  const profitAnnual = annual ? analyzeMetric(annual, PROFIT_HINTS, 'currency') : null;
+  const opmAnnual = annual ? analyzeMetric(annual, OPM_HINTS, 'percent') : null;
 
   const holdings: HoldingAnalysis[] = [];
   if (shareholding?.rows?.length) {
@@ -126,7 +138,11 @@ export function buildStockAnalysis(stock: RegistryStock): StockFundamentalAnalys
   }
 
   const growthTable = buildGrowthTable(sales, netProfit, opm);
-  const quarterlyCharts = buildQuarterlyCharts(sales, netProfit, opm);
+  const quarterlyCharts = buildQuarterlyCharts([
+    { title: 'Sales', key: 'sales', quarterly: sales, annual: salesAnnual },
+    { title: 'Net profit (PAT)', key: 'pat', quarterly: netProfit, annual: profitAnnual },
+    { title: 'OPM', key: 'opm', quarterly: opm, annual: opmAnnual },
+  ]);
   const pricePosition = buildPricePosition(stock.currentPrice, stock.highLow);
   const divergenceNote = buildDivergenceNote(sales, netProfit, opm);
   const verdicts = buildVerdicts(sales, netProfit, opm, pricePosition, holdings, divergenceNote);
@@ -191,65 +207,73 @@ function buildGrowthTable(
 
 const QUARTER_BAR_COUNT = 5;
 
-/** One chart per metric per basis: Sales/PAT/OPM × QoQ/YoY. */
-function buildQuarterlyCharts(
-  sales: MetricAnalysis | null,
-  profit: MetricAnalysis | null,
-  opm: MetricAnalysis | null
-): QuarterlyMetricChart[] {
-  const metrics: { metric: MetricAnalysis; title: string; key: string }[] = [];
-  if (sales) metrics.push({ metric: sales, title: 'Sales', key: 'sales' });
-  if (profit) metrics.push({ metric: profit, title: 'Net profit (PAT)', key: 'pat' });
-  if (opm) metrics.push({ metric: opm, title: 'OPM', key: 'opm' });
+interface MetricPair {
+  title: string;
+  key: string;
+  quarterly: MetricAnalysis | null;
+  annual: MetricAnalysis | null;
+}
 
+/**
+ * One chart per metric per basis: QoQ reads the quarterly table, YoY the annual P&L,
+ * so every bar is a real period (Jun '25… / 2022…) rather than a hidden comparison.
+ */
+function buildQuarterlyCharts(pairs: MetricPair[]): QuarterlyMetricChart[] {
   const charts: QuarterlyMetricChart[] = [];
-  for (const entry of metrics) {
-    for (const basis of ['QoQ', 'YoY'] as const) {
-      const chart = buildGrowthTrendChart(entry.metric, entry.title, entry.key, basis);
-      if (chart.bars.length) charts.push(chart);
-    }
+  for (const pair of pairs) {
+    const qoq = pair.quarterly
+      ? buildPeriodGrowthChart(pair.quarterly, pair, 'QoQ', 'quarter')
+      : null;
+    if (qoq?.bars.length) charts.push(qoq);
+
+    const yoy = pair.annual ? buildPeriodGrowthChart(pair.annual, pair, 'YoY', 'year') : null;
+    if (yoy?.bars.length) charts.push(yoy);
   }
   return charts;
 }
 
 /**
- * Growth bars for the last {@link QUARTER_BAR_COUNT} comparable quarters, oldest first.
- * QoQ compares against the previous quarter, YoY against the same quarter a year back.
+ * Bars for the last {@link QUARTER_BAR_COUNT} periods, oldest first.
+ * Each bar carries its own value; the percentage is the change from the preceding bar.
  */
-function buildGrowthTrendChart(
+function buildPeriodGrowthChart(
   metric: MetricAnalysis,
-  title: string,
-  key: string,
-  basis: 'QoQ' | 'YoY'
+  pair: MetricPair,
+  basis: 'QoQ' | 'YoY',
+  periodStyle: 'quarter' | 'year'
 ): QuarterlyMetricChart {
-  const all = metric.series;
-  const lag = basis === 'QoQ' ? 1 : 4;
+  // Annual tables end with a TTM column, which is not a comparable full year.
+  const all =
+    periodStyle === 'year'
+      ? metric.series.filter((p) => !/ttm/i.test(p.period))
+      : metric.series;
 
   const computed: QuarterBar[] = [];
-  for (let i = lag; i < all.length; i++) {
+  for (let i = 1; i < all.length; i++) {
     const point = all[i];
-    const base = all[i - lag]?.value ?? null;
+    const base = all[i - 1]?.value ?? null;
     const growthPct = pctChange(point.value, base, metric.unit);
     if (growthPct == null) continue;
     computed.push({
       period: point.period,
-      shortLabel: shortPeriodLabel(point.period),
+      shortLabel:
+        periodStyle === 'year' ? shortYearLabel(point.period) : shortPeriodLabel(point.period),
       value: point.value,
       displayValue: formatMetricValue(point.value, metric.unit),
+      compactValue: formatIndianCompact(point.value, metric.unit),
       growthPct,
       growthLabel: formatAnalysisChange(growthPct, metric.unit),
-      basePeriod: all[i - lag]?.period ?? '—',
+      basePeriod: all[i - 1]?.period ?? '—',
       baseDisplayValue: formatMetricValue(base, metric.unit),
       isLatest: i === all.length - 1,
       hasData: true,
     });
   }
 
-  // Oldest first, capped to the most recent 5 comparable quarters.
   const bars = computed.slice(-QUARTER_BAR_COUNT);
 
   const row = {
-    metric: title,
+    metric: pair.title,
     latest: formatMetricValue(metric.latest, metric.unit),
     qoq: metric.qoqChange,
     yoy: metric.yoyChange,
@@ -259,18 +283,24 @@ function buildGrowthTrendChart(
   };
 
   return {
-    key: `${key}-${basis.toLowerCase()}`,
-    metric: title,
+    key: `${pair.key}-${basis.toLowerCase()}`,
+    metric: pair.title,
     basis,
-    title: `${title} · ${basis} growth`,
+    title: periodStyle === 'year' ? `${pair.title} · Yearly (YoY)` : `${pair.title} · Quarterly (QoQ)`,
     caption:
-      basis === 'QoQ'
-        ? 'Change vs the previous quarter'
-        : 'Change vs the same quarter last year',
+      periodStyle === 'year'
+        ? 'One bar per financial year · % change vs previous year'
+        : 'One bar per quarter · % change vs previous quarter',
     unit: metric.unit,
     bars,
     summary: growthMetricSummary(row),
   };
+}
+
+/** "Mar 2022" -> "2022"; falls back to the raw header when there is no year. */
+function shortYearLabel(period: string): string {
+  const year = period.match(/(19|20)\d{2}/);
+  return year ? year[0] : period.trim();
 }
 
 function shortPeriodLabel(period: string): string {
@@ -615,6 +645,32 @@ export function formatMetricValue(value: number | null, unit: 'currency' | 'perc
   if (value == null || Number.isNaN(value)) return '—';
   if (unit === 'percent') return `${value.toFixed(1)}%`;
   return `₹${value.toLocaleString('en-IN')} Cr`;
+}
+
+/**
+ * Screener reports currency rows in ₹ crore. Render them in Indian shorthand
+ * (₹1,500 Cr / ₹45 L / ₹12 K) so small-cap figures stay readable.
+ */
+export function formatIndianCompact(value: number | null, unit: 'currency' | 'percent'): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  if (unit === 'percent') return `${value.toFixed(1)}%`;
+
+  const rupees = value * 1e7;
+  const abs = Math.abs(rupees);
+  const sign = rupees < 0 ? '-' : '';
+
+  if (abs >= 1e7) return `${sign}₹${scaleIndian(abs / 1e7)} Cr`;
+  if (abs >= 1e5) return `${sign}₹${scaleIndian(abs / 1e5)} L`;
+  if (abs >= 1e3) return `${sign}₹${scaleIndian(abs / 1e3)} K`;
+  return `${sign}₹${Math.round(abs)}`;
+}
+
+function scaleIndian(scaled: number): string {
+  const digits = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  return scaled.toLocaleString('en-IN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits,
+  });
 }
 
 export function formatPriceValue(value: number | null): string {

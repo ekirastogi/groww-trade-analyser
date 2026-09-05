@@ -89,7 +89,8 @@ export class ScreenerFundamentalsComponent {
 
   growthChartHeight = computed(() => {
     this.viewportVersion();
-    return isMobileChart() ? 210 : 250;
+    // Extra room for the two-line axis labels (period + value).
+    return isMobileChart() ? 235 : 270;
   });
 
   /** One growth chart per metric per basis (Sales/PAT/OPM × QoQ/YoY). */
@@ -172,19 +173,19 @@ export class ScreenerFundamentalsComponent {
           x: {
             grid: { display: false },
             border: { color: CHART_COLORS.border },
-            ticks: { font: { size: mobile ? 9 : 10 }, color: CHART_COLORS.muted },
-          },
-          y: {
-            grid: { color: CHART_COLORS.grid },
-            border: { display: false },
-            grace: '12%',
             ticks: {
               font: { size: mobile ? 9 : 10 },
               color: CHART_COLORS.muted,
-              maxTicksLimit: 5,
-              callback: (v) => formatMetricValue(Number(v), chart.unit),
+              autoSkip: false,
+              // Two lines per tick: the period, then its actual value.
+              callback: (_value, index) => {
+                const bar = chart.bars[index];
+                return bar ? [bar.shortLabel, bar.compactValue] : '';
+              },
             },
           },
+          // Values are printed under each bar, so the axis itself is redundant.
+          y: { display: false, grace: '12%' },
         },
       },
       plugins: [growthLabelPlugin],
