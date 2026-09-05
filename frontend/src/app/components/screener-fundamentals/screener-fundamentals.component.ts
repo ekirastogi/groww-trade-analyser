@@ -10,6 +10,8 @@ import {
   formatMetricValue,
   formatPriceValue,
   GrowthComparisonRow,
+  growthBarWidth,
+  growthMetricSummary,
   HoldingAnalysis,
   priceRangePosition,
   trendDirection,
@@ -160,4 +162,7 @@ export class ScreenerFundamentalsComponent {
     const val = kind === 'qoq' ? row.qoq : row.yoy;
     return formatAnalysisChange(val, row.unit);
   }
+
+  growthBarWidth = growthBarWidth;
+  growthMetricSummary = growthMetricSummary;
 }

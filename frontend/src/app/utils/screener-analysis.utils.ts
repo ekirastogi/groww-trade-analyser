@@ -500,6 +500,41 @@ export function formatPriceValue(value: number | null): string {
   return `₹${value.toLocaleString('en-IN')}`;
 }
 
+export function growthBarWidth(value: number | null): number {
+  if (value == null || Number.isNaN(value)) return 0;
+  return Math.min(Math.abs(value) / 50, 1) * 100;
+}
+
+export function growthMetricSummary(row: GrowthComparisonRow): string {
+  const qoq = row.qoq;
+  const yoy = row.yoy;
+  const ath = row.atAth
+    ? 'Latest quarter is at the highest level in the available history.'
+    : row.belowAthPct != null
+      ? `${Math.abs(row.belowAthPct).toFixed(1)}% below the quarterly high.`
+      : '';
+
+  if (qoq == null && yoy == null) {
+    return `${row.metric} is ${row.latest}. Not enough quarters for QoQ/YoY comparison.`;
+  }
+
+  const qoqText =
+    qoq == null
+      ? 'QoQ change unavailable'
+      : row.unit === 'percent'
+        ? `QoQ ${qoq >= 0 ? 'expanded' : 'contracted'} by ${Math.abs(qoq).toFixed(1)} percentage points`
+        : `QoQ ${qoq >= 0 ? 'up' : 'down'} ${Math.abs(qoq).toFixed(1)}%`;
+
+  const yoyText =
+    yoy == null
+      ? 'YoY change unavailable'
+      : row.unit === 'percent'
+        ? `YoY ${yoy >= 0 ? 'expanded' : 'contracted'} by ${Math.abs(yoy).toFixed(1)} percentage points`
+        : `YoY ${yoy >= 0 ? 'up' : 'down'} ${Math.abs(yoy).toFixed(1)}%`;
+
+  return `${row.metric} at ${row.latest}. ${qoqText}; ${yoyText}. ${ath}`.trim();
+}
+
 export function priceRangePosition(price: PricePosition | null): number {
   if (!price?.current || !price.rangeHigh || !price.rangeLow) return 50;
   const range = price.rangeHigh - price.rangeLow;

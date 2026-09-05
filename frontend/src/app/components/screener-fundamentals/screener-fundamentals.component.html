@@ -158,34 +158,58 @@
             <section class="screener-analysis-section">
               <h3 class="screener-analysis-heading">Growth snapshot — latest quarter</h3>
               <p class="screener-divergence-note">{{ analysis().divergenceNote }}</p>
-              <table class="screener-growth-table">
-                <thead>
-                  <tr>
-                    <th>Metric</th>
-                    <th>Latest</th>
-                    <th>QoQ</th>
-                    <th>YoY</th>
-                    <th>vs quarterly high</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of analysis().growthTable; track row.metric) {
-                    <tr>
-                      <td class="screener-growth-metric">{{ row.metric }}</td>
-                      <td class="screener-growth-latest">{{ row.latest }}</td>
-                      <td [class]="growthCellClass(row.qoq, row.unit)">{{ formatGrowthCell(row, 'qoq') }}</td>
-                      <td [class]="growthCellClass(row.yoy, row.unit)">{{ formatGrowthCell(row, 'yoy') }}</td>
-                      <td>
-                        @if (row.atAth) {
-                          <span class="screener-ath-badge">At high</span>
-                        } @else {
-                          {{ formatAthDistance(row.belowAthPct) }}
-                        }
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
+              <div class="screener-growth-bars-grid">
+                @for (row of analysis().growthTable; track row.metric) {
+                  <article class="screener-growth-bar-card">
+                    <div class="screener-growth-bar-head">
+                      <span class="screener-growth-bar-metric">{{ row.metric }}</span>
+                      <span class="screener-growth-bar-latest">{{ row.latest }}</span>
+                    </div>
+
+                    <div class="screener-growth-bar-group">
+                      <div class="screener-growth-bar-label-row">
+                        <span>QoQ</span>
+                        <span [class]="growthCellClass(row.qoq, row.unit)">{{ formatGrowthCell(row, 'qoq') }}</span>
+                      </div>
+                      <div class="screener-growth-bar-track">
+                        <div class="screener-growth-bar-half screener-growth-bar-half-neg">
+                          @if (row.qoq != null && row.qoq < 0) {
+                            <div class="screener-growth-bar-fill screener-growth-bar-fill-down" [style.width.%]="growthBarWidth(row.qoq)"></div>
+                          }
+                        </div>
+                        <div class="screener-growth-bar-axis" aria-hidden="true"></div>
+                        <div class="screener-growth-bar-half screener-growth-bar-half-pos">
+                          @if (row.qoq != null && row.qoq > 0) {
+                            <div class="screener-growth-bar-fill screener-growth-bar-fill-up" [style.width.%]="growthBarWidth(row.qoq)"></div>
+                          }
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="screener-growth-bar-group">
+                      <div class="screener-growth-bar-label-row">
+                        <span>YoY</span>
+                        <span [class]="growthCellClass(row.yoy, row.unit)">{{ formatGrowthCell(row, 'yoy') }}</span>
+                      </div>
+                      <div class="screener-growth-bar-track">
+                        <div class="screener-growth-bar-half screener-growth-bar-half-neg">
+                          @if (row.yoy != null && row.yoy < 0) {
+                            <div class="screener-growth-bar-fill screener-growth-bar-fill-down" [style.width.%]="growthBarWidth(row.yoy)"></div>
+                          }
+                        </div>
+                        <div class="screener-growth-bar-axis" aria-hidden="true"></div>
+                        <div class="screener-growth-bar-half screener-growth-bar-half-pos">
+                          @if (row.yoy != null && row.yoy > 0) {
+                            <div class="screener-growth-bar-fill screener-growth-bar-fill-up" [style.width.%]="growthBarWidth(row.yoy)"></div>
+                          }
+                        </div>
+                      </div>
+                    </div>
+
+                    <p class="screener-growth-bar-explain">{{ growthMetricSummary(row) }}</p>
+                  </article>
+                }
+              </div>
             </section>
           }
 

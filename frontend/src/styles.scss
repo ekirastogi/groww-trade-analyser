@@ -678,6 +678,70 @@
   @apply font-bold text-slate-900;
 }
 
+.screener-growth-bars-grid {
+  @apply grid gap-4 lg:grid-cols-3;
+}
+
+.screener-growth-bar-card {
+  @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm;
+}
+
+.screener-growth-bar-head {
+  @apply mb-3 flex items-baseline justify-between gap-2 border-b border-slate-100 pb-2;
+}
+
+.screener-growth-bar-metric {
+  @apply text-sm font-bold text-slate-800;
+}
+
+.screener-growth-bar-latest {
+  @apply text-sm font-bold tabular-nums text-slate-900;
+}
+
+.screener-growth-bar-group {
+  @apply mb-3;
+}
+
+.screener-growth-bar-label-row {
+  @apply mb-1 flex items-center justify-between text-xs font-semibold text-slate-500;
+}
+
+.screener-growth-bar-track {
+  @apply flex h-4 items-stretch overflow-hidden rounded-md bg-slate-100;
+}
+
+.screener-growth-bar-half {
+  @apply flex flex-1 items-stretch;
+}
+
+.screener-growth-bar-half-neg {
+  @apply justify-end;
+}
+
+.screener-growth-bar-half-pos {
+  @apply justify-start;
+}
+
+.screener-growth-bar-axis {
+  @apply w-0.5 shrink-0 bg-slate-300;
+}
+
+.screener-growth-bar-fill {
+  @apply h-full min-w-[2px] rounded-sm transition-all;
+}
+
+.screener-growth-bar-fill-up {
+  @apply bg-emerald-500;
+}
+
+.screener-growth-bar-fill-down {
+  @apply bg-red-500;
+}
+
+.screener-growth-bar-explain {
+  @apply mt-1 text-xs leading-relaxed text-slate-600;
+}
+
 .screener-growth-up {
   @apply font-bold text-emerald-700;
 }
