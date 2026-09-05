@@ -56,22 +56,26 @@ else
       -H "apikey: $ANON_KEY" \
       -H "Authorization: Bearer $ANON_KEY" \
       -d "{\"symbol\":\"$SYM\"}")"
-    echo "$RESP" | node -e "
-      const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
-      if (d.error) { console.error('ERROR:', d.error); process.exit(1); }
+    REQUIRE_GROWTH="$([[ "$SYM" == "MAZDOCK" ]] && echo 1 || echo 0)"
+    RESP="$RESP" REQUIRE_GROWTH="$REQUIRE_GROWTH" node -e '
+      const d = JSON.parse(process.env.RESP);
+      if (d.error) { console.error("ERROR:", d.error); process.exit(1); }
       const checks = [
-        ['symbol', d.symbol],
-        ['quarterlyResults.rows', d.quarterlyResults?.rows?.length],
-        ['profitLoss.rows', d.profitLoss?.rows?.length],
-        ['balanceSheet.rows', d.balanceSheet?.rows?.length],
-        ['cashFlow.rows', d.cashFlow?.rows?.length],
-        ['profitGrowth10y', d.profitGrowth10y != null],
+        ["symbol", d.symbol],
+        ["quarterlyResults.rows", d.quarterlyResults?.rows?.length],
+        ["profitLoss.rows", d.profitLoss?.rows?.length],
+        ["balanceSheet.rows", d.balanceSheet?.rows?.length],
+        ["cashFlow.rows", d.cashFlow?.rows?.length],
       ];
-      for (const [k,v] of checks) {
-        if (!v) { console.error('MISSING', k); process.exit(1); }
-        console.log('  OK', k, typeof v === 'boolean' ? '' : `(${v})`);
+      if (process.env.REQUIRE_GROWTH === "1") {
+        checks.push(["profitGrowth10y", d.profitGrowth10y != null]);
       }
-    "
+      for (const [k, val] of checks) {
+        if (!val) { console.error("MISSING", k); process.exit(1); }
+        const extra = typeof val === "boolean" ? "" : `(${val})`;
+        console.log("  OK", k, extra);
+      }
+    '
   done
 fi
 

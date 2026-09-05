@@ -97,30 +97,32 @@
         </dl>
       </div>
     </div>
-  } @else if (activeTable(); as table) {
-    <div class="screener-table-wrap">
-      <table class="screener-data-table">
-        <thead>
-          <tr>
-            <th class="screener-sticky-col">{{ tabLabel(activeTab()) }}</th>
-            @for (h of table.headers; track h) {
-              <th>{{ h }}</th>
-            }
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of table.rows; track row.label) {
+  } @else {
+    @if (activeTable(); as table) {
+      <div class="screener-table-wrap">
+        <table class="screener-data-table">
+          <thead>
             <tr>
-              <td class="screener-sticky-col">{{ row.label }}</td>
-              @for (v of row.values; track $index) {
-                <td class="tabular-nums">{{ v }}</td>
+              <th class="screener-sticky-col">{{ tabLabel(activeTab()) }}</th>
+              @for (h of table.headers; track h) {
+                <th>{{ h }}</th>
               }
             </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  } @else {
-    <p class="screener-empty">No {{ tabLabel(activeTab()).toLowerCase() }} data available. Fetch Screener data to populate.</p>
+          </thead>
+          <tbody>
+            @for (row of table.rows; track row.label) {
+              <tr>
+                <td class="screener-sticky-col">{{ row.label }}</td>
+                @for (v of row.values; track $index) {
+                  <td class="tabular-nums">{{ v }}</td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <p class="screener-empty">No {{ tabLabel(activeTab()).toLowerCase() }} data available. Fetch Screener data to populate.</p>
+    }
   }
 </div>
