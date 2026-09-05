@@ -644,10 +644,6 @@
   @apply border-b-2 border-kairo-500 bg-kairo-50/50 text-kairo-700;
 }
 
-.screener-analysis-note {
-  @apply rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500;
-}
-
 .screener-divergence-note {
   @apply mb-3 text-sm leading-relaxed text-slate-700;
 }
@@ -743,28 +739,25 @@
 }
 
 .screener-price-range {
-  @apply space-y-3;
+  @apply space-y-0;
 }
 
 .screener-price-markers {
-  @apply relative h-[4.5rem];
+  @apply relative mb-1 h-[5.25rem];
 }
 
 .screener-price-marker {
-  @apply absolute bottom-0 flex w-[5.5rem] flex-col items-center text-center;
+  @apply absolute bottom-0 flex flex-col items-center gap-0.5;
   transform: translateX(-50%);
+  min-width: 4.5rem;
 }
 
 .screener-price-marker-low {
-  @apply left-0 items-start text-left;
-  transform: translateX(0);
-  width: auto;
+  left: 0;
 }
 
 .screener-price-marker-high {
-  @apply right-0 left-auto items-end text-right;
-  transform: translateX(0);
-  width: auto;
+  left: 100%;
 }
 
 .screener-price-marker-current {
@@ -772,23 +765,23 @@
 }
 
 .screener-price-marker-tag {
-  @apply text-[10px] font-bold uppercase tracking-wide text-slate-500;
+  @apply whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-slate-500;
 }
 
 .screener-price-marker-current .screener-price-marker-tag {
   @apply text-kairo-700;
 }
 
-.screener-price-marker-pin {
-  @apply my-1 block h-3 w-0.5 rounded-full bg-slate-400;
+.screener-map-pin {
+  @apply h-5 w-5 shrink-0 text-slate-400;
 }
 
-.screener-price-marker-pin-current {
-  @apply h-4 w-1 bg-kairo-600;
+.screener-map-pin-current {
+  @apply h-6 w-6 text-kairo-600;
 }
 
 .screener-price-marker-value {
-  @apply text-sm font-bold tabular-nums text-slate-900;
+  @apply whitespace-nowrap text-sm font-bold tabular-nums text-slate-900;
 }
 
 .screener-price-track {
@@ -804,15 +797,19 @@
 }
 
 .screener-price-stats {
-  @apply flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm font-semibold tabular-nums;
+  @apply flex w-full pt-2;
+}
+
+.screener-price-stat-seg {
+  @apply flex items-start justify-center text-center;
 }
 
 .screener-price-stat-up {
-  @apply text-emerald-700;
+  @apply text-xs font-semibold tabular-nums text-emerald-700 sm:text-sm;
 }
 
 .screener-price-stat-down {
-  @apply text-red-700;
+  @apply text-xs font-semibold tabular-nums text-red-700 sm:text-sm;
 }
 
 .screener-price-foot {

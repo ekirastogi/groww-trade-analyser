@@ -74,8 +74,6 @@
     @if (activeTab() === 'analysis') {
       @if (analysis().hasQuarterly || analysis().hasShareholding) {
         <div class="screener-analysis">
-          <p class="screener-analysis-note">All metrics below are computed on-device from fetched Screener data — not stored in the database.</p>
-
           @if (analysis().verdicts.length) {
             <section class="screener-analysis-section">
               <h3 class="screener-analysis-heading">Recommendation signals</h3>
@@ -109,17 +107,23 @@
                     <div class="screener-price-markers">
                       <div class="screener-price-marker screener-price-marker-low">
                         <span class="screener-price-marker-tag">52W Low</span>
-                        <span class="screener-price-marker-pin" aria-hidden="true"></span>
+                        <svg class="screener-map-pin" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+                        </svg>
                         <span class="screener-price-marker-value">{{ formatPriceValue(price.rangeLow) }}</span>
                       </div>
                       <div class="screener-price-marker screener-price-marker-current" [style.left.%]="priceRangePct()">
                         <span class="screener-price-marker-tag">Current</span>
-                        <span class="screener-price-marker-pin screener-price-marker-pin-current" aria-hidden="true"></span>
+                        <svg class="screener-map-pin screener-map-pin-current" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+                        </svg>
                         <span class="screener-price-marker-value">{{ formatPriceValue(price.current) }}</span>
                       </div>
                       <div class="screener-price-marker screener-price-marker-high">
                         <span class="screener-price-marker-tag">52W High</span>
-                        <span class="screener-price-marker-pin" aria-hidden="true"></span>
+                        <svg class="screener-map-pin" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+                        </svg>
                         <span class="screener-price-marker-value">{{ formatPriceValue(price.rangeHigh) }}</span>
                       </div>
                     </div>
@@ -130,12 +134,16 @@
                     </div>
 
                     <div class="screener-price-stats">
-                      @if (pctAboveLow(price) != null) {
-                        <span class="screener-price-stat-up">+{{ pctAboveLow(price) | number:'1.1-1' }}% above low</span>
-                      }
-                      @if (pctBelowHigh(price) != null) {
-                        <span class="screener-price-stat-down">{{ pctBelowHigh(price) | number:'1.1-1' }}% below high</span>
-                      }
+                      <div class="screener-price-stat-seg" [style.width.%]="priceRangePct()">
+                        @if (pctAboveLow(price) != null) {
+                          <span class="screener-price-stat-up">+{{ pctAboveLow(price) | number:'1.1-1' }}% above low</span>
+                        }
+                      </div>
+                      <div class="screener-price-stat-seg" [style.width.%]="100 - priceRangePct()">
+                        @if (pctBelowHigh(price) != null) {
+                          <span class="screener-price-stat-down">{{ pctBelowHigh(price) | number:'1.1-1' }}% below high</span>
+                        }
+                      </div>
                     </div>
                   </div>
                 } @else {
