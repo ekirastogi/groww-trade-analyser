@@ -22,6 +22,21 @@ export class RegistryStockService {
     );
   }
 
+  async getBySymbol(symbol: string): Promise<RegistryStock | null> {
+    await this.auth.whenReady();
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return null;
+    const sym = symbol.trim().toUpperCase();
+    const { data, error } = await this.supabase.client
+      .from('registry_stocks')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('symbol', sym)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? rowToCamel<RegistryStock>(data) : null;
+  }
+
   async listAll(): Promise<RegistryStock[]> {
     await this.auth.whenReady();
     const uid = await this.auth.getDataUserId();
@@ -231,6 +246,35 @@ export class RegistryStockService {
       supports: (stock.supports ?? []).slice(0, 3).map(Number),
       resistances: (stock.resistances ?? []).slice(0, 3).map(Number),
       notes: stock.notes ?? '',
+      bookValue: stock.bookValue,
+      dividendYield: stock.dividendYield,
+      roce: stock.roce,
+      roe: stock.roe,
+      faceValue: stock.faceValue,
+      highLow: stock.highLow,
+      salesGrowth3y: stock.salesGrowth3y,
+      salesGrowth5y: stock.salesGrowth5y,
+      salesGrowth10y: stock.salesGrowth10y,
+      salesGrowthTtm: stock.salesGrowthTtm,
+      profitGrowth3y: stock.profitGrowth3y,
+      profitGrowth5y: stock.profitGrowth5y,
+      profitGrowth10y: stock.profitGrowth10y,
+      profitGrowthTtm: stock.profitGrowthTtm,
+      stockCagr1y: stock.stockCagr1y,
+      stockCagr3y: stock.stockCagr3y,
+      stockCagr5y: stock.stockCagr5y,
+      stockCagr10y: stock.stockCagr10y,
+      promoterHolding: stock.promoterHolding,
+      fiiHolding: stock.fiiHolding,
+      diiHolding: stock.diiHolding,
+      publicHolding: stock.publicHolding,
+      governmentHolding: stock.governmentHolding,
+      otherHolding: stock.otherHolding,
+      quarterlyResults: stock.quarterlyResults ?? {},
+      profitLoss: stock.profitLoss ?? {},
+      shareholding: stock.shareholding ?? {},
+      screenerUrl: stock.screenerUrl,
+      screenerFetchedAt: stock.screenerFetchedAt,
       updatedAt: Date.now(),
     });
     const { error } = await this.supabase.client.from('registry_stocks').upsert(row);

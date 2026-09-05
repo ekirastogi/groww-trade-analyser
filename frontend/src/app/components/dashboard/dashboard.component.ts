@@ -36,6 +36,7 @@ import {
   operatorsForColumn,
   persistStockScenarios,
 } from '../../utils/stock-scenario.utils';
+import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 
 type PeriodColumnKey = 'period' | 'tradeCount' | 'totalBuyValue' | 'totalSellValue' | 'realisedPnL' | 'allocatedCharges' | 'netPnL' | 'winRate';
@@ -318,6 +319,14 @@ export class DashboardComponent implements OnInit {
 
   stockRowKey(stock: StockSummary): string {
     return stock.isin || stock.stockName;
+  }
+
+  stockSymbol(stock: StockSummary): string {
+    return this.lazyTrades.stockSymbol(stock);
+  }
+
+  stockSymbolFromName(stockName: string): string {
+    return normalizeSymbol(stockName);
   }
 
   togglePerStockExpand(stock: StockSummary): void {

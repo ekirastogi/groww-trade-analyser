@@ -6,11 +6,57 @@
     <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>
   }
 
+  <div class="card p-4">
+    <h2 class="text-sm font-semibold text-slate-900">Fetch from Screener</h2>
+    <p class="mt-1 text-xs text-slate-500">
+      Search any NSE/BSE symbol and fetch latest fundamentals from
+      <a class="underline" href="https://www.screener.in/" target="_blank" rel="noopener">screener.in</a>
+      on demand via Supabase Edge Function.
+    </p>
+    <div class="mt-3 flex flex-wrap items-end gap-2">
+      <label class="block min-w-[12rem] flex-1 text-sm">
+        <span class="text-slate-500">Symbol</span>
+        <input
+          class="input-field mt-1 w-full uppercase"
+          placeholder="e.g. MAZAGONDOCKSHIPBUIL"
+          [ngModel]="screenerSearchSymbol()"
+          (ngModelChange)="screenerSearchSymbol.set($event)"
+          (keyup.enter)="searchAndFetchScreener()"
+        />
+      </label>
+      <button
+        type="button"
+        class="btn-primary"
+        [disabled]="!!fetchingSymbol() || !screenerSearchSymbol().trim()"
+        (click)="searchAndFetchScreener()"
+      >
+        {{ fetchingSymbol() ? 'Fetching…' : 'Fetch Screener data' }}
+      </button>
+      @if (previewStock(); as preview) {
+        <a class="btn-secondary" [routerLink]="['/stock', preview.symbol]">View stock page</a>
+        <button type="button" class="btn-secondary" [disabled]="busy()" (click)="savePreviewToRegistry()">
+          {{ busy() ? 'Saving…' : 'Save to registry' }}
+        </button>
+      }
+    </div>
+    @if (previewStock(); as preview) {
+      <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="font-semibold text-slate-900">{{ preview.name }}</h3>
+            <p class="text-xs text-slate-500">{{ preview.symbol }} · CMP {{ formatPrice(preview.currentPrice) }} · P/E {{ preview.pe ?? '—' }}</p>
+          </div>
+        </div>
+        <app-screener-fundamentals [stock]="preview" />
+      </div>
+    }
+  </div>
+
   <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
     <div>
       <p class="text-sm font-medium text-slate-900">{{ stockCount() }} stocks in your registry</p>
       <p class="mt-0.5 text-xs text-slate-500">
-        Your personal stock book. NSE/BSE import adds names only — use <strong>Refresh market data</strong> after worker ingest for CMP, market cap, and indicators.
+        Your personal stock book. Use <strong>Fetch Screener</strong> on a row for fundamentals, growth, and shareholding.
       </p>
     </div>
     <div class="flex flex-wrap gap-2">
@@ -129,7 +175,17 @@
         <button type="button" class="btn-primary" [disabled]="busy()" (click)="save()">
           {{ editingSymbol() ? 'Update' : 'Add stock' }}
         </button>
-        <button type="button" class="btn-secondary" (click)="closeAddForm()">Cancel</button>
+        <button type="button" class="btn-secondary" [disabled]="busy()" (click)="closeAddForm()">Cancel</button>
+        @if (editingSymbol()) {
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="!!fetchingSymbol()"
+            (click)="fetchScreenerForEdit()"
+          >
+            {{ fetchingSymbol() === editingSymbol() ? 'Fetching Screener…' : 'Fetch Screener' }}
+          </button>
+        }
       </div>
     </div>
   }
@@ -152,7 +208,7 @@
       <div class="px-4 py-12 text-center sm:px-5">
         <p class="text-sm font-medium text-slate-700">No stocks in your registry yet</p>
         <p class="mx-auto mt-2 max-w-md text-sm text-slate-500">
-          Click <strong>Import NSE &amp; BSE</strong> to load listed symbols, or <strong>Add stock</strong> for unlisted names you track manually.
+          Use <strong>Fetch from Screener</strong> above, or click <strong>Import NSE &amp; BSE</strong> to load listed symbols.
         </p>
         <div class="mt-4 flex flex-wrap justify-center gap-2">
           <button type="button" class="btn-secondary" [disabled]="seedBusy()" (click)="importExchangeUniverse()">
@@ -165,7 +221,7 @@
       <div class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">No stocks match your search.</div>
     } @else {
       <div class="overflow-x-auto">
-        <table class="stock-table min-w-[900px]">
+        <table class="stock-table min-w-[1400px]">
           <thead>
             <tr>
               <th class="w-10 text-center">#</th>
@@ -190,20 +246,45 @@
             @for (s of paginatedStocks(); track s.symbol; let i = $index) {
               <tr>
                 <td class="text-center text-slate-400">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
-                <td class="font-semibold text-kairo-700">{{ s.symbol }}</td>
+                <td class="font-semibold">
+                  <a class="text-kairo-700 hover:underline" [routerLink]="['/stock', s.symbol]">{{ s.symbol }}</a>
+                </td>
                 <td class="max-w-[12rem] truncate text-slate-700">{{ s.name || '—' }}</td>
                 <td class="text-right tabular-nums">{{ formatPrice(s.currentPrice) }}</td>
                 <td class="text-right tabular-nums text-slate-600">{{ s.marketCap ?? '—' }}</td>
                 <td class="text-right tabular-nums">{{ s.pe ?? '—' }}</td>
-                <td class="text-right tabular-nums">{{ s.rsi ?? '—' }}</td>
+                <td class="text-right tabular-nums">{{ formatPct(s.salesGrowth3y) }}</td>
+                <td class="text-right tabular-nums">{{ formatPct(s.profitGrowth3y) }}</td>
+                <td class="text-right tabular-nums">{{ formatPct(s.stockCagr3y) }}</td>
+                <td class="text-right tabular-nums">{{ formatPct(s.promoterHolding) }}</td>
+                <td class="text-right tabular-nums">{{ formatPct(s.fiiHolding) }}</td>
+                <td class="text-right text-xs text-slate-500">{{ formatUpdated(s.screenerFetchedAt) }}</td>
                 <td class="text-right text-xs text-slate-500">{{ formatUpdated(s.updatedAt) }}</td>
                 <td class="text-xs text-emerald-700">{{ s.supports.join(', ') || '—' }}</td>
                 <td class="text-xs text-red-600">{{ s.resistances.join(', ') || '—' }}</td>
                 <td class="whitespace-nowrap">
-                  <button type="button" class="text-xs text-kairo-600 hover:underline" (click)="edit(s)">Edit</button>
+                  <button
+                    type="button"
+                    class="text-xs text-kairo-600 hover:underline"
+                    [disabled]="fetchingSymbol() === s.symbol"
+                    (click)="fetchScreener(s)"
+                  >
+                    {{ fetchingSymbol() === s.symbol ? 'Fetching…' : 'Fetch Screener' }}
+                  </button>
+                  <button type="button" class="ml-2 text-xs text-slate-600 hover:underline" (click)="toggleDetails(s.symbol)">
+                    {{ expandedSymbol() === s.symbol ? 'Hide' : 'Details' }}
+                  </button>
+                  <button type="button" class="ml-2 text-xs text-kairo-600 hover:underline" (click)="edit(s)">Edit</button>
                   <button type="button" class="ml-2 text-xs text-red-500 hover:underline" (click)="remove(s.symbol)">Delete</button>
                 </td>
               </tr>
+              @if (expandedSymbol() === s.symbol) {
+                <tr>
+                  <td [attr.colspan]="columns.length + 4" class="bg-slate-50 px-4 py-4">
+                    <app-screener-fundamentals [stock]="s" />
+                  </td>
+                </tr>
+              }
             }
           </tbody>
         </table>

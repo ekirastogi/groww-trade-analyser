@@ -169,7 +169,9 @@
                                 >
                                   <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500">{{ gi + 1 }}</span>
                                   <div class="min-w-0 flex-1">
-                                    <div class="truncate text-sm font-semibold text-slate-900">{{ group.stockName }}</div>
+                                    <div class="truncate text-sm font-semibold">
+                                      <a class="text-kairo-700 hover:underline" [routerLink]="['/stock', stockSymbolFromName(group.stockName)]">{{ group.stockName }}</a>
+                                    </div>
                                     <div class="text-xs text-slate-400">{{ group.tradeCount }} trades · Qty {{ group.totalQuantity | number }}</div>
                                   </div>
                                   <div class="shrink-0 text-right">
@@ -498,7 +500,11 @@
                       <td [class]="(col.key === 'stockName' ? 'col-name' : stockColumnCellClass(col.key, stock)) + ' ' + stockColumnResponsiveClass(col.key)">
                         @switch (col.key) {
                           @case ('stockName') {
-                            <span class="block truncate font-semibold text-slate-900" [title]="stock.stockName">{{ stock.stockName }}</span>
+                            <a
+                              class="block truncate font-semibold text-kairo-700 hover:underline"
+                              [title]="stock.stockName"
+                              [routerLink]="['/stock', stockSymbol(stock)]"
+                            >{{ stock.stockName }}</a>
                           }
                           @case ('tradeCount') { {{ stock.tradeCount }} }
                           @case ('quantity') { {{ stock.quantity | number }} }

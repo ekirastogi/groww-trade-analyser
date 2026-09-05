@@ -11,15 +11,20 @@ import { AuthService } from '../../services/auth.service';
 import { TradeLedgerService } from '../../services/trade-ledger.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { PageShellService } from '../../services/page-shell.service';
+import { RegistryStockService } from '../../services/registry-stock.service';
+import { ScreenerService } from '../../services/screener.service';
 import { TradingChartComponent } from '../trading-chart/trading-chart.component';
+import { ScreenerFundamentalsComponent } from '../screener-fundamentals/screener-fundamentals.component';
+import { RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency, formatPct } from '../../utils/format.utils';
+import { formatDataAge, formatFetchedAt } from '../../utils/data-age.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { Trade } from '../../models/trade.models';
 
 @Component({
   selector: 'app-stock-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TradingChartComponent],
+  imports: [CommonModule, FormsModule, RouterLink, TradingChartComponent, ScreenerFundamentalsComponent],
   templateUrl: './stock-detail.component.html',
 })
 export class StockDetailComponent implements OnInit {
@@ -32,6 +37,8 @@ export class StockDetailComponent implements OnInit {
   private pageShell = inject(PageShellService);
   readonly reportState = inject(ReportStateService);
   private ledger = inject(TradeLedgerService);
+  private registrySvc = inject(RegistryStockService);
+  private screenerSvc = inject(ScreenerService);
 
   readonly tableSort = new TableSortState('sellDate', 'desc');
   newLevelPrice = '';
@@ -42,7 +49,14 @@ export class StockDetailComponent implements OnInit {
   backfillBusy = signal(false);
   backfillError = signal<string | null>(null);
   backfillSuccess = signal<string | null>(null);
+  screenerBusy = signal(false);
+  screenerError = signal<string | null>(null);
+  screenerSuccess = signal<string | null>(null);
   workerOnline = signal(false);
+  registryStock = signal<RegistryStock | null>(null);
+
+  formatFetchedAt = formatFetchedAt;
+  formatDataAge = formatDataAge;
 
   readonly tradeColumns = [
     { key: 'buyDate', label: 'Buy', align: 'left' as const },
@@ -84,7 +98,7 @@ export class StockDetailComponent implements OnInit {
     { initialValue: undefined }
   );
 
-  activeTab = signal<'market' | 'my-trades'>('market');
+  activeTab = signal<'market' | 'fundamentals' | 'my-trades'>('market');
   fmt = formatCurrency;
   fmtPct = formatPct;
 
@@ -102,6 +116,15 @@ export class StockDetailComponent implements OnInit {
     const subtitle = s ? `${s.name} · ${s.exchange}` : 'Market data and your trades';
     this.pageShell.setHeader(sym || 'Stock', subtitle);
     onCleanup(() => this.pageShell.clearOverride());
+  }, { allowSignalWrites: true });
+
+  private readonly _loadRegistryStock = effect(() => {
+    const sym = this.symbol();
+    if (!sym) {
+      this.registryStock.set(null);
+      return;
+    }
+    void this.registrySvc.getBySymbol(sym).then((row) => this.registryStock.set(row));
   }, { allowSignalWrites: true });
 
   myTrades = signal<Trade[]>([]);
@@ -190,6 +213,71 @@ export class StockDetailComponent implements OnInit {
     void this.workerJobs.getWorkerOnline().then((online) => this.workerOnline.set(online));
   }
 
+  async fetchScreener(): Promise<void> {
+    const sym = this.symbol();
+    if (!sym || this.screenerBusy()) return;
+
+    this.screenerBusy.set(true);
+    this.screenerError.set(null);
+    this.screenerSuccess.set(null);
+
+    try {
+      const data = await this.screenerSvc.fetchStock(sym);
+      const existing = this.registryStock() ?? {
+        symbol: sym,
+        name: data.name,
+        currentPrice: 0,
+        supports: [],
+        resistances: [],
+        updatedAt: Date.now(),
+      };
+      const updated: RegistryStock = {
+        ...existing,
+        name: data.name || existing.name,
+        currentPrice: data.currentPrice ?? existing.currentPrice,
+        marketCap: data.marketCap ?? existing.marketCap,
+        pe: data.pe ?? existing.pe,
+        bookValue: data.bookValue,
+        dividendYield: data.dividendYield,
+        roce: data.roce,
+        roe: data.roe,
+        faceValue: data.faceValue,
+        highLow: data.highLow,
+        salesGrowth3y: data.salesGrowth3y,
+        salesGrowth5y: data.salesGrowth5y,
+        salesGrowth10y: data.salesGrowth10y,
+        salesGrowthTtm: data.salesGrowthTtm,
+        profitGrowth3y: data.profitGrowth3y,
+        profitGrowth5y: data.profitGrowth5y,
+        profitGrowth10y: data.profitGrowth10y,
+        profitGrowthTtm: data.profitGrowthTtm,
+        stockCagr1y: data.stockCagr1y,
+        stockCagr3y: data.stockCagr3y,
+        stockCagr5y: data.stockCagr5y,
+        stockCagr10y: data.stockCagr10y,
+        promoterHolding: data.promoterHolding,
+        fiiHolding: data.fiiHolding,
+        diiHolding: data.diiHolding,
+        publicHolding: data.publicHolding,
+        governmentHolding: data.governmentHolding,
+        otherHolding: data.otherHolding,
+        quarterlyResults: data.quarterlyResults,
+        profitLoss: data.profitLoss,
+        shareholding: data.shareholding,
+        screenerUrl: data.url,
+        screenerFetchedAt: data.fetchedAt,
+      };
+      await this.registrySvc.save(updated);
+      this.registryStock.set(updated);
+      this.screenerSuccess.set(`Fetched Screener data for ${sym}.`);
+      this.activeTab.set('fundamentals');
+    } catch (e) {
+      this.screenerError.set(e instanceof Error ? e.message : 'Screener fetch failed');
+    } finally {
+      this.screenerBusy.set(false);
+    }
+  }
+
   async backfillStock(): Promise<void> {
     const sym = this.symbol();
     if (!sym || this.backfillBusy()) return;
@@ -228,6 +316,13 @@ export class StockDetailComponent implements OnInit {
 
   macdHist(s: { indicators?: { macdHist?: number } }): number {
     return s.indicators?.macdHist ?? 0;
+  }
+
+  marketDataAge(lastUpdated: string): string {
+    if (!lastUpdated) return 'unknown age';
+    const ts = new Date(lastUpdated).getTime();
+    if (!Number.isFinite(ts)) return 'unknown age';
+    return formatDataAge(ts);
   }
 
   async addUserLevel(): Promise<void> {

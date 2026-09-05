@@ -68,6 +68,16 @@ go run .
 
 Worker writes market data to Postgres; UI reads via `supabase-js`.
 
+## Edge Functions
+
+On-demand Screener.in scraping:
+
+```bash
+supabase functions deploy screener-fetch --project-ref vufjhwxlyhxunqhfeqtr
+```
+
+The Angular app calls `screener-fetch` via `supabase.functions.invoke()` when you fetch fundamentals from Stock Registry or a stock detail page.
+
 ## Migrating from Firestore
 
 Existing Firestore documents are **not** auto-imported. Re-upload your P&L CSV or run a custom backfill.
