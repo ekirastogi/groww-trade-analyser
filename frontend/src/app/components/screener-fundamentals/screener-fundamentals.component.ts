@@ -8,9 +8,12 @@ import {
   formatAnalysisChange,
   formatAthDistance,
   formatMetricValue,
+  formatPriceValue,
+  GrowthComparisonRow,
   HoldingAnalysis,
-  MetricAnalysis,
+  priceRangePosition,
   trendDirection,
+  VerdictTone,
 } from '../../utils/screener-analysis.utils';
 
 type FinancialTab = 'analysis' | 'quarterly' | 'annual' | 'balance' | 'cashflow' | 'shareholding' | 'growth';
@@ -29,12 +32,14 @@ export class ScreenerFundamentalsComponent {
   readonly tabs: FinancialTab[] = ['analysis', 'quarterly', 'annual', 'balance', 'cashflow', 'shareholding', 'growth'];
 
   analysis = computed(() => buildStockAnalysis(this.stock));
+  priceRangePct = computed(() => priceRangePosition(this.analysis().pricePosition));
 
   formatFetchedAt = formatFetchedAt;
   formatDataAge = formatDataAge;
   formatAnalysisChange = formatAnalysisChange;
   formatAthDistance = formatAthDistance;
   formatMetricValue = formatMetricValue;
+  formatPriceValue = formatPriceValue;
   trendDirection = trendDirection;
 
   formatPct(value: number | undefined | null): string {
@@ -122,8 +127,28 @@ export class ScreenerFundamentalsComponent {
     }
   }
 
-  metricSparkMax(metric: MetricAnalysis): number {
-    const max = Math.max(...metric.series.map((p) => p.value), 1);
-    return max;
+  verdictClass(tone: VerdictTone): string {
+    switch (tone) {
+      case 'bullish':
+        return 'screener-verdict-bullish';
+      case 'bearish':
+        return 'screener-verdict-bearish';
+      case 'caution':
+        return 'screener-verdict-caution';
+      default:
+        return 'screener-verdict-neutral';
+    }
+  }
+
+  growthCellClass(value: number | null, unit: 'currency' | 'percent'): string {
+    const dir = trendDirection(value);
+    if (dir === 'up') return 'screener-growth-up';
+    if (dir === 'down') return 'screener-growth-down';
+    return '';
+  }
+
+  formatGrowthCell(row: GrowthComparisonRow, kind: 'qoq' | 'yoy'): string {
+    const val = kind === 'qoq' ? row.qoq : row.yoy;
+    return formatAnalysisChange(val, row.unit);
   }
 }

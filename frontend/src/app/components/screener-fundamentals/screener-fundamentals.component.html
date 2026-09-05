@@ -49,10 +49,12 @@
       <span class="screener-ratio-value">{{ formatPct(stock.roe) }}</span>
     </div>
     <div class="screener-ratio-card">
-      <span class="screener-ratio-label">High / Low</span>
+      <span class="screener-ratio-label">52W high / low</span>
       <span class="screener-ratio-value screener-ratio-value-sm">{{ stock.highLow || '—' }}</span>
     </div>
   </div>
+
+  <div class="screener-tabs-divider" role="separator" aria-hidden="true"></div>
 
   <div class="screener-section-tabs">
     @for (tab of tabs; track tab) {
@@ -68,184 +70,208 @@
     }
   </div>
 
-  @if (activeTab() === 'analysis') {
-    @if (analysis().hasQuarterly || analysis().hasShareholding) {
-      <div class="screener-analysis">
-        @if (analysis().sales; as m) {
-          <section class="screener-analysis-section">
-            <h3 class="screener-analysis-heading">Revenue momentum</h3>
-            <div class="screener-metric-card">
-              <div class="screener-metric-head">
-                <div>
-                  <p class="screener-metric-label">Sales · {{ m.latestPeriod }}</p>
-                  <p class="screener-metric-value">{{ formatMetricValue(m.latest, m.unit) }}</p>
-                </div>
-                <div class="screener-metric-badges">
-                  <span class="screener-badge" [class.screener-badge-up]="trendDirection(m.qoqChange) === 'up'" [class.screener-badge-down]="trendDirection(m.qoqChange) === 'down'">
-                    QoQ {{ formatAnalysisChange(m.qoqChange, m.unit) }}
-                  </span>
-                  <span class="screener-badge" [class.screener-badge-up]="trendDirection(m.yoyChange) === 'up'" [class.screener-badge-down]="trendDirection(m.yoyChange) === 'down'">
-                    YoY {{ formatAnalysisChange(m.yoyChange, m.unit) }}
-                  </span>
-                </div>
-              </div>
-              <div class="screener-metric-meta">
-                <span>{{ formatAthDistance(m.belowAthPct) }}</span>
-                <span class="screener-meta-sep">·</span>
-                <span>ATH {{ formatMetricValue(m.ath, m.unit) }} ({{ m.athPeriod }})</span>
-                @if (m.cagr3y != null) {
-                  <span class="screener-meta-sep">·</span>
-                  <span>3Y CAGR {{ formatPct(m.cagr3y) }}</span>
-                }
-              </div>
-              <div class="screener-sparkline" aria-hidden="true">
-                @for (p of m.series; track p.period) {
-                  <div class="screener-spark-col">
-                    <div class="screener-spark-bar" [style.height.%]="(p.value / metricSparkMax(m)) * 100"></div>
-                    <span class="screener-spark-label">{{ p.period }}</span>
-                  </div>
-                }
-              </div>
-            </div>
-          </section>
-        }
+  <div class="screener-tab-panel">
+    @if (activeTab() === 'analysis') {
+      @if (analysis().hasQuarterly || analysis().hasShareholding) {
+        <div class="screener-analysis">
+          <p class="screener-analysis-note">All metrics below are computed on-device from fetched Screener data — not stored in the database.</p>
 
-        <div class="screener-analysis-grid">
-          @if (analysis().netProfit; as m) {
+          @if (analysis().verdicts.length) {
             <section class="screener-analysis-section">
-              <h3 class="screener-analysis-heading">Profit (PAT)</h3>
-              <div class="screener-metric-card screener-metric-card-compact">
-                <p class="screener-metric-value">{{ formatMetricValue(m.latest, m.unit) }}</p>
-                <p class="screener-metric-sublabel">{{ m.latestPeriod }}</p>
-                <div class="screener-metric-badges screener-metric-badges-stack">
-                  <span class="screener-badge" [class.screener-badge-up]="trendDirection(m.qoqChange) === 'up'" [class.screener-badge-down]="trendDirection(m.qoqChange) === 'down'">QoQ {{ formatAnalysisChange(m.qoqChange, m.unit) }}</span>
-                  <span class="screener-badge" [class.screener-badge-up]="trendDirection(m.yoyChange) === 'up'" [class.screener-badge-down]="trendDirection(m.yoyChange) === 'down'">YoY {{ formatAnalysisChange(m.yoyChange, m.unit) }}</span>
-                </div>
-                <p class="screener-metric-foot">{{ formatAthDistance(m.belowAthPct) }} · 3Y CAGR {{ formatPct(m.cagr3y) }}</p>
+              <h3 class="screener-analysis-heading">Recommendation signals</h3>
+              <div class="screener-verdict-grid">
+                @for (v of analysis().verdicts; track v.title) {
+                  <article class="screener-verdict-card" [class]="verdictClass(v.tone)">
+                    <h4 class="screener-verdict-title">{{ v.title }}</h4>
+                    <p class="screener-verdict-body">{{ v.body }}</p>
+                    @if (v.upsidePct != null || v.downsidePct != null) {
+                      <div class="screener-verdict-range">
+                        @if (v.upsidePct != null) {
+                          <span class="screener-range-up">↑ ~{{ v.upsidePct.toFixed(1) }}% to 52W high</span>
+                        }
+                        @if (v.downsidePct != null) {
+                          <span class="screener-range-down">↓ ~{{ v.downsidePct.toFixed(1) }}% to 52W low</span>
+                        }
+                      </div>
+                    }
+                  </article>
+                }
               </div>
             </section>
           }
 
-          @if (analysis().opm; as m) {
+          @if (analysis().pricePosition; as price) {
             <section class="screener-analysis-section">
-              <h3 class="screener-analysis-heading">Operating margin (OPM)</h3>
-              <div class="screener-metric-card screener-metric-card-compact">
-                <p class="screener-metric-value">{{ formatMetricValue(m.latest, m.unit) }}</p>
-                <p class="screener-metric-sublabel">{{ m.latestPeriod }}</p>
-                <div class="screener-metric-badges screener-metric-badges-stack">
-                  <span class="screener-badge" [class.screener-badge-up]="trendDirection(m.qoqChange) === 'up'" [class.screener-badge-down]="trendDirection(m.qoqChange) === 'down'">QoQ {{ formatAnalysisChange(m.qoqChange, m.unit) }}</span>
-                  <span class="screener-badge" [class.screener-badge-up]="trendDirection(m.yoyChange) === 'up'" [class.screener-badge-down]="trendDirection(m.yoyChange) === 'down'">YoY {{ formatAnalysisChange(m.yoyChange, m.unit) }}</span>
+              <h3 class="screener-analysis-heading">Price vs 52-week range</h3>
+              <div class="screener-price-card">
+                <div class="screener-price-row">
+                  <div>
+                    <p class="screener-price-label">Current</p>
+                    <p class="screener-price-value">{{ formatPriceValue(price.current) }}</p>
+                  </div>
+                  <div class="screener-price-side">
+                    <p class="screener-price-label">52W high</p>
+                    <p class="screener-price-value-sm">{{ formatPriceValue(price.rangeHigh) }}</p>
+                  </div>
+                  <div class="screener-price-side">
+                    <p class="screener-price-label">52W low</p>
+                    <p class="screener-price-value-sm">{{ formatPriceValue(price.rangeLow) }}</p>
+                  </div>
                 </div>
-                <p class="screener-metric-foot">{{ formatAthDistance(m.belowAthPct) }}</p>
+                @if (price.rangeHigh && price.rangeLow && price.current) {
+                  <div class="screener-price-track-wrap">
+                    <div class="screener-price-track">
+                      <div class="screener-price-fill" [style.width.%]="priceRangePct()"></div>
+                      <div class="screener-price-thumb" [style.left.%]="priceRangePct()"></div>
+                    </div>
+                    <div class="screener-price-track-labels">
+                      <span>{{ formatPriceValue(price.rangeLow) }}</span>
+                      @if (price.belowRangeHighPct != null) {
+                        <span [class.text-emerald-600]="price.belowRangeHighPct < -5" [class.text-amber-600]="price.belowRangeHighPct >= -5">
+                          {{ price.belowRangeHighPct < 0 ? (price.belowRangeHighPct | number:'1.1-1') + '% below high' : 'At / above 52W high' }}
+                        </span>
+                      }
+                      <span>{{ formatPriceValue(price.rangeHigh) }}</span>
+                    </div>
+                  </div>
+                }
+                <p class="screener-price-foot">{{ price.rangeLabel }}</p>
+              </div>
+            </section>
+          }
+
+          @if (analysis().growthTable.length) {
+            <section class="screener-analysis-section">
+              <h3 class="screener-analysis-heading">Growth snapshot — latest quarter</h3>
+              <p class="screener-divergence-note">{{ analysis().divergenceNote }}</p>
+              <table class="screener-growth-table">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Latest</th>
+                    <th>QoQ</th>
+                    <th>YoY</th>
+                    <th>vs quarterly high</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of analysis().growthTable; track row.metric) {
+                    <tr>
+                      <td class="screener-growth-metric">{{ row.metric }}</td>
+                      <td class="screener-growth-latest">{{ row.latest }}</td>
+                      <td [class]="growthCellClass(row.qoq, row.unit)">{{ formatGrowthCell(row, 'qoq') }}</td>
+                      <td [class]="growthCellClass(row.yoy, row.unit)">{{ formatGrowthCell(row, 'yoy') }}</td>
+                      <td>
+                        @if (row.atAth) {
+                          <span class="screener-ath-badge">At high</span>
+                        } @else {
+                          {{ formatAthDistance(row.belowAthPct) }}
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </section>
+          }
+
+          @if (analysis().holdings.length) {
+            <section class="screener-analysis-section">
+              <h3 class="screener-analysis-heading">Shareholding · last ~5 quarters</h3>
+              <div class="screener-holdings-grid">
+                @for (h of analysis().holdings; track h.label) {
+                  <div class="screener-holding-card" [class.screener-holding-buying]="h.direction === 'buying'" [class.screener-holding-selling]="h.direction === 'selling'">
+                    <div class="screener-holding-top">
+                      <span class="screener-holding-name">{{ h.label }}</span>
+                      <span class="screener-holding-pct">{{ h.latest != null ? h.latest.toFixed(2) + '%' : '—' }}</span>
+                    </div>
+                    <div class="screener-holding-change" [class.text-emerald-600]="h.direction === 'buying'" [class.text-red-600]="h.direction === 'selling'">
+                      @if (h.change4q != null) {
+                        {{ h.change4q > 0 ? '+' : '' }}{{ h.change4q.toFixed(2) }} pp · {{ stakeLabel(h) }}
+                      } @else {
+                        —
+                      }
+                    </div>
+                  </div>
+                }
               </div>
             </section>
           }
         </div>
-
-        @if (analysis().holdings.length) {
-          <section class="screener-analysis-section">
-            <h3 class="screener-analysis-heading">Shareholding trend · last {{ analysis().holdings[0].series.length }} quarters</h3>
-            <div class="screener-holdings-grid">
-              @for (h of analysis().holdings; track h.label) {
-                <div class="screener-holding-card" [class.screener-holding-buying]="h.direction === 'buying'" [class.screener-holding-selling]="h.direction === 'selling'">
-                  <div class="screener-holding-top">
-                    <span class="screener-holding-name">{{ h.label }}</span>
-                    <span class="screener-holding-pct">{{ h.latest != null ? h.latest.toFixed(2) + '%' : '—' }}</span>
-                  </div>
-                  <div class="screener-holding-change" [class.text-emerald-600]="h.direction === 'buying'" [class.text-red-600]="h.direction === 'selling'">
-                    @if (h.change4q != null) {
-                      {{ h.change4q > 0 ? '+' : '' }}{{ h.change4q.toFixed(2) }} pp · {{ stakeLabel(h) }}
-                    } @else {
-                      —
-                    }
-                  </div>
-                  <div class="screener-sparkline screener-sparkline-sm" aria-hidden="true">
-                    @for (p of h.series; track p.period) {
-                      <div class="screener-spark-col">
-                        <div class="screener-spark-bar screener-spark-bar-hold" [style.height.%]="p.value * 4"></div>
-                        <span class="screener-spark-label">{{ p.period.split(' ')[0] }}</span>
-                      </div>
-                    }
-                  </div>
-                </div>
-              }
-            </div>
-          </section>
-        }
-      </div>
-    } @else {
-      <p class="screener-empty">Fetch Screener data to see quarterly analysis, growth trends, and shareholding moves.</p>
-    }
-  } @else if (activeTab() === 'growth') {
-    <div class="screener-compound-wrap">
-      <h3 class="screener-analysis-heading">Compounded growth</h3>
-      <table class="screener-compound-table">
-        <thead>
-          <tr>
-            <th></th>
-            <th>10 Years</th>
-            <th>5 Years</th>
-            <th>3 Years</th>
-            <th>TTM / 1Y</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of analysis().compoundGrowth; track row.label) {
-            <tr>
-              <td>{{ row.label }}</td>
-              <td>{{ formatPct(row.y10) }}</td>
-              <td>{{ formatPct(row.y5) }}</td>
-              <td>{{ formatPct(row.y3) }}</td>
-              <td>{{ formatPct(row.ttm) }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-
-      <h3 class="screener-analysis-heading mt-5">Shareholding pattern</h3>
-      <table class="screener-compound-table">
-        <thead>
-          <tr>
-            <th>Holder</th>
-            <th>%</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>Promoters</td><td>{{ formatPct(stock.promoterHolding) }}</td></tr>
-          <tr><td>FIIs</td><td>{{ formatPct(stock.fiiHolding) }}</td></tr>
-          <tr><td>DIIs</td><td>{{ formatPct(stock.diiHolding) }}</td></tr>
-          <tr><td>Public</td><td>{{ formatPct(stock.publicHolding) }}</td></tr>
-          <tr><td>Government</td><td>{{ formatPct(stock.governmentHolding) }}</td></tr>
-          <tr><td>Others</td><td>{{ formatPct(stock.otherHolding) }}</td></tr>
-        </tbody>
-      </table>
-    </div>
-  } @else {
-    @if (activeTable(); as table) {
-      <div class="screener-table-wrap">
-        <table class="screener-data-table">
+      } @else {
+        <p class="screener-empty">Fetch Screener data to see quarterly analysis, growth trends, and shareholding moves.</p>
+      }
+    } @else if (activeTab() === 'growth') {
+      <div class="screener-compound-wrap">
+        <h3 class="screener-analysis-heading">Compounded growth</h3>
+        <table class="screener-compound-table">
           <thead>
             <tr>
-              <th class="screener-sticky-col">{{ tabLabel(activeTab()) }}</th>
-              @for (h of table.headers; track h) {
-                <th>{{ h }}</th>
-              }
+              <th></th>
+              <th>10 Years</th>
+              <th>5 Years</th>
+              <th>3 Years</th>
+              <th>TTM / 1Y</th>
             </tr>
           </thead>
           <tbody>
-            @for (row of table.rows; track row.label) {
+            @for (row of analysis().compoundGrowth; track row.label) {
               <tr>
-                <td class="screener-sticky-col">{{ row.label }}</td>
-                @for (v of row.values; track $index) {
-                  <td class="tabular-nums">{{ v }}</td>
-                }
+                <td>{{ row.label }}</td>
+                <td>{{ formatPct(row.y10) }}</td>
+                <td>{{ formatPct(row.y5) }}</td>
+                <td>{{ formatPct(row.y3) }}</td>
+                <td>{{ formatPct(row.ttm) }}</td>
               </tr>
             }
           </tbody>
         </table>
+
+        <h3 class="screener-analysis-heading mt-5">Shareholding pattern</h3>
+        <table class="screener-compound-table">
+          <thead>
+            <tr>
+              <th>Holder</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Promoters</td><td>{{ formatPct(stock.promoterHolding) }}</td></tr>
+            <tr><td>FIIs</td><td>{{ formatPct(stock.fiiHolding) }}</td></tr>
+            <tr><td>DIIs</td><td>{{ formatPct(stock.diiHolding) }}</td></tr>
+            <tr><td>Public</td><td>{{ formatPct(stock.publicHolding) }}</td></tr>
+            <tr><td>Government</td><td>{{ formatPct(stock.governmentHolding) }}</td></tr>
+            <tr><td>Others</td><td>{{ formatPct(stock.otherHolding) }}</td></tr>
+          </tbody>
+        </table>
       </div>
     } @else {
-      <p class="screener-empty">No {{ tabLabel(activeTab()).toLowerCase() }} data available. Fetch Screener data to populate.</p>
+      @if (activeTable(); as table) {
+        <div class="screener-table-wrap">
+          <table class="screener-data-table">
+            <thead>
+              <tr>
+                <th class="screener-sticky-col">{{ tabLabel(activeTab()) }}</th>
+                @for (h of table.headers; track h) {
+                  <th>{{ h }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of table.rows; track row.label) {
+                <tr>
+                  <td class="screener-sticky-col">{{ row.label }}</td>
+                  @for (v of row.values; track $index) {
+                    <td class="tabular-nums">{{ v }}</td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="screener-empty">No {{ tabLabel(activeTab()).toLowerCase() }} data available. Fetch Screener data to populate.</p>
+      }
     }
-  }
+  </div>
 </div>

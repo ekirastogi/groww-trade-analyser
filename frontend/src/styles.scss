@@ -625,7 +625,15 @@
 }
 
 .screener-section-tabs {
-  @apply flex flex-wrap gap-1 border-b border-slate-200 pb-1;
+  @apply flex flex-wrap gap-1;
+}
+
+.screener-tabs-divider {
+  @apply my-4 border-t border-slate-200;
+}
+
+.screener-tab-panel {
+  @apply pt-4;
 }
 
 .screener-section-tab {
@@ -634,6 +642,148 @@
 
 .screener-section-tab-active {
   @apply border-b-2 border-kairo-500 bg-kairo-50/50 text-kairo-700;
+}
+
+.screener-analysis-note {
+  @apply rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500;
+}
+
+.screener-divergence-note {
+  @apply mb-3 text-sm leading-relaxed text-slate-700;
+}
+
+.screener-growth-table {
+  @apply w-full border-collapse overflow-hidden rounded-xl border border-slate-200 bg-white text-sm;
+
+  th {
+    @apply border-b border-slate-200 bg-slate-800 px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-white;
+  }
+
+  td {
+    @apply border-b border-slate-100 px-4 py-3 tabular-nums text-slate-800;
+  }
+
+  tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  th:not(:first-child),
+  td:not(:first-child) {
+    @apply text-right;
+  }
+}
+
+.screener-growth-metric {
+  @apply font-semibold text-slate-700;
+  text-align: left !important;
+}
+
+.screener-growth-latest {
+  @apply font-bold text-slate-900;
+}
+
+.screener-growth-up {
+  @apply font-bold text-emerald-700;
+}
+
+.screener-growth-down {
+  @apply font-bold text-red-700;
+}
+
+.screener-ath-badge {
+  @apply inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800;
+}
+
+.screener-verdict-grid {
+  @apply grid gap-3 lg:grid-cols-2;
+}
+
+.screener-verdict-card {
+  @apply rounded-xl border p-4;
+}
+
+.screener-verdict-bullish {
+  @apply border-emerald-200 bg-emerald-50/50;
+}
+
+.screener-verdict-bearish {
+  @apply border-red-200 bg-red-50/50;
+}
+
+.screener-verdict-caution {
+  @apply border-amber-200 bg-amber-50/50;
+}
+
+.screener-verdict-neutral {
+  @apply border-slate-200 bg-white;
+}
+
+.screener-verdict-title {
+  @apply text-sm font-bold text-slate-900;
+}
+
+.screener-verdict-body {
+  @apply mt-1.5 text-sm leading-relaxed text-slate-600;
+}
+
+.screener-verdict-range {
+  @apply mt-2 flex flex-wrap gap-2 text-xs font-semibold;
+}
+
+.screener-range-up {
+  @apply text-emerald-700;
+}
+
+.screener-range-down {
+  @apply text-red-700;
+}
+
+.screener-price-card {
+  @apply rounded-xl border border-slate-200 bg-white p-4;
+}
+
+.screener-price-row {
+  @apply flex flex-wrap items-end justify-between gap-4;
+}
+
+.screener-price-label {
+  @apply text-[10px] font-bold uppercase tracking-wide text-slate-400;
+}
+
+.screener-price-value {
+  @apply text-2xl font-bold tabular-nums text-slate-900;
+}
+
+.screener-price-value-sm {
+  @apply text-lg font-bold tabular-nums text-slate-800;
+}
+
+.screener-price-side {
+  @apply text-right;
+}
+
+.screener-price-track-wrap {
+  @apply mt-4;
+}
+
+.screener-price-track {
+  @apply relative h-2.5 rounded-full bg-slate-100;
+}
+
+.screener-price-fill {
+  @apply absolute top-0 h-2.5 rounded-full bg-kairo-500;
+}
+
+.screener-price-thumb {
+  @apply absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-kairo-600 shadow;
+}
+
+.screener-price-track-labels {
+  @apply mt-2 flex justify-between text-xs text-slate-500;
+}
+
+.screener-price-foot {
+  @apply mt-2 text-[11px] text-slate-400;
 }
 
 .screener-section-tab-muted {
