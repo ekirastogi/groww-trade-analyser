@@ -1,10 +1,19 @@
-import { Component, Input, signal } from '@angular/core';
+import { Component, Input, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RegistryFinancialTable, RegistryStock } from '../../models/trading-journal.models';
 import { formatFetchedAt, formatDataAge } from '../../utils/data-age.utils';
 import { formatCurrency } from '../../utils/format.utils';
+import {
+  buildStockAnalysis,
+  formatAnalysisChange,
+  formatAthDistance,
+  formatMetricValue,
+  HoldingAnalysis,
+  MetricAnalysis,
+  trendDirection,
+} from '../../utils/screener-analysis.utils';
 
-type FinancialTab = 'quarterly' | 'annual' | 'balance' | 'cashflow' | 'shareholding' | 'growth';
+type FinancialTab = 'analysis' | 'quarterly' | 'annual' | 'balance' | 'cashflow' | 'shareholding' | 'growth';
 
 @Component({
   selector: 'app-screener-fundamentals',
@@ -15,12 +24,20 @@ type FinancialTab = 'quarterly' | 'annual' | 'balance' | 'cashflow' | 'sharehold
 export class ScreenerFundamentalsComponent {
   @Input({ required: true }) stock!: RegistryStock;
 
-  activeTab = signal<FinancialTab>('quarterly');
+  activeTab = signal<FinancialTab>('analysis');
+
+  readonly tabs: FinancialTab[] = ['analysis', 'quarterly', 'annual', 'balance', 'cashflow', 'shareholding', 'growth'];
+
+  analysis = computed(() => buildStockAnalysis(this.stock));
 
   formatFetchedAt = formatFetchedAt;
   formatDataAge = formatDataAge;
+  formatAnalysisChange = formatAnalysisChange;
+  formatAthDistance = formatAthDistance;
+  formatMetricValue = formatMetricValue;
+  trendDirection = trendDirection;
 
-  formatPct(value: number | undefined): string {
+  formatPct(value: number | undefined | null): string {
     if (value == null || Number.isNaN(value)) return '—';
     return `${value}%`;
   }
@@ -59,6 +76,8 @@ export class ScreenerFundamentalsComponent {
 
   tabLabel(tab: FinancialTab): string {
     switch (tab) {
+      case 'analysis':
+        return 'Analysis';
       case 'quarterly':
         return 'Quarterly results';
       case 'annual':
@@ -75,7 +94,7 @@ export class ScreenerFundamentalsComponent {
   }
 
   hasTabData(tab: FinancialTab): boolean {
-    if (tab === 'growth') return true;
+    if (tab === 'analysis' || tab === 'growth') return true;
     switch (tab) {
       case 'quarterly':
         return !!this.stock.quarterlyResults?.rows?.length;
@@ -88,5 +107,23 @@ export class ScreenerFundamentalsComponent {
       case 'shareholding':
         return !!this.stock.shareholding?.rows?.length;
     }
+  }
+
+  stakeLabel(h: HoldingAnalysis): string {
+    switch (h.direction) {
+      case 'buying':
+        return 'Accumulating';
+      case 'selling':
+        return 'Reducing';
+      case 'flat':
+        return 'Stable';
+      default:
+        return '—';
+    }
+  }
+
+  metricSparkMax(metric: MetricAnalysis): number {
+    const max = Math.max(...metric.series.map((p) => p.value), 1);
+    return max;
   }
 }

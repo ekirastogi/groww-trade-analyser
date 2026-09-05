@@ -712,6 +712,161 @@
   @apply rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500;
 }
 
+.screener-analysis {
+  @apply space-y-5;
+}
+
+.screener-analysis-section {
+  @apply space-y-3;
+}
+
+.screener-analysis-heading {
+  @apply text-[11px] font-bold uppercase tracking-wide text-slate-500;
+}
+
+.screener-analysis-grid {
+  @apply grid gap-4 lg:grid-cols-2;
+}
+
+.screener-metric-card {
+  @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm;
+}
+
+.screener-metric-card-compact {
+  @apply p-3.5;
+}
+
+.screener-metric-head {
+  @apply flex flex-wrap items-start justify-between gap-3;
+}
+
+.screener-metric-label {
+  @apply text-[10px] font-bold uppercase tracking-wide text-slate-400;
+}
+
+.screener-metric-value {
+  @apply mt-1 text-2xl font-bold tabular-nums text-slate-900;
+}
+
+.screener-metric-card-compact .screener-metric-value {
+  @apply text-xl;
+}
+
+.screener-metric-sublabel {
+  @apply text-xs text-slate-400;
+}
+
+.screener-metric-meta,
+.screener-metric-foot {
+  @apply mt-3 text-xs text-slate-500;
+}
+
+.screener-metric-badges {
+  @apply flex flex-wrap gap-1.5;
+}
+
+.screener-metric-badges-stack {
+  @apply mt-3 flex-col items-start;
+}
+
+.screener-badge {
+  @apply inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600;
+}
+
+.screener-badge-up {
+  @apply bg-emerald-50 text-emerald-700;
+}
+
+.screener-badge-down {
+  @apply bg-red-50 text-red-700;
+}
+
+.screener-sparkline {
+  @apply mt-4 flex items-end gap-1 border-t border-slate-100 pt-3;
+}
+
+.screener-sparkline-sm {
+  @apply mt-3 pt-2;
+}
+
+.screener-spark-col {
+  @apply flex min-w-0 flex-1 flex-col items-center gap-1;
+}
+
+.screener-spark-bar {
+  @apply w-full max-w-[2rem] rounded-t bg-kairo-500/80;
+  min-height: 4px;
+}
+
+.screener-spark-bar-hold {
+  @apply bg-slate-400/70;
+}
+
+.screener-spark-label {
+  @apply truncate text-[9px] font-medium text-slate-400;
+}
+
+.screener-holdings-grid {
+  @apply grid gap-3 sm:grid-cols-3;
+}
+
+.screener-holding-card {
+  @apply rounded-xl border border-slate-200 bg-white p-3 shadow-sm;
+}
+
+.screener-holding-buying {
+  @apply border-emerald-200 bg-emerald-50/30;
+}
+
+.screener-holding-selling {
+  @apply border-red-200 bg-red-50/30;
+}
+
+.screener-holding-top {
+  @apply flex items-center justify-between gap-2;
+}
+
+.screener-holding-name {
+  @apply text-xs font-bold uppercase tracking-wide text-slate-500;
+}
+
+.screener-holding-pct {
+  @apply text-lg font-bold tabular-nums text-slate-900;
+}
+
+.screener-holding-change {
+  @apply mt-1 text-[11px] font-semibold;
+}
+
+.screener-compound-wrap {
+  @apply rounded-xl border border-slate-200 bg-white p-4;
+}
+
+.screener-compound-table {
+  @apply w-full border-collapse text-sm;
+
+  th {
+    @apply border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500;
+  }
+
+  td {
+    @apply border-b border-slate-100 px-3 py-2.5 tabular-nums text-slate-800;
+  }
+
+  tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  td:first-child {
+    @apply font-medium text-slate-600;
+  }
+
+  th:not(:first-child),
+  td:not(:first-child) {
+    @apply text-right;
+  }
+}
+
 /* Stock detail page */
 .stock-detail-page {
   @apply mx-auto max-w-6xl space-y-5;

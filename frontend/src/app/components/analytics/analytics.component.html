@@ -96,7 +96,8 @@
                 >
                   <span class="heat-day">{{ bucket.label }}</span>
                   @if (bucket.tradeCount) {
-                    <span class="heat-pnl">{{ formatCompactCurrency(bucket.netPnL) }}</span>
+                    <span class="heat-pnl lg:hidden">{{ formatCompactCurrency(bucket.netPnL) }}</span>
+                    <span class="heat-pnl hidden lg:inline">{{ formatCurrency(bucket.netPnL) }}</span>
                   }
                 </div>
               }
@@ -260,7 +261,8 @@
               >
                 <span class="heat-day">{{ bucket.label }}</span>
                 @if (bucket.tradeCount) {
-                  <span class="heat-pnl">{{ formatCompactCurrency(bucket.netPnL) }}</span>
+                    <span class="heat-pnl lg:hidden">{{ formatCompactCurrency(bucket.netPnL) }}</span>
+                    <span class="heat-pnl hidden lg:inline">{{ formatCurrency(bucket.netPnL) }}</span>
                 }
               </div>
             }
