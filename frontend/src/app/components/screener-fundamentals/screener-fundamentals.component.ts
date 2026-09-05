@@ -34,6 +34,15 @@ export class ScreenerFundamentalsComponent {
   analysis = computed(() => buildStockAnalysis(this.stock));
   priceRangePct = computed(() => priceRangePosition(this.analysis().pricePosition));
 
+  pctAboveLow(price: { aboveRangeLowPct: number | null }): number | null {
+    return price.aboveRangeLowPct;
+  }
+
+  pctBelowHigh(price: { belowRangeHighPct: number | null }): number | null {
+    if (price.belowRangeHighPct == null) return null;
+    return price.belowRangeHighPct < 0 ? Math.abs(price.belowRangeHighPct) : 0;
+  }
+
   formatFetchedAt = formatFetchedAt;
   formatDataAge = formatDataAge;
   formatAnalysisChange = formatAnalysisChange;

@@ -739,51 +739,84 @@
 }
 
 .screener-price-card {
-  @apply rounded-xl border border-slate-200 bg-white p-4;
+  @apply rounded-xl border border-slate-200 bg-white p-4 pt-5;
 }
 
-.screener-price-row {
-  @apply flex flex-wrap items-end justify-between gap-4;
+.screener-price-range {
+  @apply space-y-3;
 }
 
-.screener-price-label {
-  @apply text-[10px] font-bold uppercase tracking-wide text-slate-400;
+.screener-price-markers {
+  @apply relative h-[4.5rem];
 }
 
-.screener-price-value {
-  @apply text-2xl font-bold tabular-nums text-slate-900;
+.screener-price-marker {
+  @apply absolute bottom-0 flex w-[5.5rem] flex-col items-center text-center;
+  transform: translateX(-50%);
 }
 
-.screener-price-value-sm {
-  @apply text-lg font-bold tabular-nums text-slate-800;
+.screener-price-marker-low {
+  @apply left-0 items-start text-left;
+  transform: translateX(0);
+  width: auto;
 }
 
-.screener-price-side {
-  @apply text-right;
+.screener-price-marker-high {
+  @apply right-0 left-auto items-end text-right;
+  transform: translateX(0);
+  width: auto;
 }
 
-.screener-price-track-wrap {
-  @apply mt-4;
+.screener-price-marker-current {
+  @apply z-[1];
+}
+
+.screener-price-marker-tag {
+  @apply text-[10px] font-bold uppercase tracking-wide text-slate-500;
+}
+
+.screener-price-marker-current .screener-price-marker-tag {
+  @apply text-kairo-700;
+}
+
+.screener-price-marker-pin {
+  @apply my-1 block h-3 w-0.5 rounded-full bg-slate-400;
+}
+
+.screener-price-marker-pin-current {
+  @apply h-4 w-1 bg-kairo-600;
+}
+
+.screener-price-marker-value {
+  @apply text-sm font-bold tabular-nums text-slate-900;
 }
 
 .screener-price-track {
-  @apply relative h-2.5 rounded-full bg-slate-100;
+  @apply flex h-3 overflow-hidden rounded-full bg-slate-100;
 }
 
-.screener-price-fill {
-  @apply absolute top-0 h-2.5 rounded-full bg-kairo-500;
+.screener-price-seg-green {
+  @apply h-full bg-emerald-500 transition-all;
 }
 
-.screener-price-thumb {
-  @apply absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-kairo-600 shadow;
+.screener-price-seg-red {
+  @apply h-full bg-red-500 transition-all;
 }
 
-.screener-price-track-labels {
-  @apply mt-2 flex justify-between text-xs text-slate-500;
+.screener-price-stats {
+  @apply flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm font-semibold tabular-nums;
+}
+
+.screener-price-stat-up {
+  @apply text-emerald-700;
+}
+
+.screener-price-stat-down {
+  @apply text-red-700;
 }
 
 .screener-price-foot {
-  @apply mt-2 text-[11px] text-slate-400;
+  @apply mt-3 text-[11px] text-slate-400;
 }
 
 .screener-section-tab-muted {

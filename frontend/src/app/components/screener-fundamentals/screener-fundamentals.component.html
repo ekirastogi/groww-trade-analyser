@@ -104,36 +104,42 @@
             <section class="screener-analysis-section">
               <h3 class="screener-analysis-heading">Price vs 52-week range</h3>
               <div class="screener-price-card">
-                <div class="screener-price-row">
-                  <div>
-                    <p class="screener-price-label">Current</p>
-                    <p class="screener-price-value">{{ formatPriceValue(price.current) }}</p>
-                  </div>
-                  <div class="screener-price-side">
-                    <p class="screener-price-label">52W high</p>
-                    <p class="screener-price-value-sm">{{ formatPriceValue(price.rangeHigh) }}</p>
-                  </div>
-                  <div class="screener-price-side">
-                    <p class="screener-price-label">52W low</p>
-                    <p class="screener-price-value-sm">{{ formatPriceValue(price.rangeLow) }}</p>
-                  </div>
-                </div>
                 @if (price.rangeHigh && price.rangeLow && price.current) {
-                  <div class="screener-price-track-wrap">
-                    <div class="screener-price-track">
-                      <div class="screener-price-fill" [style.width.%]="priceRangePct()"></div>
-                      <div class="screener-price-thumb" [style.left.%]="priceRangePct()"></div>
+                  <div class="screener-price-range">
+                    <div class="screener-price-markers">
+                      <div class="screener-price-marker screener-price-marker-low">
+                        <span class="screener-price-marker-tag">52W Low</span>
+                        <span class="screener-price-marker-pin" aria-hidden="true"></span>
+                        <span class="screener-price-marker-value">{{ formatPriceValue(price.rangeLow) }}</span>
+                      </div>
+                      <div class="screener-price-marker screener-price-marker-current" [style.left.%]="priceRangePct()">
+                        <span class="screener-price-marker-tag">Current</span>
+                        <span class="screener-price-marker-pin screener-price-marker-pin-current" aria-hidden="true"></span>
+                        <span class="screener-price-marker-value">{{ formatPriceValue(price.current) }}</span>
+                      </div>
+                      <div class="screener-price-marker screener-price-marker-high">
+                        <span class="screener-price-marker-tag">52W High</span>
+                        <span class="screener-price-marker-pin" aria-hidden="true"></span>
+                        <span class="screener-price-marker-value">{{ formatPriceValue(price.rangeHigh) }}</span>
+                      </div>
                     </div>
-                    <div class="screener-price-track-labels">
-                      <span>{{ formatPriceValue(price.rangeLow) }}</span>
-                      @if (price.belowRangeHighPct != null) {
-                        <span [class.text-emerald-600]="price.belowRangeHighPct < -5" [class.text-amber-600]="price.belowRangeHighPct >= -5">
-                          {{ price.belowRangeHighPct < 0 ? (price.belowRangeHighPct | number:'1.1-1') + '% below high' : 'At / above 52W high' }}
-                        </span>
+
+                    <div class="screener-price-track">
+                      <div class="screener-price-seg-green" [style.width.%]="priceRangePct()"></div>
+                      <div class="screener-price-seg-red" [style.width.%]="100 - priceRangePct()"></div>
+                    </div>
+
+                    <div class="screener-price-stats">
+                      @if (pctAboveLow(price) != null) {
+                        <span class="screener-price-stat-up">+{{ pctAboveLow(price) | number:'1.1-1' }}% above low</span>
                       }
-                      <span>{{ formatPriceValue(price.rangeHigh) }}</span>
+                      @if (pctBelowHigh(price) != null) {
+                        <span class="screener-price-stat-down">{{ pctBelowHigh(price) | number:'1.1-1' }}% below high</span>
+                      }
                     </div>
                   </div>
+                } @else {
+                  <p class="screener-price-foot">52-week range unavailable — refresh from Screener.</p>
                 }
                 <p class="screener-price-foot">{{ price.rangeLabel }}</p>
               </div>
