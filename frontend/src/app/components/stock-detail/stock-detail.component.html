@@ -1,81 +1,157 @@
-@if (stock(); as s) {
-  <div class="space-y-6">
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <button type="button" class="text-sm text-kairo-600 hover:underline" (click)="goBack()">← Back</button>
-      <div class="flex flex-wrap items-center justify-end gap-2">
+<div class="stock-detail-page">
+  <header class="stock-detail-hero">
+    <div class="stock-detail-hero-top">
+      <button type="button" class="stock-detail-back" (click)="goBack()">
+        <span aria-hidden="true">←</span> Back
+      </button>
+      <button
+        type="button"
+        class="stock-fetch-cta"
+        [class.stock-fetch-cta-busy]="screenerBusy()"
+        [disabled]="screenerBusy() || !auth.hasAccess"
+        (click)="fetchScreener()"
+      >
+        @if (screenerBusy()) {
+          <span class="stock-fetch-spinner" aria-hidden="true"></span>
+          <span>Fetching from Screener…</span>
+        } @else {
+          <svg class="stock-fetch-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466A5.5 5.5 0 1112.28 6.28a.75.75 0 011.06 1.06 4 4 0 00-5.78 5.47 4 4 0 008.16-1.53.75.75 0 011.44.61z" clip-rule="evenodd" />
+          </svg>
+          <span>Refresh from Screener</span>
+        }
+      </button>
+    </div>
+
+    <div class="stock-detail-hero-body">
+      <div class="stock-detail-identity">
+        <p class="stock-detail-symbol">{{ symbol() }}</p>
+        <h1 class="stock-detail-name">{{ displayName() }}</h1>
+        <p class="stock-detail-exchange">{{ displayExchange() }}</p>
+      </div>
+
+      <div class="stock-detail-quote">
+        @if (displayPrice(); as price) {
+          <div
+            class="stock-detail-ltp"
+            [class.text-emerald-600]="price.fromMarket && price.change != null && price.change >= 0"
+            [class.text-red-600]="price.fromMarket && price.change != null && price.change < 0"
+          >
+            {{ fmt(price.value) }}
+          </div>
+          @if (price.fromMarket && price.change != null && price.changePct != null) {
+            <div
+              class="stock-detail-change"
+              [class.text-emerald-600]="price.change >= 0"
+              [class.text-red-600]="price.change < 0"
+            >
+              {{ price.change >= 0 ? '+' : '' }}{{ price.change.toFixed(2) }}
+              ({{ fmtPct(price.changePct / 100) }})
+            </div>
+          } @else {
+            <div class="stock-detail-change-muted">From Screener</div>
+          }
+        } @else {
+          <div class="stock-detail-ltp-muted">—</div>
+          <div class="stock-detail-change-muted">Price not loaded</div>
+        }
+
+        <div class="stock-detail-quote-meta">
+          @if (headerPe(); as pe) {
+            <span>P/E {{ pe.toFixed(1) }}</span>
+          }
+          @if (headerMarketCap(); as cap) {
+            <span>{{ formatMarketCap(cap) }}</span>
+          }
+          @if (stock()?.lastUpdated) {
+            <span>Live · {{ marketDataAge(stock()!.lastUpdated) }}</span>
+          }
+          @if (registryStock()?.screenerFetchedAt; as fetchedAt) {
+            <span>Screener · {{ formatDataAge(fetchedAt) }}</span>
+          }
+        </div>
+      </div>
+    </div>
+  </header>
+
+  @if (screenerError()) {
+    <div class="stock-detail-alert stock-detail-alert-error">{{ screenerError() }}</div>
+  }
+  @if (screenerSuccess()) {
+    <div class="stock-detail-alert stock-detail-alert-success">{{ screenerSuccess() }}</div>
+  }
+
+  @if (stock(); as s) {
+    @if (s.week52High && s.week52Low) {
+      <div class="stock-detail-52w">
+        <div class="stock-detail-52w-labels">
+          <span>52W Low {{ fmt(s.week52Low) }}</span>
+          <span>52W High {{ fmt(s.week52High) }}</span>
+        </div>
+        <div class="stock-detail-52w-track">
+          <div class="stock-detail-52w-fill" [style.width.%]="week52Position()"></div>
+          <div class="stock-detail-52w-thumb" [style.left.%]="week52Position()"></div>
+        </div>
+      </div>
+    }
+  }
+
+  <nav class="stock-detail-tabs" aria-label="Stock sections">
+    <button
+      type="button"
+      class="stock-detail-tab"
+      [class.stock-detail-tab-active]="activeTab() === 'fundamentals'"
+      (click)="activeTab.set('fundamentals')"
+    >
+      Fundamentals
+    </button>
+    <button
+      type="button"
+      class="stock-detail-tab"
+      [class.stock-detail-tab-active]="activeTab() === 'market'"
+      [class.stock-detail-tab-muted]="!hasMarketData()"
+      (click)="activeTab.set('market')"
+    >
+      Market
+    </button>
+    <button
+      type="button"
+      class="stock-detail-tab"
+      [class.stock-detail-tab-active]="activeTab() === 'my-trades'"
+      (click)="activeTab.set('my-trades')"
+    >
+      My Trades
+    </button>
+  </nav>
+
+  @if (activeTab() === 'fundamentals') {
+    @if (registryStock(); as reg) {
+      <app-screener-fundamentals [stock]="reg" />
+    } @else {
+      <div class="stock-detail-empty">
+        <div class="stock-detail-empty-icon" aria-hidden="true"></div>
+        <h2 class="stock-detail-empty-title">No fundamentals yet</h2>
+        <p class="stock-detail-empty-text">
+          Pull ratios, financials, and shareholding for {{ symbol() }} directly from Screener.in.
+        </p>
         <button
           type="button"
-          class="btn-secondary !py-1.5 !text-xs"
+          class="stock-fetch-cta stock-fetch-cta-lg"
+          [class.stock-fetch-cta-busy]="screenerBusy()"
           [disabled]="screenerBusy() || !auth.hasAccess"
           (click)="fetchScreener()"
         >
           @if (screenerBusy()) {
-            Fetching Screener…
+            <span class="stock-fetch-spinner" aria-hidden="true"></span>
+            <span>Fetching…</span>
           } @else {
-            Fetch Screener data
+            <span>Get fundamentals from Screener</span>
           }
         </button>
       </div>
-      <div class="w-full text-right sm:ml-auto sm:w-auto">
-        <div class="text-2xl font-bold" [class.text-emerald-600]="s.change >= 0" [class.text-red-600]="s.change < 0">
-          {{ fmt(s.ltp) }}
-        </div>
-        <div class="text-sm" [class.text-emerald-600]="s.change >= 0" [class.text-red-600]="s.change < 0">
-          {{ s.change >= 0 ? '+' : '' }}{{ s.change.toFixed(2) }} ({{ fmtPct(s.changePct / 100) }})
-        </div>
-        <div class="text-xs text-slate-400">
-          Market data updated {{ s.lastUpdated | date:'short' }}
-          @if (s.lastUpdated) {
-            <span class="text-slate-300">·</span> {{ marketDataAge(s.lastUpdated) }}
-          }
-        </div>
-        @if (registryStock()?.screenerFetchedAt; as fetchedAt) {
-          <div class="text-xs text-slate-400">
-            Screener fetched {{ formatFetchedAt(fetchedAt) }}
-            <span class="text-slate-300">·</span> {{ formatDataAge(fetchedAt) }}
-          </div>
-        }
-      </div>
-    </div>
-
-    @if (screenerError()) {
-      <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ screenerError() }}</div>
     }
-    @if (screenerSuccess()) {
-      <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ screenerSuccess() }}</div>
-    }
-
-    @if (s.week52High && s.week52Low) {
-      <div class="rounded-xl border border-slate-200 bg-white p-4">
-        <div class="mb-2 flex justify-between text-xs text-slate-500">
-          <span>52W Low {{ fmt(s.week52Low) }}</span>
-          <span>52W High {{ fmt(s.week52High) }}</span>
-        </div>
-        <div class="relative h-2 rounded-full bg-slate-100">
-          <div class="absolute top-0 h-2 rounded-full bg-kairo-500" [style.width.%]="week52Position()"></div>
-          <div class="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-kairo-600 shadow" [style.left.%]="week52Position()"></div>
-        </div>
-      </div>
-    }
-
-    <div class="flex gap-2 border-b border-slate-200">
-      <button type="button" class="px-4 py-2 text-sm font-medium" [class.border-b-2]="activeTab() === 'market'" [class.border-kairo-500]="activeTab() === 'market'" (click)="activeTab.set('market')">Market</button>
-      <button type="button" class="px-4 py-2 text-sm font-medium" [class.border-b-2]="activeTab() === 'fundamentals'" [class.border-kairo-500]="activeTab() === 'fundamentals'" (click)="activeTab.set('fundamentals')">Fundamentals</button>
-      <button type="button" class="px-4 py-2 text-sm font-medium" [class.border-b-2]="activeTab() === 'my-trades'" [class.border-kairo-500]="activeTab() === 'my-trades'" (click)="activeTab.set('my-trades')">My Trades</button>
-    </div>
-
-    @if (activeTab() === 'fundamentals') {
-      @if (registryStock(); as reg) {
-        <app-screener-fundamentals [stock]="reg" />
-      } @else {
-        <div class="rounded-xl border border-slate-200 bg-white p-6 text-center">
-          <p class="text-sm text-slate-600">No Screener fundamentals saved for {{ symbol() }} yet.</p>
-          <button type="button" class="btn-primary mt-4" [disabled]="screenerBusy()" (click)="fetchScreener()">
-            {{ screenerBusy() ? 'Fetching…' : 'Fetch Screener data' }}
-          </button>
-        </div>
-      }
-    } @else if (activeTab() === 'market') {
+  } @else if (activeTab() === 'market') {
+    @if (stock(); as s) {
       <app-trading-chart
         [chartView]="chartView()"
         [supportLevels]="(s.supportLevels ?? []).slice(0, 3)"
@@ -85,27 +161,29 @@
         [showSma]="true"
       />
 
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <div class="text-xs text-slate-500">RSI</div>
-          <div class="text-lg font-bold" [class.text-red-600]="rsi(s) > 70" [class.text-emerald-600]="rsi(s) < 30">{{ rsi(s) ? rsi(s).toFixed(1) : '—' }}</div>
+      <div class="stock-detail-metrics">
+        <div class="stock-detail-metric">
+          <span class="stock-detail-metric-label">RSI</span>
+          <span class="stock-detail-metric-value" [class.text-red-600]="rsi(s) > 70" [class.text-emerald-600]="rsi(s) < 30">
+            {{ rsi(s) ? rsi(s).toFixed(1) : '—' }}
+          </span>
         </div>
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <div class="text-xs text-slate-500">MACD Hist</div>
-          <div class="text-lg font-bold">{{ macdHist(s) ? macdHist(s).toFixed(2) : '—' }}</div>
+        <div class="stock-detail-metric">
+          <span class="stock-detail-metric-label">MACD Hist</span>
+          <span class="stock-detail-metric-value">{{ macdHist(s) ? macdHist(s).toFixed(2) : '—' }}</span>
         </div>
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <div class="text-xs text-slate-500">P/E</div>
-          <div class="text-lg font-bold">{{ s.pe ? s.pe.toFixed(1) : '—' }}</div>
+        <div class="stock-detail-metric">
+          <span class="stock-detail-metric-label">P/E</span>
+          <span class="stock-detail-metric-value">{{ s.pe ? s.pe.toFixed(1) : '—' }}</span>
         </div>
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <div class="text-xs text-slate-500">Market Cap</div>
-          <div class="text-lg font-bold">{{ s.marketCap ? (s.marketCap / 1e7).toFixed(0) + ' Cr' : '—' }}</div>
+        <div class="stock-detail-metric">
+          <span class="stock-detail-metric-label">Market Cap</span>
+          <span class="stock-detail-metric-value">{{ formatMarketCap(s.marketCap) }}</span>
         </div>
       </div>
 
       @if (s.vsNiftyPct != null || s.vsCapIndexPct != null) {
-        <div class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <div class="stock-detail-panel text-sm text-slate-600">
           <span class="font-semibold text-slate-900">Relative strength:</span>
           @if (s.vsNiftyPct != null) { Nifty {{ s.vsNiftyPct >= 0 ? '+' : '' }}{{ s.vsNiftyPct.toFixed(2) }}% }
           @if (s.vsCapIndexPct != null) { · Cap index {{ s.vsCapIndexPct >= 0 ? '+' : '' }}{{ s.vsCapIndexPct.toFixed(2) }}% }
@@ -113,27 +191,29 @@
         </div>
       }
 
-      <div class="grid gap-4 lg:grid-cols-2">
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <h3 class="mb-3 font-semibold text-slate-900">System Support (3)</h3>
-          <div class="space-y-1">
-            @for (level of (s.supportLevels ?? []).slice(0, 3); track $index) {
-              <div class="flex justify-between text-sm"><span>S{{ $index + 1 }}</span><span class="font-mono text-emerald-600">{{ fmt(level) }}</span></div>
-            }
-          </div>
+      <div class="stock-detail-levels-grid">
+        <div class="stock-detail-panel">
+          <h3 class="stock-detail-panel-title">System Support (3)</h3>
+          @for (level of (s.supportLevels ?? []).slice(0, 3); track $index) {
+            <div class="stock-detail-level-row">
+              <span>S{{ $index + 1 }}</span>
+              <span class="font-mono text-emerald-600">{{ fmt(level) }}</span>
+            </div>
+          }
         </div>
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <h3 class="mb-3 font-semibold text-slate-900">System Resistance (3)</h3>
-          <div class="space-y-1">
-            @for (level of (s.resistanceLevels ?? []).slice(0, 3); track $index) {
-              <div class="flex justify-between text-sm"><span>R{{ $index + 1 }}</span><span class="font-mono text-red-600">{{ fmt(level) }}</span></div>
-            }
-          </div>
+        <div class="stock-detail-panel">
+          <h3 class="stock-detail-panel-title">System Resistance (3)</h3>
+          @for (level of (s.resistanceLevels ?? []).slice(0, 3); track $index) {
+            <div class="stock-detail-level-row">
+              <span>R{{ $index + 1 }}</span>
+              <span class="font-mono text-red-600">{{ fmt(level) }}</span>
+            </div>
+          }
         </div>
       </div>
 
-      <div class="rounded-xl border border-slate-200 bg-white p-4">
-        <h3 class="mb-3 font-semibold text-slate-900">Your levels</h3>
+      <div class="stock-detail-panel">
+        <h3 class="stock-detail-panel-title">Your levels</h3>
         @if (levelError()) {
           <p class="mb-2 text-sm text-red-600">{{ levelError() }}</p>
         }
@@ -150,7 +230,7 @@
           <div>
             <h4 class="mb-2 text-xs font-semibold uppercase text-slate-500">Your supports</h4>
             @for (l of userLevels()?.supports ?? []; track l.id) {
-              <div class="flex justify-between text-sm"><span>{{ l.label }}</span><span class="font-mono text-emerald-600">{{ fmt(l.price) }}</span></div>
+              <div class="stock-detail-level-row"><span>{{ l.label }}</span><span class="font-mono text-emerald-600">{{ fmt(l.price) }}</span></div>
             } @empty {
               <p class="text-xs text-slate-400">None yet</p>
             }
@@ -158,7 +238,7 @@
           <div>
             <h4 class="mb-2 text-xs font-semibold uppercase text-slate-500">Your resistances</h4>
             @for (l of userLevels()?.resistances ?? []; track l.id) {
-              <div class="flex justify-between text-sm"><span>{{ l.label }}</span><span class="font-mono text-red-600">{{ fmt(l.price) }}</span></div>
+              <div class="stock-detail-level-row"><span>{{ l.label }}</span><span class="font-mono text-red-600">{{ fmt(l.price) }}</span></div>
             } @empty {
               <p class="text-xs text-slate-400">None yet</p>
             }
@@ -166,75 +246,67 @@
         </div>
       </div>
     } @else {
-      @if (myStockSummary(); as summary) {
-        <div class="grid gap-4 sm:grid-cols-3">
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><div class="text-xs text-slate-500">Trades</div><div class="text-lg font-bold">{{ summary.tradeCount }}</div></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><div class="text-xs text-slate-500">Win Rate</div><div class="text-lg font-bold">{{ summary.winRate.toFixed(1) }}%</div></div>
-          <div class="rounded-xl border border-slate-200 bg-white p-4"><div class="text-xs text-slate-500">Realised P&L</div><div class="text-lg font-bold" [class.text-emerald-600]="summary.realisedPnL >= 0" [class.text-red-600]="summary.realisedPnL < 0">{{ fmt(summary.realisedPnL) }}</div></div>
+      <div class="stock-detail-empty">
+        <div class="stock-detail-empty-icon" aria-hidden="true"></div>
+        <h2 class="stock-detail-empty-title">Live market data unavailable</h2>
+        <p class="stock-detail-empty-text">
+          Chart and technicals appear when live quotes are available. Fundamentals from Screener are always accessible.
+        </p>
+        <button type="button" class="btn-secondary" (click)="activeTab.set('fundamentals')">View fundamentals</button>
+      </div>
+    }
+  } @else {
+    @if (myStockSummary(); as summary) {
+      <div class="stock-detail-metrics">
+        <div class="stock-detail-metric">
+          <span class="stock-detail-metric-label">Trades</span>
+          <span class="stock-detail-metric-value">{{ summary.tradeCount }}</span>
         </div>
-        <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table class="stock-table min-w-[560px]">
-            <thead>
-              <tr>
-                <th class="w-10 text-center">#</th>
-                @for (col of tradeColumns; track col.key) {
-                  <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
-                    <button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive(col.key)" (click)="tableSort.toggle(col.key, $event)">
-                      {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
-                    </button>
-                  </th>
-                }
-              </tr>
-            </thead>
-            <tbody>
-              @for (t of myTrades(); track t.isin + t.sellDate + t.buyDate + t.quantity; let i = $index) {
-                <tr>
-                  <td class="text-center text-slate-400">{{ i + 1 }}</td>
-                  <td class="px-4 py-2">{{ t.buyDate }} at {{ fmt(t.buyPrice) }}</td>
-                  <td class="px-4 py-2">{{ t.sellDate }} at {{ fmt(t.sellPrice) }}</td>
-                  <td class="px-4 py-2 text-right tabular-nums">{{ t.quantity }}</td>
-                  <td class="px-4 py-2">{{ t.tradeType }}</td>
-                  <td class="px-4 py-2 text-right tabular-nums" [class.text-emerald-600]="t.realisedPnL >= 0" [class.text-red-600]="t.realisedPnL < 0">{{ fmt(t.realisedPnL) }}</td>
-                </tr>
+        <div class="stock-detail-metric">
+          <span class="stock-detail-metric-label">Win Rate</span>
+          <span class="stock-detail-metric-value">{{ summary.winRate.toFixed(1) }}%</span>
+        </div>
+        <div class="stock-detail-metric">
+          <span class="stock-detail-metric-label">Realised P&L</span>
+          <span class="stock-detail-metric-value" [class.text-emerald-600]="summary.realisedPnL >= 0" [class.text-red-600]="summary.realisedPnL < 0">
+            {{ fmt(summary.realisedPnL) }}
+          </span>
+        </div>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table class="stock-table min-w-[560px]">
+          <thead>
+            <tr>
+              <th class="w-10 text-center">#</th>
+              @for (col of tradeColumns; track col.key) {
+                <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
+                  <button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive(col.key)" (click)="tableSort.toggle(col.key, $event)">
+                    {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
+                  </button>
+                </th>
               }
-            </tbody>
-          </table>
-        </div>
-      } @else {
-        <p class="text-center text-slate-500">No trades for this stock in the loaded report.</p>
-      }
-    }
-  </div>
-} @else {
-  <div class="space-y-4 py-12">
-    <div class="text-center">
-      <p class="text-slate-500">Waiting for market data from local backend…</p>
-      <p class="text-sm text-slate-400">Symbol {{ symbol() }} — fetch Screener fundamentals below.</p>
-      <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          class="btn-primary"
-          [disabled]="screenerBusy() || !auth.hasAccess"
-          (click)="fetchScreener()"
-        >
-          @if (screenerBusy()) {
-            Fetching Screener…
-          } @else {
-            Fetch Screener data
-          }
-        </button>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of myTrades(); track t.isin + t.sellDate + t.buyDate + t.quantity; let i = $index) {
+              <tr>
+                <td class="text-center text-slate-400">{{ i + 1 }}</td>
+                <td class="px-4 py-2">{{ t.buyDate }} at {{ fmt(t.buyPrice) }}</td>
+                <td class="px-4 py-2">{{ t.sellDate }} at {{ fmt(t.sellPrice) }}</td>
+                <td class="px-4 py-2 text-right tabular-nums">{{ t.quantity }}</td>
+                <td class="px-4 py-2">{{ t.tradeType }}</td>
+                <td class="px-4 py-2 text-right tabular-nums" [class.text-emerald-600]="t.realisedPnL >= 0" [class.text-red-600]="t.realisedPnL < 0">{{ fmt(t.realisedPnL) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
       </div>
-      @if (screenerError()) {
-        <p class="mt-2 text-sm text-red-600">{{ screenerError() }}</p>
-      }
-      @if (screenerSuccess()) {
-        <p class="mt-2 text-sm text-emerald-700">{{ screenerSuccess() }}</p>
-      }
-    </div>
-    @if (registryStock(); as reg) {
-      <div class="mx-auto max-w-5xl">
-        <app-screener-fundamentals [stock]="reg" />
+    } @else {
+      <div class="stock-detail-empty">
+        <div class="stock-detail-empty-icon" aria-hidden="true"></div>
+        <h2 class="stock-detail-empty-title">No trades recorded</h2>
+        <p class="stock-detail-empty-text">This stock has no trades in your loaded P&amp;L report.</p>
       </div>
     }
-  </div>
-}
+  }
+</div>

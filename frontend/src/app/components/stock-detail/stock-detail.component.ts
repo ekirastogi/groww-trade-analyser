@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal, effect, OnInit } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { switchMap, of } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
@@ -23,7 +23,7 @@ import { Trade } from '../../models/trade.models';
 @Component({
   selector: 'app-stock-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TradingChartComponent, ScreenerFundamentalsComponent],
+  imports: [CommonModule, FormsModule, TradingChartComponent, ScreenerFundamentalsComponent],
   templateUrl: './stock-detail.component.html',
 })
 export class StockDetailComponent implements OnInit {
@@ -92,9 +92,41 @@ export class StockDetailComponent implements OnInit {
     { initialValue: undefined }
   );
 
-  activeTab = signal<'market' | 'fundamentals' | 'my-trades'>('market');
+  activeTab = signal<'market' | 'fundamentals' | 'my-trades'>('fundamentals');
   fmt = formatCurrency;
   fmtPct = formatPct;
+
+  hasMarketData = computed(() => !!this.stock());
+
+  displayName = computed(() => {
+    const s = this.stock();
+    const reg = this.registryStock();
+    return s?.name || reg?.name || this.symbol();
+  });
+
+  displayExchange = computed(() => this.stock()?.exchange || this.registryStock()?.exchange || 'NSE');
+
+  displayPrice = computed(() => {
+    const s = this.stock();
+    if (s?.ltp) {
+      return {
+        value: s.ltp,
+        change: s.change,
+        changePct: s.changePct,
+        fromMarket: true,
+      };
+    }
+    const reg = this.registryStock();
+    if (reg?.currentPrice && reg.currentPrice > 0) {
+      return { value: reg.currentPrice, fromMarket: false };
+    }
+    return null;
+  });
+
+  headerPe = computed(() => this.stock()?.pe ?? this.registryStock()?.pe);
+  headerMarketCap = computed(() => this.stock()?.marketCap ?? this.registryStock()?.marketCap);
+
+  private lastSymbol = '';
 
   week52Position = computed(() => {
     const s = this.stock();
@@ -106,10 +138,21 @@ export class StockDetailComponent implements OnInit {
 
   private readonly _syncPageHeader = effect((onCleanup) => {
     const sym = this.symbol();
-    const s = this.stock();
-    const subtitle = s ? `${s.name} · ${s.exchange}` : 'Market data and your trades';
+    const name = this.displayName();
+    const subtitle = this.hasMarketData()
+      ? `${name} · ${this.displayExchange()}`
+      : `${name} · Fundamentals`;
     this.pageShell.setHeader(sym || 'Stock', subtitle);
     onCleanup(() => this.pageShell.clearOverride());
+  }, { allowSignalWrites: true });
+
+  private readonly _resetTabOnSymbol = effect(() => {
+    const sym = this.symbol();
+    if (!sym || sym === this.lastSymbol) return;
+    this.lastSymbol = sym;
+    this.activeTab.set('fundamentals');
+    this.screenerError.set(null);
+    this.screenerSuccess.set(null);
   }, { allowSignalWrites: true });
 
   private readonly _loadRegistryStock = effect(() => {
@@ -286,6 +329,11 @@ export class StockDetailComponent implements OnInit {
     const ts = new Date(lastUpdated).getTime();
     if (!Number.isFinite(ts)) return 'unknown age';
     return formatDataAge(ts);
+  }
+
+  formatMarketCap(value?: number): string {
+    if (!value || value <= 0) return '—';
+    return `₹${(value / 1e7).toFixed(0)} Cr`;
   }
 
   async addUserLevel(): Promise<void> {
