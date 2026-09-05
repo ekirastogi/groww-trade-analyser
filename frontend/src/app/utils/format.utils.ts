@@ -12,15 +12,14 @@ function compactMagnitude(abs: number, divisor: number, suffix: string): string 
   return `${scaled.toFixed(digits).replace(/\.?0+$/, '')}${suffix}`;
 }
 
-/** Short signed P&L for tight heatmap cells (e.g. +1.2L, −45.6K). */
+/** Unsigned compact P&L for heatmap cells; color conveys sign (e.g. 1.2L, 45.6K). */
 export function formatCompactCurrency(value: number): string {
   if (!Number.isFinite(value) || value === 0) return '0';
-  const sign = value > 0 ? '+' : '−';
   const abs = Math.abs(value);
-  if (abs >= 1_00_00_000) return `${sign}${compactMagnitude(abs, 1_00_00_000, 'Cr')}`;
-  if (abs >= 1_00_000) return `${sign}${compactMagnitude(abs, 1_00_000, 'L')}`;
-  if (abs >= 1000) return `${sign}${compactMagnitude(abs, 1000, 'K')}`;
-  return `${sign}${Math.round(abs)}`;
+  if (abs >= 1_00_00_000) return compactMagnitude(abs, 1_00_00_000, 'Cr');
+  if (abs >= 1_00_000) return compactMagnitude(abs, 1_00_000, 'L');
+  if (abs >= 1000) return compactMagnitude(abs, 1000, 'K');
+  return String(Math.round(abs));
 }
 
 export function formatPct(value: number): string {
