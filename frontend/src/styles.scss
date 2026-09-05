@@ -1460,6 +1460,22 @@
   @apply flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center;
 }
 
+.registry-label-add {
+  @apply border-t border-slate-100 pt-3;
+}
+
+.registry-label-add-row {
+  @apply flex flex-col gap-2 sm:flex-row sm:items-end;
+}
+
+.registry-label-add-results {
+  @apply mt-2 max-h-48 space-y-0.5 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-1;
+}
+
+.registry-label-add-hit {
+  @apply flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-800 transition hover:bg-white disabled:opacity-60;
+}
+
 .label-manager {
   @apply mt-3 space-y-3;
 }

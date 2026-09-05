@@ -228,6 +228,65 @@
           />
         </div>
       </div>
+      @if (activeLabelIds().length) {
+        <div class="registry-label-add">
+          <div class="registry-label-add-row">
+            <label class="block min-w-0 flex-1 text-sm">
+              <span class="text-slate-500">Add to {{ activeFilterLabelNames() }}</span>
+              <input
+                type="search"
+                class="input-field mt-1 w-full"
+                placeholder="Search symbol or name, then add…"
+                [ngModel]="labelAddQuery()"
+                (ngModelChange)="onLabelAddQuery($event)"
+                (keyup.enter)="addFromLabelSearch()"
+                [disabled]="labelAddBusy()"
+              />
+            </label>
+            <button
+              type="button"
+              class="btn-primary mt-5"
+              [disabled]="labelAddBusy() || (!labelAddMatches().length && !labelAddTypedSymbol())"
+              (click)="addFromLabelSearch()"
+            >
+              {{ labelAddBusy() ? 'Adding…' : 'Add' }}
+            </button>
+          </div>
+          @if (labelAddQuery().trim()) {
+            <ul class="registry-label-add-results">
+              @for (stock of labelAddMatches(); track stock.symbol) {
+                <li>
+                  <button
+                    type="button"
+                    class="registry-label-add-hit"
+                    [disabled]="labelAddBusy()"
+                    (click)="addStockToActiveLabels(stock.symbol, stock.name)"
+                  >
+                    <span class="font-semibold">{{ stock.symbol }}</span>
+                    <span class="truncate text-slate-500">{{ stock.name || '' }}</span>
+                  </button>
+                </li>
+              }
+              @if (labelAddTypedSymbol(); as typed) {
+                <li>
+                  <button
+                    type="button"
+                    class="registry-label-add-hit"
+                    [disabled]="labelAddBusy()"
+                    (click)="addStockToActiveLabels(typed)"
+                  >
+                    <span class="font-semibold">{{ typed }}</span>
+                    <span class="text-slate-500">Add to {{ activeFilterLabelNames() }}</span>
+                  </button>
+                </li>
+              }
+              @if (!labelAddMatches().length && !labelAddTypedSymbol()) {
+                <li class="px-1 py-1 text-xs text-slate-400">No matching stocks to add.</li>
+              }
+            </ul>
+          }
+        </div>
+      }
     </div>
 
     @if (loading()) {
@@ -246,7 +305,8 @@
     } @else if (!filteredStocks().length) {
       <div class="px-4 py-10 text-center text-sm text-slate-500 sm:px-5">
         @if (activeLabelIds().length) {
-          No stocks with {{ activeLabelIds().length === 1 ? 'this label' : 'these labels' }}{{ searchQuery().trim() ? ' match your search' : '' }}.
+          No stocks with {{ activeLabelIds().length === 1 ? 'this label' : 'these labels' }}{{ searchQuery().trim() ? ' match your search' : ' yet' }}.
+          Search above to add stocks to {{ activeFilterLabelNames() }}.
         } @else {
           No stocks match your search.
         }

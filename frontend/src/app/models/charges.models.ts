@@ -8,7 +8,10 @@ export interface SegmentChargeRates {
   brokeragePct: number;
   /** Rupee cap per order; 0 means uncapped. */
   brokerageCap: number;
-  /** Rupee floor per order. */
+  /**
+   * Rupee floor per order. Groww bills the lower of this floor and
+   * `brokerageMinCapPct` of turnover, so tiny orders are not overcharged.
+   */
   brokerageMin: number;
   sttBuyPct: number;
   sttSellPct: number;
@@ -16,13 +19,22 @@ export interface SegmentChargeRates {
   stampDutyBuyPct: number;
   exchangeTxnPct: number;
   ipftPct: number;
-  /** Depository + broker DP fee per scrip on a sell, before GST. */
-  dpChargePerSell: number;
+  /** Depository fee per scrip on a sell, before GST. Never waived. */
+  dpDepositoryPerSell: number;
+  /** Broker DP fee per scrip on a sell, before GST. Waived under `dpBrokerWaiverBelowValue`. */
+  dpBrokerPerSell: number;
+  /** Sell turnover below which the broker's share of the DP fee is waived. */
+  dpBrokerWaiverBelowValue: number;
 }
 
 export interface ChargeRates {
   gstPct: number;
   sebiPct: number;
+  /**
+   * SEBI's ceiling on brokerage as a percent of turnover. Also bounds the rupee floor,
+   * matching Groww's "lower of ₹5 or 2.5% of trade value" rule on very small orders.
+   */
+  brokerageMaxPct: number;
   segments: Record<ChargeSegment, SegmentChargeRates>;
 }
 

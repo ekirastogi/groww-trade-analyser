@@ -12,8 +12,10 @@ import {
 import { ChargeItem } from '../models/trade.models';
 import {
   DEFAULT_CHARGE_RATES,
+  RealizedTradeRow,
   calcLadder,
   calcLegCharges,
+  calcRealizedCharges,
   calcRoundTrip,
   chargeItems,
   solveBreakevenPrice,
@@ -21,7 +23,20 @@ import {
 } from '../utils/charges.utils';
 import { readJson, writeJson } from '../utils/local-store.utils';
 
-const RATES_STORAGE_KEY = 'kairo-charge-rates-v2';
+// v3 splits the DP fee into depository/broker parts and adds the SEBI brokerage ceiling.
+const RATES_STORAGE_KEY = 'kairo-charge-rates-v3';
+
+/** Fills gaps from the default card so a partial or older saved override still works. */
+function mergeWithDefaults(stored: ChargeRates): ChargeRates {
+  return {
+    ...DEFAULT_CHARGE_RATES,
+    ...stored,
+    segments: {
+      delivery: { ...DEFAULT_CHARGE_RATES.segments.delivery, ...stored?.segments?.delivery },
+      intraday: { ...DEFAULT_CHARGE_RATES.segments.intraday, ...stored?.segments?.intraday },
+    },
+  };
+}
 
 /**
  * Single source of truth for forward-looking trading cost estimates (brokerage, STT,
@@ -30,7 +45,9 @@ const RATES_STORAGE_KEY = 'kairo-charge-rates-v2';
  */
 @Injectable({ providedIn: 'root' })
 export class ChargesService {
-  private ratesState = signal<ChargeRates>(readJson(RATES_STORAGE_KEY, DEFAULT_CHARGE_RATES));
+  private ratesState = signal<ChargeRates>(
+    mergeWithDefaults(readJson(RATES_STORAGE_KEY, DEFAULT_CHARGE_RATES))
+  );
 
   readonly rates = this.ratesState.asReadonly();
 
@@ -70,6 +87,15 @@ export class ChargesService {
   /** Exit price where the trade nets zero after all charges. */
   breakevenPrice(input: Omit<RoundTripInput, 'exitPrice'>): number | null {
     return solveBreakevenPrice(input, this.ratesState());
+  }
+
+  /**
+   * Charges for realized statement trades, grouped into orders so the per-order brokerage
+   * cap and per-scrip DP fee are applied once. Keyed by the caller's row key; rows the
+   * equity card cannot price (F&O) are absent.
+   */
+  realized(rows: RealizedTradeRow[]): Map<string, ChargeBreakdown> {
+    return calcRealizedCharges(rows, this.ratesState());
   }
 
   /** Non-zero charge lines, ready for display. */

@@ -1,4 +1,7 @@
 import { Trade, TradeType, TradeTypeStats } from '../models/trade.models';
+import { ChargesService } from '../services/charges.service';
+import { RealizedTradeRow } from './charges.utils';
+import { effectiveTradeType } from './trade-type-filter.utils';
 
 export function normalizeSymbol(stockName: string): string {
   return stockName
@@ -80,8 +83,40 @@ interface TradeWithCharges extends Trade {
   netPnL: number;
 }
 
-export function enrichTradeWithCharges(trade: Trade, chargeRatio: number): TradeWithCharges {
-  const allocatedCharges = trade.sellValue * chargeRatio;
+/**
+ * Per-trade charges from the Groww rate card, aligned with the input array. Entries are
+ * undefined for rows the equity card cannot price (F&O), so callers fall back to the
+ * statement's blended ratio for those.
+ */
+export function computeTradeCharges(
+  trades: Trade[],
+  chargesSvc: Pick<ChargesService, 'realized'>
+): (number | undefined)[] {
+  const rows: RealizedTradeRow[] = trades.map((trade, index) => ({
+    key: String(index),
+    isin: trade.isin || trade.stockName,
+    tradeType: effectiveTradeType(trade),
+    quantity: trade.quantity,
+    buyDate: trade.buyDate,
+    sellDate: trade.sellDate,
+    buyPrice: trade.buyPrice,
+    sellPrice: trade.sellPrice,
+  }));
+
+  const breakdowns = chargesSvc.realized(rows);
+  return trades.map((_, index) => breakdowns.get(String(index))?.total);
+}
+
+/**
+ * Attaches charges to a trade. `rateCardCharges` comes from `computeTradeCharges`; when a
+ * row is missing (F&O), the statement's blended turnover ratio is used instead.
+ */
+export function enrichTradeWithCharges(
+  trade: Trade,
+  chargeRatio: number,
+  rateCardCharges?: number
+): TradeWithCharges {
+  const allocatedCharges = rateCardCharges ?? trade.sellValue * chargeRatio;
   return {
     ...trade,
     allocatedCharges,

@@ -114,16 +114,18 @@ export class StockLabelsStore {
     }
   }
 
-  async assign(symbol: string, labelId: string): Promise<void> {
+  async assign(symbol: string, labelId: string): Promise<boolean> {
     const sym = symbol?.trim().toUpperCase();
-    if (!sym || !labelId) return;
+    if (!sym || !labelId) return false;
     this.error.set(null);
     try {
       await this.svc.addToStock(sym, labelId);
       const current = this.labelIdsFor(sym);
       if (!current.includes(labelId)) this.setSymbolLabels(sym, [...current, labelId]);
+      return true;
     } catch (err) {
       this.error.set(errorMessage(err, 'Could not add label'));
+      return false;
     }
   }
 

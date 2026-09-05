@@ -247,6 +247,7 @@ export class StockRegistryComponent implements OnInit {
   setLabelFilter(ids: string[]): void {
     this.labelFilterTouched = true;
     this.activeLabelIds.set(ids);
+    this.labelAddQuery.set('');
     this.currentPage.set(1);
   }
 
@@ -257,6 +258,99 @@ export class StockRegistryComponent implements OnInit {
       count: this.labelStore.countFor(label.id),
     }))
   );
+
+  activeFilterLabels = computed(() => {
+    const selected = new Set(this.activeLabelIds());
+    return this.labelStore.labels().filter((label) => selected.has(label.id));
+  });
+
+  activeFilterLabelNames = computed(() =>
+    this.activeFilterLabels()
+      .map((label) => label.name)
+      .join(', ')
+  );
+
+  labelAddQuery = signal('');
+  labelAddBusy = signal(false);
+
+  /** Registry rows matching the add-search that are missing at least one selected label. */
+  labelAddMatches = computed(() => {
+    const q = this.labelAddQuery().trim().toLowerCase();
+    const labelIds = this.activeLabelIds();
+    if (!q || !labelIds.length) return [];
+    const assigned = this.labelStore.assignments();
+    return this.stocks()
+      .filter((stock) => {
+        const ids = assigned.get(stock.symbol) ?? [];
+        if (labelIds.every((id) => ids.includes(id))) return false;
+        return (
+          stock.symbol.toLowerCase().includes(q) ||
+          (stock.name ?? '').toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 8);
+  });
+
+  /**
+   * Offer adding a typed ticker even when it is not in the registry yet, so a label
+   * list can be built without first using Add stock.
+   */
+  labelAddTypedSymbol = computed(() => {
+    const raw = this.labelAddQuery().trim().toUpperCase();
+    if (!this.activeLabelIds().length) return null;
+    if (!/^[A-Z0-9][A-Z0-9.&-]{0,31}$/.test(raw)) return null;
+    if (this.labelAddMatches().some((stock) => stock.symbol === raw)) return null;
+    const assigned = this.labelStore.assignments().get(raw) ?? [];
+    if (this.activeLabelIds().every((id) => assigned.includes(id))) return null;
+    return raw;
+  });
+
+  onLabelAddQuery(value: string): void {
+    this.labelAddQuery.set(value);
+  }
+
+  async addFromLabelSearch(): Promise<void> {
+    const typed = this.labelAddTypedSymbol();
+    const matches = this.labelAddMatches();
+    if (typed && !matches.length) {
+      await this.addStockToActiveLabels(typed);
+      return;
+    }
+    if (matches[0]) await this.addStockToActiveLabels(matches[0].symbol, matches[0].name);
+  }
+
+  async addStockToActiveLabels(symbol: string, name?: string): Promise<void> {
+    const labelIds = this.activeLabelIds();
+    if (!labelIds.length) return;
+    const sym = symbol.trim().toUpperCase();
+    if (!sym) return;
+
+    this.labelAddBusy.set(true);
+    this.error.set(null);
+    this.success.set(null);
+    try {
+      const row = await this.registrySvc.ensureListed(sym, { name: name || undefined });
+      this.stocks.update((list) => {
+        if (list.some((stock) => stock.symbol === row.symbol)) return list;
+        return [...list, row].sort((a, b) => a.symbol.localeCompare(b.symbol));
+      });
+      this.stockCount.set(this.stocks().length);
+
+      for (const labelId of labelIds) {
+        const ok = await this.labelStore.assign(row.symbol, labelId);
+        if (!ok) {
+          this.error.set(this.labelStore.error() ?? `Could not add ${row.symbol} to the label`);
+          return;
+        }
+      }
+      this.labelAddQuery.set('');
+      this.success.set(`Added ${row.symbol} to ${this.activeFilterLabelNames()}.`);
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Could not add stock to label');
+    } finally {
+      this.labelAddBusy.set(false);
+    }
+  }
 
   labelIdsFor(symbol: string): string[] {
     return this.labelStore.labelIdsFor(symbol);

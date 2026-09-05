@@ -10,6 +10,7 @@ import {
   DailyAnalyticsRow,
 } from '../models/trade.models';
 import { AuthService } from './auth.service';
+import { ChargesService } from './charges.service';
 import { ClientAccountService } from './client-account.service';
 import { ParserService } from './parser.service';
 import { RegistryStockService } from './registry-stock.service';
@@ -21,6 +22,7 @@ import { objectToSnake, numField, rowToCamel, SupabaseService } from './supabase
 import {
   buildTradeTypeStats,
   computeChargeRatio,
+  computeTradeCharges,
   computeFileContentHash,
   computeTradeFingerprint,
   enrichTradeWithCharges,
@@ -257,6 +259,7 @@ export class TradeLedgerService {
   private tradePlans = inject(TradePlanService);
   private momentumStocks = inject(MomentumStockService);
   private watchlists = inject(WatchlistService);
+  private chargesSvc = inject(ChargesService);
   /** null = unknown; false = `by_trade_type` column not on remote DB yet. */
   private stockProfilesSupportByTradeType: boolean | null = null;
   /** The traded-label backfill only needs to run once per session. */
@@ -312,6 +315,7 @@ export class TradeLedgerService {
     const uploadId = crypto.randomUUID();
     const totalSellValue = report.trades.reduce((s, t) => s + t.sellValue, 0);
     const chargeRatio = computeChargeRatio(totalSellValue, report.charges.total);
+    const rateCardCharges = computeTradeCharges(report.trades, this.chargesSvc);
     const now = Date.now();
 
     let newTradesAdded = 0;
@@ -320,7 +324,7 @@ export class TradeLedgerService {
     const pendingWrites: StoredTrade[] = [];
     const occurrenceInFile = new Map<string, number>();
 
-    for (const trade of report.trades) {
+    for (const [index, trade] of report.trades.entries()) {
       const fingerprint = await computeTradeFingerprint(trade, clientCode);
       const occurrence = occurrenceInFile.get(fingerprint) ?? 0;
       occurrenceInFile.set(fingerprint, occurrence + 1);
@@ -332,7 +336,7 @@ export class TradeLedgerService {
 
       const dedupeKey = await tradeOccurrenceKey(fingerprint, occurrence);
       const symbol = normalizeSymbol(trade.stockName);
-      const enriched = enrichTradeWithCharges(trade, chargeRatio);
+      const enriched = enrichTradeWithCharges(trade, chargeRatio, rateCardCharges[index]);
       pendingWrites.push({
         ...trade,
         dedupeKey,

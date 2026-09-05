@@ -3,14 +3,16 @@ import {
   ChargeLegInput,
   ChargeRates,
   ChargeSegment,
+  ChargeSide,
   LadderInput,
   LadderResult,
   LadderSliceResult,
   ProfitTargetResult,
   RoundTripInput,
   RoundTripResult,
+  SegmentChargeRates,
 } from '../models/charges.models';
-import { ChargeItem } from '../models/trade.models';
+import { ChargeItem, TradeType } from '../models/trade.models';
 
 /**
  * Groww equity rate card on NSE (FY 2025-26). Percent values are percent of turnover,
@@ -19,28 +21,33 @@ import { ChargeItem } from '../models/trade.models';
 export const DEFAULT_CHARGE_RATES: ChargeRates = {
   gstPct: 18,
   sebiPct: 0.0001,
+  brokerageMaxPct: 2.5,
   segments: {
     delivery: {
       brokeragePct: 0.1,
       brokerageCap: 20,
-      brokerageMin: 2,
+      brokerageMin: 5,
       sttBuyPct: 0.1,
       sttSellPct: 0.1,
       stampDutyBuyPct: 0.015,
       exchangeTxnPct: 0.00297,
       ipftPct: 0.0001,
-      dpChargePerSell: 20,
+      dpDepositoryPerSell: 3.5,
+      dpBrokerPerSell: 16.5,
+      dpBrokerWaiverBelowValue: 100,
     },
     intraday: {
       brokeragePct: 0.1,
       brokerageCap: 20,
-      brokerageMin: 2,
+      brokerageMin: 5,
       sttBuyPct: 0,
       sttSellPct: 0.025,
       stampDutyBuyPct: 0.003,
       exchangeTxnPct: 0.00297,
       ipftPct: 0.0001,
-      dpChargePerSell: 0,
+      dpDepositoryPerSell: 0,
+      dpBrokerPerSell: 0,
+      dpBrokerWaiverBelowValue: 0,
     },
   },
 };
@@ -82,6 +89,33 @@ function pctOf(value: number, pct: number): number {
   return (value * pct) / 100;
 }
 
+/**
+ * Groww bills ₹20 or 0.1% per executed order, whichever is lower, with a ₹5 floor —
+ * except the floor itself is capped at 2.5% of turnover, so a ₹50 order pays ₹1.25
+ * rather than ₹5. SEBI's 2.5% ceiling bounds the result either way.
+ */
+function calcBrokerage(
+  turnover: number,
+  segment: SegmentChargeRates,
+  rates: ChargeRates
+): number {
+  const cap = segment.brokerageCap > 0 ? segment.brokerageCap : Infinity;
+  const maxPct = rates.brokerageMaxPct > 0 ? rates.brokerageMaxPct : 100;
+  const regulatoryCeiling = pctOf(turnover, maxPct);
+  const slab = Math.min(pctOf(turnover, segment.brokeragePct), cap);
+  const floor = Math.min(segment.brokerageMin, regulatoryCeiling);
+  return Math.min(Math.max(slab, floor), regulatoryCeiling);
+}
+
+/**
+ * DP fee on a delivery sell: the depository's cut always applies, while Groww waives
+ * its own share on debit values under ₹100.
+ */
+function calcDpCharge(turnover: number, segment: SegmentChargeRates): number {
+  const broker = turnover < segment.dpBrokerWaiverBelowValue ? 0 : segment.dpBrokerPerSell;
+  return segment.dpDepositoryPerSell + broker;
+}
+
 export function calcLegCharges(
   input: ChargeLegInput,
   rates: ChargeRates = DEFAULT_CHARGE_RATES
@@ -93,18 +127,14 @@ export function calcLegCharges(
   if (!turnover || !segment) return emptyBreakdown();
 
   const isBuy = input.side === 'buy';
-  const cap = segment.brokerageCap > 0 ? segment.brokerageCap : Infinity;
-  const brokerage = Math.max(
-    Math.min(pctOf(turnover, segment.brokeragePct), cap),
-    segment.brokerageMin
-  );
+  const brokerage = calcBrokerage(turnover, segment, rates);
 
   const stt = pctOf(turnover, isBuy ? segment.sttBuyPct : segment.sttSellPct);
   const exchangeTxn = pctOf(turnover, segment.exchangeTxnPct);
   const ipft = pctOf(turnover, segment.ipftPct);
   const sebi = pctOf(turnover, rates.sebiPct);
   const stampDuty = isBuy ? pctOf(turnover, segment.stampDutyBuyPct) : 0;
-  const dpCharges = isBuy ? 0 : segment.dpChargePerSell;
+  const dpCharges = isBuy ? 0 : calcDpCharge(turnover, segment);
   const gst = pctOf(brokerage + exchangeTxn + ipft + sebi + dpCharges, rates.gstPct);
 
   return {
@@ -262,6 +292,134 @@ export function calcLadder(
     netPnLPct: entryValue > 0 ? ((grossPnL - charges) / entryValue) * 100 : 0,
     combined,
   };
+}
+
+/**
+ * Maps a statement trade type onto a rate-card segment. Returns null for rows the equity
+ * card cannot price (F&O), so callers can fall back instead of billing them as equity.
+ */
+export function chargeSegmentForTradeType(tradeType: TradeType): ChargeSegment | null {
+  switch (tradeType) {
+    case 'intraday':
+    case 'same_day':
+      return 'intraday';
+    case 'delivery':
+    case 'mtf':
+      return 'delivery';
+    default:
+      return null;
+  }
+}
+
+/** One realized buy→sell pair from a P&L statement. */
+export interface RealizedTradeRow {
+  /** Caller's identifier, echoed back on the result. */
+  key: string;
+  /** DP charges are levied per ISIN per day, so rows are grouped by it. */
+  isin: string;
+  tradeType: TradeType;
+  quantity: number;
+  buyDate: string;
+  sellDate: string;
+  buyPrice: number;
+  sellPrice: number;
+}
+
+function scaleBreakdown(b: ChargeBreakdown, factor: number): ChargeBreakdown {
+  return {
+    turnover: b.turnover * factor,
+    brokerage: b.brokerage * factor,
+    stt: b.stt * factor,
+    exchangeTxn: b.exchangeTxn * factor,
+    sebi: b.sebi * factor,
+    ipft: b.ipft * factor,
+    stampDuty: b.stampDuty * factor,
+    dpCharges: b.dpCharges * factor,
+    gst: b.gst * factor,
+    total: b.total * factor,
+  };
+}
+
+interface OrderGroup {
+  segment: ChargeSegment;
+  side: ChargeSide;
+  quantity: number;
+  value: number;
+  members: { key: string; value: number }[];
+}
+
+/**
+ * Charges for realized trades from a P&L statement, billed the way a broker actually
+ * bills them rather than as a flat percentage of turnover.
+ *
+ * Statement rows are matched buy/sell legs, not orders, so rows sharing a scrip, date and
+ * side are treated as one order. That matters because brokerage is capped at ₹20 per order
+ * and the DP fee is a flat per-scrip-per-day charge: pricing each row separately would
+ * multiply both. Each order's charges are then split across its rows pro rata by value.
+ *
+ * Rows whose trade type has no equity rate card (F&O) are omitted from the result.
+ */
+export function calcRealizedCharges(
+  rows: RealizedTradeRow[],
+  rates: ChargeRates = DEFAULT_CHARGE_RATES
+): Map<string, ChargeBreakdown> {
+  const groups = new Map<string, OrderGroup>();
+
+  const addLeg = (
+    row: RealizedTradeRow,
+    segment: ChargeSegment,
+    side: ChargeSide,
+    date: string,
+    price: number
+  ) => {
+    const value = price * row.quantity;
+    if (!(value > 0)) return;
+    const id = `${side}|${segment}|${row.isin}|${date}`;
+    const group = groups.get(id);
+    if (group) {
+      group.quantity += row.quantity;
+      group.value += value;
+      group.members.push({ key: row.key, value });
+      return;
+    }
+    groups.set(id, {
+      segment,
+      side,
+      quantity: row.quantity,
+      value,
+      members: [{ key: row.key, value }],
+    });
+  };
+
+  for (const row of rows) {
+    const segment = chargeSegmentForTradeType(row.tradeType);
+    if (!segment || !(row.quantity > 0)) continue;
+    addLeg(row, segment, 'buy', row.buyDate, row.buyPrice);
+    addLeg(row, segment, 'sell', row.sellDate, row.sellPrice);
+  }
+
+  const totals = new Map<string, ChargeBreakdown>();
+  for (const group of groups.values()) {
+    // Charge the whole order once at its average price, then share it out by value.
+    const legCharges = calcLegCharges(
+      {
+        segment: group.segment,
+        side: group.side,
+        price: group.value / group.quantity,
+        quantity: group.quantity,
+      },
+      rates
+    );
+
+    for (const member of group.members) {
+      const share = group.value > 0 ? member.value / group.value : 0;
+      const existing = totals.get(member.key);
+      const portion = scaleBreakdown(legCharges, share);
+      totals.set(member.key, existing ? addBreakdowns(existing, portion) : portion);
+    }
+  }
+
+  return totals;
 }
 
 /**
