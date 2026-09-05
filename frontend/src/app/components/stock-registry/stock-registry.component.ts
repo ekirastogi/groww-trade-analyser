@@ -4,16 +4,15 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { RegistryStockService } from '../../services/registry-stock.service';
 import { StockLabelsStore } from '../../services/stock-labels.store';
-import { WorkerJobService } from '../../services/worker-job.service';
 import { ScreenerService, ScreenerSnapshot } from '../../services/screener.service';
-import { RegistryStock } from '../../models/trading-journal.models';
-import { StockLabelPickerComponent } from '../stock-labels/stock-label-picker.component';
+import { RegistryLabel, RegistryStock } from '../../models/trading-journal.models';
 import { StockLabelsManagerComponent } from '../stock-labels/stock-labels-manager.component';
 import {
   LabelFilterOption,
   LabelFilterSelectComponent,
 } from '../stock-labels/label-filter-select.component';
 import { formatCurrency } from '../../utils/format.utils';
+import { formatDataAge } from '../../utils/data-age.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { ScreenerFundamentalsComponent } from '../screener-fundamentals/screener-fundamentals.component';
 
@@ -39,7 +38,6 @@ type RegistryColumnKey =
     FormsModule,
     RouterLink,
     ScreenerFundamentalsComponent,
-    StockLabelPickerComponent,
     StockLabelsManagerComponent,
     LabelFilterSelectComponent,
   ],
@@ -48,12 +46,9 @@ type RegistryColumnKey =
 export class StockRegistryComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
   private labelStore = inject(StockLabelsStore);
-  private workerJobs = inject(WorkerJobService);
   private screener = inject(ScreenerService);
 
   stocks = signal<RegistryStock[]>([]);
-  labels = computed(() => this.labelStore.labels());
-  labelsBusy = computed(() => this.labelStore.busy());
   activeLabelIds = signal<string[]>([]);
   showScreenerPanel = signal(false);
   showLabelPanel = signal(false);
@@ -61,6 +56,7 @@ export class StockRegistryComponent implements OnInit {
   loading = signal(false);
   tableSort = new TableSortState('symbol', 'asc');
   fmt = formatCurrency;
+  formatDataAge = formatDataAge;
 
   showAddForm = signal(false);
   searchQuery = signal('');
@@ -71,26 +67,34 @@ export class StockRegistryComponent implements OnInit {
   error = signal<string | null>(null);
   success = signal<string | null>(null);
   busy = signal(false);
-  seedBusy = signal(false);
+  screenerRefreshBusy = signal(false);
+  screenerRefreshDone = signal(0);
+  screenerRefreshTotal = signal(0);
   fetchingSymbol = signal<string | null>(null);
   expandedSymbol = signal<string | null>(null);
   symbolQuery = signal('');
   screenerSearchSymbol = signal('');
   previewStock = signal<RegistryStock | null>(null);
 
-  readonly columns: { key: RegistryColumnKey; label: string; align?: 'left' | 'right' }[] = [
-    { key: 'symbol', label: 'Symbol' },
-    { key: 'name', label: 'Name' },
-    { key: 'currentPrice', label: 'Price', align: 'right' },
-    { key: 'marketCap', label: 'Mkt cap (Cr)', align: 'right' },
-    { key: 'pe', label: 'P/E', align: 'right' },
-    { key: 'salesGrowth3y', label: 'Sales 3Y', align: 'right' },
-    { key: 'profitGrowth3y', label: 'Profit 3Y', align: 'right' },
-    { key: 'stockCagr3y', label: 'CAGR 3Y', align: 'right' },
-    { key: 'promoterHolding', label: 'Promoter %', align: 'right' },
-    { key: 'fiiHolding', label: 'FII %', align: 'right' },
-    { key: 'screenerFetchedAt', label: 'Screener fetched', align: 'right' },
-    { key: 'updatedAt', label: 'Updated', align: 'right' },
+  /**
+   * Only the columns worth scanning at a glance; `responsive` drops the softer metrics on
+   * narrow screens so the table never needs sideways scrolling. Secondary fields live in
+   * the expanded row. Keep these classes in sync with the matching cells in the template.
+   */
+  readonly columns: {
+    key: RegistryColumnKey;
+    label: string;
+    align?: 'left' | 'right';
+    responsive?: string;
+  }[] = [
+    { key: 'symbol', label: 'Stock' },
+    { key: 'currentPrice', label: 'CMP', align: 'right' },
+    { key: 'marketCap', label: 'Mkt cap', align: 'right', responsive: 'hidden sm:table-cell' },
+    { key: 'pe', label: 'P/E', align: 'right', responsive: 'hidden sm:table-cell' },
+    { key: 'salesGrowth3y', label: 'Sales 3Y', align: 'right', responsive: 'hidden lg:table-cell' },
+    { key: 'profitGrowth3y', label: 'Profit 3Y', align: 'right', responsive: 'hidden lg:table-cell' },
+    { key: 'stockCagr3y', label: 'CAGR 3Y', align: 'right', responsive: 'hidden xl:table-cell' },
+    { key: 'screenerFetchedAt', label: 'Screener', align: 'right', responsive: 'hidden md:table-cell' },
   ];
 
   readonly pageSizeOptions = [10, 25, 50, 100];
@@ -224,12 +228,9 @@ export class StockRegistryComponent implements OnInit {
     return this.labelStore.labelIdsFor(symbol);
   }
 
-  async addLabelToStock(symbol: string, labelId: string): Promise<void> {
-    await this.labelStore.assign(symbol, labelId);
-  }
-
-  async removeLabelFromStock(symbol: string, labelId: string): Promise<void> {
-    await this.labelStore.unassign(symbol, labelId);
+  rowLabels(symbol: string): RegistryLabel[] {
+    const ids = new Set(this.labelStore.labelIdsFor(symbol));
+    return this.labelStore.labels().filter((label) => ids.has(label.id));
   }
 
   onPageSizeChange(value: string): void {
@@ -307,6 +308,28 @@ export class StockRegistryComponent implements OnInit {
     if (value == null || Number.isNaN(value)) return '—';
     return `${value}%`;
   }
+
+  /** Screener reports market cap in crores; shorten it so the column stays narrow. */
+  formatMktCap(value: number | undefined): string {
+    if (value == null || value === 0) return '—';
+    if (value >= 100000) return `${(value / 100000).toFixed(2)}L Cr`;
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}K Cr`;
+    return `${Math.round(value)} Cr`;
+  }
+
+  isUp(value: number | undefined): boolean {
+    return value != null && value > 0;
+  }
+
+  isDown(value: number | undefined): boolean {
+    return value != null && value < 0;
+  }
+
+  screenerRefreshLabel = computed(() => {
+    if (!this.screenerRefreshBusy()) return 'Refresh from Screener';
+    const total = this.screenerRefreshTotal();
+    return total ? `Refreshing ${this.screenerRefreshDone() + 1}/${total}…` : 'Refreshing…';
+  });
 
   toggleDetails(symbol: string): void {
     this.expandedSymbol.set(this.expandedSymbol() === symbol ? null : symbol);
@@ -536,75 +559,42 @@ export class StockRegistryComponent implements OnInit {
     await this.reload();
   }
 
-  async backfillFromYahoo(): Promise<void> {
+  /** Refetches Screener data for every stock that already has it, one symbol at a time. */
+  async refreshFromScreener(): Promise<void> {
+    const targets = this.stocks().filter((s) => s.screenerFetchedAt);
     this.error.set(null);
     this.success.set(null);
-    this.busy.set(true);
-    try {
-      const result = await this.workerJobs.backfillRegistryFromYahoo(true);
+
+    if (!targets.length) {
       await this.reload();
-      this.success.set(
-        `Yahoo backfill complete: updated ${result.updated} of ${result.processed} symbol(s) with CMP, market cap, and P/E (delayed data).`
-      );
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Yahoo backfill failed');
-    } finally {
-      this.busy.set(false);
+      this.success.set('No Screener data to refresh yet. Fetch a stock from Screener first.');
+      return;
     }
-  }
 
-  async refreshMarketData(): Promise<void> {
-    this.error.set(null);
-    this.success.set(null);
-    this.busy.set(true);
+    this.screenerRefreshBusy.set(true);
+    const failed: string[] = [];
+    let updated = 0;
     try {
-      const result = await this.registrySvc.enrichFromMarketData();
+      for (const [index, stock] of targets.entries()) {
+        this.screenerRefreshDone.set(index);
+        this.screenerRefreshTotal.set(targets.length);
+        try {
+          const data = await this.screener.fetchStock(stock.symbol, stock.name);
+          await this.registrySvc.save(this.applyScreener(stock, data));
+          updated++;
+        } catch {
+          failed.push(stock.symbol);
+        }
+      }
       await this.reload();
-      if (!result.updated) {
-        this.success.set(
-          'No market data found yet. Run Settings → Worker → Hot ingest (with Groww credentials in backend/.env) then try again.'
-        );
-      } else {
-        const pendingNote =
-          result.pending > 0
-            ? ` ${result.pending} symbol(s) still need ingest (run Hot ingest in Settings → Worker).`
-            : '';
-        this.success.set(`Updated market data for ${result.updated} stock(s).${pendingNote}`);
-      }
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Market data refresh failed');
+      const failNote = failed.length
+        ? ` ${failed.length} failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}.`
+        : '';
+      this.success.set(`Refreshed Screener data for ${updated} stock(s).${failNote}`);
     } finally {
-      this.busy.set(false);
-    }
-  }
-
-  async importExchangeUniverse(): Promise<void> {
-    this.error.set(null);
-    this.success.set(null);
-    this.seedBusy.set(true);
-    try {
-      const online = await this.workerJobs.getWorkerOnline();
-      if (!online) {
-        throw new Error('Worker is offline. Start it with `cd backend && go run .` then retry.');
-      }
-      const jobId = await this.workerJobs.requestSeedRegistry();
-      const job = await this.workerJobs.waitForJob(jobId, 20 * 60 * 1000);
-      if (job.status === 'failed') {
-        throw new Error(job.error ?? 'Registry import failed');
-      }
-
-      const deduped = await this.registrySvc.dedupeByIsin();
-      await this.reload();
-
-      const imported = job.symbolsIngested ?? 0;
-      const dedupeNote = deduped > 0 ? ` Removed ${deduped} duplicate listing(s) for the same company.` : '';
-      this.success.set(
-        `Imported ${imported} NSE/BSE symbols into your registry.${dedupeNote} Edit any stock to add price, indicators, and notes.`
-      );
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Import failed');
-    } finally {
-      this.seedBusy.set(false);
+      this.screenerRefreshBusy.set(false);
+      this.screenerRefreshDone.set(0);
+      this.screenerRefreshTotal.set(0);
     }
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { RegistryLabel } from '../models/trading-journal.models';
 import { RegistryLabelService, StockLabelMap } from './registry-label.service';
 
@@ -20,8 +20,6 @@ export class StockLabelsStore {
   busy = signal(false);
   error = signal<string | null>(null);
   loaded = signal(false);
-
-  hasLabels = computed(() => this.labels().length > 0);
 
   private inFlight: Promise<void> | null = null;
 

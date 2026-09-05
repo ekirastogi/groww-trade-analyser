@@ -6,25 +6,42 @@
     <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>
   }
 
-  <div class="registry-toolbar">
-    <button
-      type="button"
-      class="btn-secondary"
-      [class.btn-toggle-on]="showScreenerPanel()"
-      [attr.aria-expanded]="showScreenerPanel()"
-      (click)="showScreenerPanel.set(!showScreenerPanel())"
-    >
-      {{ showScreenerPanel() ? 'Hide Screener fetch' : 'Fetch from Screener' }}
-    </button>
-    <button
-      type="button"
-      class="btn-secondary"
-      [class.btn-toggle-on]="showLabelPanel()"
-      [attr.aria-expanded]="showLabelPanel()"
-      (click)="showLabelPanel.set(!showLabelPanel())"
-    >
-      {{ showLabelPanel() ? 'Hide labels' : 'Manage labels' }}
-    </button>
+  <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+    <div>
+      <p class="text-sm font-medium text-slate-900">{{ stockCount() }} stocks in your registry</p>
+      <p class="mt-0.5 text-xs text-slate-500">
+        Your personal stock book. Use <strong>Fetch Screener</strong> on a row for fundamentals, growth, and shareholding.
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="btn-primary" (click)="openAddForm()">Add stock</button>
+      <button
+        type="button"
+        class="btn-secondary"
+        [disabled]="screenerRefreshBusy() || loading()"
+        (click)="refreshFromScreener()"
+      >
+        {{ screenerRefreshLabel() }}
+      </button>
+      <button
+        type="button"
+        class="btn-secondary"
+        [class.btn-toggle-on]="showScreenerPanel()"
+        [attr.aria-expanded]="showScreenerPanel()"
+        (click)="showScreenerPanel.set(!showScreenerPanel())"
+      >
+        {{ showScreenerPanel() ? 'Hide Screener fetch' : 'Fetch from Screener' }}
+      </button>
+      <button
+        type="button"
+        class="btn-secondary"
+        [class.btn-toggle-on]="showLabelPanel()"
+        [attr.aria-expanded]="showLabelPanel()"
+        (click)="showLabelPanel.set(!showLabelPanel())"
+      >
+        {{ showLabelPanel() ? 'Hide labels' : 'Manage labels' }}
+      </button>
+    </div>
   </div>
 
   @if (showScreenerPanel()) {
@@ -76,30 +93,6 @@
       <app-stock-labels-manager [allowDelete]="true" />
     </div>
   }
-
-  <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-    <div>
-      <p class="text-sm font-medium text-slate-900">{{ stockCount() }} stocks in your registry</p>
-      <p class="mt-0.5 text-xs text-slate-500">
-        Your personal stock book. Use <strong>Fetch Screener</strong> on a row for fundamentals, growth, and shareholding.
-      </p>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      <button type="button" class="btn-primary" (click)="openAddForm()">Add stock</button>
-      <button type="button" class="btn-secondary" [disabled]="busy() || loading()" (click)="backfillFromYahoo()">
-        {{ busy() ? 'Backfilling…' : 'Backfill from Yahoo' }}
-      </button>
-      <button type="button" class="btn-secondary" [disabled]="busy() || loading()" (click)="refreshMarketData()">
-        {{ busy() ? 'Refreshing…' : 'Refresh market data' }}
-      </button>
-      <button type="button" class="btn-secondary" [disabled]="seedBusy() || loading()" (click)="reload()">
-        {{ loading() ? 'Loading…' : 'Refresh' }}
-      </button>
-      <button type="button" class="btn-secondary" [disabled]="seedBusy()" (click)="importExchangeUniverse()">
-        {{ seedBusy() ? 'Importing…' : 'Import NSE & BSE' }}
-      </button>
-    </div>
-  </div>
 
   @if (showAddForm()) {
     <div class="card p-4">
@@ -243,12 +236,10 @@
       <div class="px-4 py-12 text-center sm:px-5">
         <p class="text-sm font-medium text-slate-700">No stocks in your registry yet</p>
         <p class="mx-auto mt-2 max-w-md text-sm text-slate-500">
-          Use <strong>Fetch from Screener</strong> above, or click <strong>Import NSE &amp; BSE</strong> to load listed symbols.
+          Fetch any NSE/BSE symbol from Screener to add it with fundamentals, or add one manually.
         </p>
         <div class="mt-4 flex flex-wrap justify-center gap-2">
-          <button type="button" class="btn-secondary" [disabled]="seedBusy()" (click)="importExchangeUniverse()">
-            {{ seedBusy() ? 'Importing…' : 'Import NSE & BSE' }}
-          </button>
+          <button type="button" class="btn-secondary" (click)="showScreenerPanel.set(true)">Fetch from Screener</button>
           <button type="button" class="btn-primary" (click)="openAddForm()">Add stock manually</button>
         </div>
       </div>
@@ -262,12 +253,11 @@
       </div>
     } @else {
       <div class="overflow-x-auto">
-        <table class="stock-table min-w-[1400px]">
+        <table class="stock-table">
           <thead>
             <tr>
-              <th class="w-10 text-center">#</th>
               @for (col of columns; track col.key) {
-                <th [class]="col.align === 'right' ? 'text-right' : 'text-left'">
+                <th [class]="(col.align === 'right' ? 'text-right ' : 'text-left ') + (col.responsive ?? '')">
                   <button
                     type="button"
                     class="sort-btn"
@@ -278,60 +268,90 @@
                   </button>
                 </th>
               }
-              <th>Labels</th>
-              <th>Supports</th>
-              <th>Resistances</th>
-              <th></th>
+              <th class="w-12 text-right"><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
-            @for (s of paginatedStocks(); track s.symbol; let i = $index) {
-              <tr>
-                <td class="text-center text-slate-400">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
-                <td class="font-semibold">
-                  <a class="text-kairo-700 hover:underline" [routerLink]="['/stock', s.symbol]">{{ s.symbol }}</a>
+            @for (s of paginatedStocks(); track s.symbol) {
+              <tr [class.registry-row-open]="expandedSymbol() === s.symbol">
+                <td>
+                  <a class="registry-symbol" [routerLink]="['/stock', s.symbol]">{{ s.symbol }}</a>
+                  <p class="registry-name">{{ s.name || '—' }}</p>
+                  @if (labelIdsFor(s.symbol).length) {
+                    <div class="registry-row-labels">
+                      @for (label of rowLabels(s.symbol); track label.id) {
+                        <span class="label-chip">{{ label.name }}</span>
+                      }
+                    </div>
+                  }
                 </td>
-                <td class="max-w-[12rem] truncate text-slate-700">{{ s.name || '—' }}</td>
-                <td class="text-right tabular-nums">{{ formatPrice(s.currentPrice) }}</td>
-                <td class="text-right tabular-nums text-slate-600">{{ s.marketCap ?? '—' }}</td>
-                <td class="text-right tabular-nums">{{ s.pe ?? '—' }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.salesGrowth3y) }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.profitGrowth3y) }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.stockCagr3y) }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.promoterHolding) }}</td>
-                <td class="text-right tabular-nums">{{ formatPct(s.fiiHolding) }}</td>
-                <td class="text-right text-xs text-slate-500">{{ formatUpdated(s.screenerFetchedAt) }}</td>
-                <td class="text-right text-xs text-slate-500">{{ formatUpdated(s.updatedAt) }}</td>
-                <td class="min-w-[12rem]">
-                  <app-stock-label-picker
-                    [labels]="labels()"
-                    [selectedIds]="labelIdsFor(s.symbol)"
-                    [disabled]="labelsBusy()"
-                    (addLabel)="addLabelToStock(s.symbol, $event)"
-                    (removeLabel)="removeLabelFromStock(s.symbol, $event)"
-                  />
+                <td class="text-right font-semibold tabular-nums">{{ formatPrice(s.currentPrice) }}</td>
+                <td class="hidden text-right tabular-nums text-slate-600 sm:table-cell">{{ formatMktCap(s.marketCap) }}</td>
+                <td class="hidden text-right tabular-nums text-slate-600 sm:table-cell">{{ s.pe ?? '—' }}</td>
+                <td
+                  class="hidden text-right tabular-nums lg:table-cell"
+                  [class.text-emerald-600]="isUp(s.salesGrowth3y)"
+                  [class.text-red-600]="isDown(s.salesGrowth3y)"
+                >
+                  {{ formatPct(s.salesGrowth3y) }}
                 </td>
-                <td class="text-xs text-emerald-700">{{ s.supports.join(', ') || '—' }}</td>
-                <td class="text-xs text-red-600">{{ s.resistances.join(', ') || '—' }}</td>
-                <td class="whitespace-nowrap">
+                <td
+                  class="hidden text-right tabular-nums lg:table-cell"
+                  [class.text-emerald-600]="isUp(s.profitGrowth3y)"
+                  [class.text-red-600]="isDown(s.profitGrowth3y)"
+                >
+                  {{ formatPct(s.profitGrowth3y) }}
+                </td>
+                <td
+                  class="hidden text-right tabular-nums xl:table-cell"
+                  [class.text-emerald-600]="isUp(s.stockCagr3y)"
+                  [class.text-red-600]="isDown(s.stockCagr3y)"
+                >
+                  {{ formatPct(s.stockCagr3y) }}
+                </td>
+                <td class="hidden text-right text-xs text-slate-500 md:table-cell">
+                  {{ s.screenerFetchedAt ? formatDataAge(s.screenerFetchedAt) : '—' }}
+                </td>
+                <td class="text-right">
                   <button
                     type="button"
-                    class="text-xs text-kairo-600 hover:underline"
-                    [disabled]="fetchingSymbol() === s.symbol"
-                    (click)="fetchScreener(s)"
+                    class="registry-expand-btn"
+                    [class.registry-expand-btn-open]="expandedSymbol() === s.symbol"
+                    [attr.aria-expanded]="expandedSymbol() === s.symbol"
+                    [attr.aria-label]="'Actions and details for ' + s.symbol"
+                    (click)="toggleDetails(s.symbol)"
                   >
-                    {{ fetchingSymbol() === s.symbol ? 'Fetching…' : 'Fetch Screener' }}
+                    <span aria-hidden="true">⌄</span>
                   </button>
-                  <button type="button" class="ml-2 text-xs text-slate-600 hover:underline" (click)="toggleDetails(s.symbol)">
-                    {{ expandedSymbol() === s.symbol ? 'Hide' : 'Details' }}
-                  </button>
-                  <button type="button" class="ml-2 text-xs text-kairo-600 hover:underline" (click)="edit(s)">Edit</button>
-                  <button type="button" class="ml-2 text-xs text-red-500 hover:underline" (click)="remove(s.symbol)">Delete</button>
                 </td>
               </tr>
               @if (expandedSymbol() === s.symbol) {
-                <tr>
-                  <td [attr.colspan]="columns.length + 5" class="bg-slate-50 px-4 py-4">
+                <tr class="registry-detail-row">
+                  <td [attr.colspan]="columns.length + 1">
+                    <div class="registry-detail-actions">
+                      <button
+                        type="button"
+                        class="btn-secondary px-3 py-1.5 text-xs"
+                        [disabled]="fetchingSymbol() === s.symbol"
+                        (click)="fetchScreener(s)"
+                      >
+                        {{ fetchingSymbol() === s.symbol ? 'Fetching…' : 'Refresh from Screener' }}
+                      </button>
+                      <a class="btn-secondary px-3 py-1.5 text-xs" [routerLink]="['/stock', s.symbol]">Open stock page</a>
+                      <button type="button" class="btn-secondary px-3 py-1.5 text-xs" (click)="edit(s)">Edit</button>
+                      <button type="button" class="registry-delete-btn" (click)="remove(s.symbol)">Delete</button>
+                    </div>
+
+                    <div class="registry-detail-stats">
+                      <div><span>Promoter</span><strong>{{ formatPct(s.promoterHolding) }}</strong></div>
+                      <div><span>FII</span><strong>{{ formatPct(s.fiiHolding) }}</strong></div>
+                      <div><span>CAGR 3Y</span><strong>{{ formatPct(s.stockCagr3y) }}</strong></div>
+                      <div><span>Supports</span><strong class="text-emerald-700">{{ s.supports.join(', ') || '—' }}</strong></div>
+                      <div><span>Resistances</span><strong class="text-red-600">{{ s.resistances.join(', ') || '—' }}</strong></div>
+                      <div><span>Updated</span><strong>{{ formatUpdated(s.updatedAt) }}</strong></div>
+                    </div>
+
+                    <app-stock-labels-manager [symbol]="s.symbol" />
                     <app-screener-fundamentals [stock]="s" />
                   </td>
                 </tr>

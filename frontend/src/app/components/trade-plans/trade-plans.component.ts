@@ -204,6 +204,15 @@ export class TradePlansComponent implements OnInit, OnDestroy {
 
   registry = toSignal(this.registrySvc.watchAll(), { initialValue: [] });
 
+  /** Registry prices, kept fresh by realtime updates plus the 60s poll. */
+  private livePrices = computed(() => {
+    const prices = new Map<string, number>();
+    for (const stock of this.registry()) {
+      if (stock.currentPrice > 0) prices.set(stock.symbol.toUpperCase(), stock.currentPrice);
+    }
+    return prices;
+  });
+
   fmt = formatCurrency;
   fmtPrice = formatPrice;
   fmtPct = formatPctSigned;
@@ -428,12 +437,21 @@ export class TradePlansComponent implements OnInit, OnDestroy {
     this.openPage.set(Math.max(0, Math.min(page, max)));
   }
 
+  /** Current price: live from the registry, falling back to the snapshot taken when the plan was saved. */
+  liveCmp(t: PlannedTrade): number | undefined {
+    return this.livePrices().get(t.symbol.toUpperCase()) ?? t.cmp;
+  }
+
+  isLivePrice(t: PlannedTrade): boolean {
+    return this.livePrices().has(t.symbol.toUpperCase());
+  }
+
   entryPct(t: PlannedTrade): number | null {
-    return TradePlanService.pctVsCmp(t.entryPrice, t.cmp);
+    return TradePlanService.pctVsCmp(t.entryPrice, this.liveCmp(t));
   }
 
   exitPct(t: PlannedTrade): number | null {
-    return TradePlanService.pctVsCmp(t.targetPrice, t.cmp);
+    return TradePlanService.pctVsCmp(t.targetPrice, this.liveCmp(t));
   }
 
   stopLossPnL(t: PlannedTrade): number | null {
@@ -780,11 +798,12 @@ export class TradePlansComponent implements OnInit, OnDestroy {
 
   priceRange(t: PlannedTrade): { min: number; max: number } {
     const prices = [
-      t.cmp,
+      this.liveCmp(t),
       t.entryPrice,
       t.targetPrice,
       t.stopLoss,
       ...(t.entryLegs?.map((leg) => leg.price) ?? []),
+      ...TradePlanService.resolveTargets(t).map((target) => target.price),
     ].filter((p): p is number => p != null && p > 0);
     const summary = this.executionSummary(t);
     if (summary) {
@@ -851,11 +870,12 @@ export class TradePlansComponent implements OnInit, OnDestroy {
   /** Fixed display order: CMP → Entry → Exit → SL (trade sequence, not price sort). */
   priceLevels(t: PlannedTrade): PriceLevel[] {
     const levels: PriceLevel[] = [];
-    if (t.cmp != null) {
+    const cmp = this.liveCmp(t);
+    if (cmp != null) {
       levels.push({
         key: 'cmp',
-        label: 'CMP',
-        price: t.cmp,
+        label: this.isLivePrice(t) ? 'CMP · live' : 'CMP',
+        price: cmp,
         pct: null,
         labelClass: 'text-blue-600',
         markerClass: 'bg-blue-500',

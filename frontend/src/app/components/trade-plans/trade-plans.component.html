@@ -141,7 +141,15 @@
                 </div>
 
                 <div class="min-w-0 flex-1">
-                  <div class="grid gap-1 text-center sm:grid-cols-3">
+                  <div class="grid gap-1 text-center sm:grid-cols-4">
+                    <div class="rounded-lg bg-slate-50 px-2 py-1.5">
+                      <p class="text-[9px] font-semibold uppercase tracking-wide text-blue-600">
+                        {{ isLivePrice(t) ? 'CMP · live' : 'CMP' }}
+                      </p>
+                      <p class="text-xs font-semibold tabular-nums text-slate-900">
+                        {{ liveCmp(t) != null ? fmt(liveCmp(t)!) : '—' }}
+                      </p>
+                    </div>
                     <div class="rounded-lg bg-slate-50 px-2 py-1.5">
                       <p class="text-[9px] font-semibold uppercase tracking-wide text-emerald-600">Entry</p>
                       <p class="text-xs font-semibold tabular-nums text-slate-900">{{ fmt(t.entryPrice) }}</p>
