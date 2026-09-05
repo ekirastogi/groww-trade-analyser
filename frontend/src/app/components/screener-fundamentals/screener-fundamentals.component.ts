@@ -30,27 +30,38 @@ interface GrowthChartView {
   config: ChartConfiguration<'bar'>;
 }
 
-/** Draws the % change above (or below, for declines) each bar. */
+const GROWTH_UP_FILL = 'rgba(16,185,129,0.85)';
+const GROWTH_DOWN_FILL = 'rgba(239,68,68,0.85)';
+const GROWTH_UP_BORDER = '#047857';
+const GROWTH_DOWN_BORDER = '#b91c1c';
+
+interface GrowthLabelMeta {
+  growthLabels?: string[];
+  growthUp?: boolean[];
+}
+
+/** Draws the % change just past the end of each bar. */
 const growthLabelPlugin: Plugin<'bar'> = {
   id: 'screenerGrowthLabels',
   afterDatasetsDraw(chart) {
     const { ctx } = chart;
-    const meta = chart.getDatasetMeta(0);
-    const labels = (chart.data.datasets[0] as { growthLabels?: string[] })?.growthLabels ?? [];
+    const dataset = chart.data.datasets[0] as GrowthLabelMeta | undefined;
+    const labels = dataset?.growthLabels ?? [];
+    const growthUp = dataset?.growthUp ?? [];
     const mobile = isMobileChart();
 
     ctx.save();
-    ctx.font = `600 ${mobile ? 9 : 11}px Inter, system-ui, sans-serif`;
+    ctx.font = `700 ${mobile ? 9 : 11}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'center';
 
-    meta.data.forEach((bar, i) => {
+    chart.getDatasetMeta(0).data.forEach((element, i) => {
       const text = labels[i];
       if (!text) return;
-      const value = Number(chart.data.datasets[0].data[i] ?? 0);
-      const up = value >= 0;
-      ctx.fillStyle = up ? '#047857' : '#b91c1c';
-      ctx.textBaseline = up ? 'bottom' : 'top';
-      ctx.fillText(text, bar.x, bar.y + (up ? -5 : 5));
+      const bar = element as { x: number; y: number; base?: number };
+      const pointsUp = bar.y <= (bar.base ?? bar.y);
+      ctx.fillStyle = growthUp[i] ? GROWTH_UP_BORDER : GROWTH_DOWN_BORDER;
+      ctx.textBaseline = pointsUp ? 'bottom' : 'top';
+      ctx.fillText(text, bar.x, bar.y + (pointsUp ? -5 : 5));
     });
 
     ctx.restore();
@@ -98,10 +109,11 @@ export class ScreenerFundamentalsComponent {
 
   private buildGrowthChartConfig(chart: QuarterlyMetricChart): ChartConfiguration<'bar'> {
     const mobile = isMobileChart();
-    const values = chart.bars.map((b) => b.growthPct);
-    const unitSuffix = chart.unit === 'percent' ? ' pp' : '%';
+    // Bars show the actual metric value; growth only drives the colour and the label.
+    const values = chart.bars.map((b) => b.value);
+    const growthUp = chart.bars.map((b) => b.growthPct >= 0);
     const labelGutter = mobile ? 18 : 22;
-    const hasDecline = values.some((v) => v < 0);
+    const hasNegativeBar = values.some((v) => (v ?? 0) < 0);
 
     return {
       type: 'bar',
@@ -109,16 +121,16 @@ export class ScreenerFundamentalsComponent {
         labels: chart.bars.map((b) => b.shortLabel),
         datasets: [
           {
-            label: `${chart.metric} ${chart.basis}`,
+            label: chart.metric,
             data: values,
             growthLabels: chart.bars.map((b) => b.growthLabel),
-            backgroundColor: values.map((v) =>
-              v >= 0 ? 'rgba(16,185,129,0.85)' : 'rgba(239,68,68,0.85)'
+            growthUp,
+            backgroundColor: growthUp.map((up) => (up ? GROWTH_UP_FILL : GROWTH_DOWN_FILL)),
+            hoverBackgroundColor: growthUp.map((up) =>
+              up ? CHART_COLORS.success : CHART_COLORS.danger
             ),
-            hoverBackgroundColor: values.map((v) =>
-              v >= 0 ? CHART_COLORS.success : CHART_COLORS.danger
-            ),
-            borderWidth: 0,
+            borderColor: growthUp.map((up) => (up ? GROWTH_UP_BORDER : GROWTH_DOWN_BORDER)),
+            borderWidth: 1.5,
             borderRadius: 3,
             // Bars sit flush against each other.
             categoryPercentage: 1,
@@ -131,7 +143,7 @@ export class ScreenerFundamentalsComponent {
         maintainAspectRatio: false,
         // Gutters so the % labels at the bar ends are never clipped.
         layout: {
-          padding: { top: labelGutter, right: 2, bottom: hasDecline ? labelGutter : 0, left: 0 },
+          padding: { top: labelGutter, right: 2, bottom: hasNegativeBar ? labelGutter : 0, left: 0 },
         },
         plugins: {
           legend: { display: false },
@@ -164,12 +176,12 @@ export class ScreenerFundamentalsComponent {
           y: {
             grid: { color: CHART_COLORS.grid },
             border: { display: false },
-            grace: '18%',
+            grace: '12%',
             ticks: {
               font: { size: mobile ? 9 : 10 },
               color: CHART_COLORS.muted,
               maxTicksLimit: 5,
-              callback: (v) => `${Number(v).toFixed(0)}${unitSuffix}`,
+              callback: (v) => formatMetricValue(Number(v), chart.unit),
             },
           },
         },

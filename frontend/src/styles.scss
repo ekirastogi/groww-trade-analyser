@@ -742,8 +742,9 @@
   @apply mt-3 text-xs leading-relaxed text-slate-600;
 }
 
+/* Two columns so each metric's QoQ + YoY pair occupies its own row. */
 .screener-growth-charts-grid {
-  @apply mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3;
+  @apply mt-3 grid grid-cols-1 gap-3 md:grid-cols-2;
 }
 
 .screener-growth-up {
