@@ -31,7 +31,7 @@ export interface AvgCalculatorSummary {
   remainingAvg: number | null;
 }
 
-/** The open position a target is measured against: leftover lots, or the full buy leg when flat. */
+/** Remaining lots after matching buys and sells. Fully closed books have no position. */
 export interface AvgPosition {
   side: FillSide;
   quantity: number;
@@ -100,9 +100,6 @@ export function openPosition(summary: AvgCalculatorSummary): AvgPosition | null 
       quantity: summary.remainingQty,
       avgPrice: summary.remainingAvg,
     };
-  }
-  if (summary.remainingQty === 0 && summary.buyQty > 0 && summary.avgBuy != null) {
-    return { side: 'buy', quantity: summary.buyQty, avgPrice: summary.avgBuy };
   }
   return null;
 }

@@ -488,6 +488,60 @@ export function buildPnLBarDataset(label: string, values: number[]) {
   };
 }
 
+/**
+ * Line dataset whose fill and stroke flip colour at zero, so a drawdown reads red and a
+ * profit reads green within the same series.
+ */
+export function buildZeroSplitLineDataset(label: string, values: number[]) {
+  return {
+    label,
+    data: values,
+    borderColor: CHART_COLORS.success,
+    fill: {
+      target: { value: 0 },
+      above: 'rgba(16,185,129,0.14)',
+      below: 'rgba(239,68,68,0.14)',
+    },
+    segment: {
+      borderColor: (ctx: { p0: { parsed: { y: number } }; p1: { parsed: { y: number } } }) =>
+        ctx.p0.parsed.y < 0 || ctx.p1.parsed.y < 0 ? CHART_COLORS.danger : CHART_COLORS.success,
+    },
+    tension: 0.35,
+    borderWidth: 2.5,
+    pointBackgroundColor: '#fff',
+    pointBorderColor: (ctx: { parsed?: { y: number } }) =>
+      (ctx.parsed?.y ?? 0) < 0 ? CHART_COLORS.danger : CHART_COLORS.success,
+    pointBorderWidth: 2,
+    pointRadius: isMobileChart() ? 2 : 3,
+    pointHoverRadius: 5,
+  };
+}
+
+/**
+ * Floating-bar dataset that reads like a candle chart: each bar spans from the running
+ * total before the day to the running total after it, coloured by that day's result.
+ */
+export function buildCumulativeCandleDataset(label: string, dailyValues: number[]) {
+  let running = 0;
+  const spans = dailyValues.map((value) => {
+    const from = running;
+    running += value;
+    return [from, running] as [number, number];
+  });
+
+  return {
+    label,
+    data: spans,
+    backgroundColor: dailyValues.map((v) => pnlColor(v)),
+    hoverBackgroundColor: dailyValues.map((v) => pnlColor(v, 1)),
+    borderColor: dailyValues.map((v) => pnlColor(v, 1)),
+    borderWidth: 1,
+    borderSkipped: false,
+    barPercentage: 0.7,
+    categoryPercentage: 0.9,
+  };
+}
+
 export function buildLineDataset(
   label: string,
   values: number[],

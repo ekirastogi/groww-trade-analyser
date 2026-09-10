@@ -25,50 +25,83 @@ import { ChargesService } from '../../services/charges.service';
 import { TradePlanService } from '../../services/trade-plan.service';
 import { readJson, writeJson } from '../../utils/local-store.utils';
 
-const STATE_KEY = 'kairo-avg-calculator-v2';
-const SHEETS_KEY = 'kairo-avg-sheets-v1';
+const PLANS_KEY = 'kairo-stock-plans-v1';
+const LEGACY_SHEETS_KEY = 'kairo-avg-sheets-v1';
+const LEGACY_STATE_KEY = 'kairo-avg-calculator-v2';
 
-type TargetMode = 'price' | 'profit';
 type ProfitUnit = 'inr' | 'pct';
+type RightTab = 'guide' | 'price' | 'profit';
 
-/** A saved calculator sheet. Browser-only — never synced to the backend. */
-interface AvgSheet {
+const PROFIT_PRESETS = [1000, 5000, 10000, 25000, 50000] as const;
+const STOP_PRESETS = [1000, 5000, 10000] as const;
+
+/** A saved calculator plan. Browser-only — never synced to the backend. */
+interface StockPlan {
   id: string;
   symbol: string;
   segment: ChargeSegment;
   fills: AvgFill[];
   targets: AvgTarget[];
+  markPrice: number | null;
   updatedAt: number;
 }
 
-interface WorkingState {
-  sheetId: string | null;
-  symbol: string;
-  segment: ChargeSegment;
-  fills: AvgFill[];
-  targets: AvgTarget[];
+interface PlansStore {
+  plans: StockPlan[];
+  activeId: string;
 }
 
-const FALLBACK: WorkingState = {
-  sheetId: null,
-  symbol: '',
-  segment: 'delivery',
-  fills: [],
-  targets: [],
-};
-
-function loadWorking(): WorkingState {
-  const parsed = readJson<Partial<WorkingState>>(STATE_KEY, FALLBACK);
+function emptyPlan(partial?: Partial<StockPlan>): StockPlan {
   return {
-    sheetId: parsed.sheetId ?? null,
-    symbol: parsed.symbol ?? '',
-    segment: parsed.segment ?? 'delivery',
-    fills: Array.isArray(parsed.fills) ? parsed.fills : [],
-    // Targets gained a quantity; older saved rows default to the whole position.
-    targets: Array.isArray(parsed.targets)
-      ? parsed.targets.map((t) => ({ ...t, quantity: t.quantity ?? 0 }))
-      : [],
+    id: crypto.randomUUID(),
+    symbol: '',
+    segment: 'delivery',
+    fills: [],
+    targets: [],
+    markPrice: null,
+    updatedAt: Date.now(),
+    ...partial,
   };
+}
+
+function normalizePlan(raw: Partial<StockPlan> & { id?: string }): StockPlan {
+  return emptyPlan({
+    id: raw.id ?? crypto.randomUUID(),
+    symbol: raw.symbol ?? '',
+    segment: raw.segment ?? 'delivery',
+    fills: Array.isArray(raw.fills) ? raw.fills : [],
+    targets: Array.isArray(raw.targets)
+      ? raw.targets.map((t) => ({ ...t, quantity: t.quantity ?? 0 }))
+      : [],
+    markPrice: raw.markPrice ?? null,
+    updatedAt: raw.updatedAt ?? Date.now(),
+  });
+}
+
+function loadStore(): PlansStore {
+  const stored = readJson<PlansStore | null>(PLANS_KEY, null);
+  if (stored?.plans?.length && stored.activeId) {
+    const plans = stored.plans.map(normalizePlan);
+    const activeId = plans.some((p) => p.id === stored.activeId) ? stored.activeId : plans[0].id;
+    return { plans, activeId };
+  }
+
+  const legacySheets = readJson<StockPlan[]>(LEGACY_SHEETS_KEY, []);
+  const legacyWorking = readJson<Partial<StockPlan> & { sheetId?: string | null }>(LEGACY_STATE_KEY, {});
+  if (legacySheets.length) {
+    const plans = legacySheets.map(normalizePlan);
+    const activeId =
+      plans.find((p) => p.id === legacyWorking.sheetId)?.id ?? plans[0].id;
+    return { plans, activeId };
+  }
+
+  const migrated = emptyPlan({
+    symbol: legacyWorking.symbol ?? '',
+    segment: legacyWorking.segment ?? 'delivery',
+    fills: Array.isArray(legacyWorking.fills) ? legacyWorking.fills : [],
+    targets: Array.isArray(legacyWorking.targets) ? legacyWorking.targets : [],
+  });
+  return { plans: [migrated], activeId: migrated.id };
 }
 
 @Component({
@@ -77,18 +110,6 @@ function loadWorking(): WorkingState {
   imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './avg-calculator.component.html',
   styles: `
-    .avg-hero {
-      @apply overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 text-white shadow-lg sm:p-5;
-    }
-    .avg-kpi {
-      @apply rounded-xl border border-white/10 bg-white/5 px-3 py-2.5;
-    }
-    .avg-kpi-label {
-      @apply text-[10px] font-semibold uppercase tracking-wider text-slate-400;
-    }
-    .avg-kpi-value {
-      @apply mt-1 text-lg font-bold tabular-nums sm:text-xl;
-    }
     .blotter-row {
       @apply grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:grid-cols-[5.5rem_1fr_1fr_auto];
     }
@@ -101,10 +122,10 @@ function loadWorking(): WorkingState {
     .mini-toggle-active {
       @apply bg-slate-900 text-white hover:text-white;
     }
-    .sheet-chip {
-      @apply flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white pl-2.5 pr-1 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300;
+    .plan-tab {
+      @apply flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white pl-3 pr-1 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300;
     }
-    .sheet-chip-active {
+    .plan-tab-active {
       @apply border-kairo-500 bg-kairo-50 text-kairo-700;
     }
     .target-row {
@@ -122,19 +143,28 @@ function loadWorking(): WorkingState {
     .qty-input {
       @apply w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm font-semibold tabular-nums text-slate-900 focus:border-kairo-500 focus:outline-none;
     }
+    .stat-chip {
+      @apply rounded-xl border border-slate-200 bg-white px-3 py-2;
+    }
   `,
 })
 export class AvgCalculatorComponent {
   private readonly charges = inject(ChargesService);
   private readonly tradePlans = inject(TradePlanService);
-  private working = loadWorking();
+  private store = loadStore();
 
-  sheetId = signal<string | null>(this.working.sheetId);
-  symbol = signal<string>(this.working.symbol);
-  segment = signal<ChargeSegment>(this.working.segment);
-  fills = signal<AvgFill[]>(this.working.fills);
-  targets = signal<AvgTarget[]>(this.working.targets);
-  sheets = signal<AvgSheet[]>(readJson<AvgSheet[]>(SHEETS_KEY, []));
+  plans = signal<StockPlan[]>(this.store.plans);
+  planId = signal<string>(this.store.activeId);
+
+  private activePlan(): StockPlan {
+    return this.plans().find((p) => p.id === this.planId()) ?? this.plans()[0];
+  }
+
+  symbol = signal<string>(this.activePlan().symbol);
+  segment = signal<ChargeSegment>(this.activePlan().segment);
+  fills = signal<AvgFill[]>(this.activePlan().fills);
+  targets = signal<AvgTarget[]>(this.activePlan().targets);
+  markPrice = signal<number | null>(this.activePlan().markPrice);
 
   draftSide = signal<FillSide>('buy');
   draftPrice = '';
@@ -142,7 +172,9 @@ export class AvgCalculatorComponent {
   draftTarget = '';
   draftTargetQty = '';
   draftProfit = '';
-  targetMode = signal<TargetMode>('price');
+  draftGuideProfit = '';
+  draftMark = '';
+  rightTab = signal<RightTab>('guide');
   profitUnit = signal<ProfitUnit>('inr');
   addError = signal<string | null>(null);
   targetError = signal<string | null>(null);
@@ -155,12 +187,12 @@ export class AvgCalculatorComponent {
   readonly pnlClass = pnlClass;
   readonly segmentLabels = CHARGE_SEGMENT_LABELS;
   readonly segments = CHARGE_SEGMENTS;
+  readonly profitPresets = PROFIT_PRESETS;
+  readonly stopPresets = STOP_PRESETS;
 
   summary = computed(() => summarizeFills(this.fills()));
   position = computed(() => openPosition(this.summary()));
-  hasFills = computed(() => this.fills().length > 0);
 
-  /** Per-target and blended P&L for the partial exit ladder. */
   ladder = computed(() => {
     const position = this.position();
     if (!position) return null;
@@ -173,7 +205,6 @@ export class AvgCalculatorComponent {
     });
   });
 
-  /** Targets paired with their ladder result; indexes line up by construction. */
   targetRows = computed(() => {
     const slices = this.ladder()?.slices ?? [];
     return this.targets().map((target, i) => ({ target, slice: slices[i] ?? null }));
@@ -197,11 +228,58 @@ export class AvgCalculatorComponent {
     return position ? position.avgPrice * position.quantity : 0;
   });
 
-  canSave = computed(() => this.symbol().trim().length > 0 && this.hasFills());
+  leftoverMark = computed(() => {
+    const position = this.position();
+    const mark = this.markPrice();
+    if (!position || mark == null || mark <= 0) return null;
+    return this.charges.roundTrip({
+      ...this.tradeFor(position),
+      exitPrice: mark,
+    });
+  });
+
+  exitGuideRows = computed(() => {
+    const position = this.position();
+    if (!position) return [];
+    const trade = this.tradeFor(position);
+    const tick = position.side === 'buy' ? 'up' : 'down';
+    return PROFIT_PRESETS.map((profit) => {
+      const solved = this.charges.profitTarget(trade, profit);
+      if (!solved) return { profit, price: null as number | null, movePct: null as number | null, charges: null as number | null };
+      const price = roundToTick(solved.targetPrice, tick);
+      return {
+        profit,
+        price,
+        movePct: solved.movePct,
+        charges: solved.roundTrip.charges,
+      };
+    });
+  });
+
+  stopGuideRows = computed(() => {
+    const position = this.position();
+    if (!position) return [];
+    const trade = this.tradeFor(position);
+    const tick = position.side === 'buy' ? 'down' : 'up';
+    return STOP_PRESETS.map((loss) => {
+      const solved = this.charges.profitTarget(trade, -loss);
+      if (!solved) return { loss, price: null as number | null, movePct: null as number | null };
+      return {
+        loss,
+        price: roundToTick(solved.targetPrice, tick),
+        movePct: solved.movePct,
+      };
+    });
+  });
 
   canAddToBook = computed(
     () => this.symbol().trim().length > 0 && this.position() != null && this.targets().length > 0
   );
+
+  planLabel(plan: StockPlan): string {
+    const symbol = plan.id === this.planId() ? this.symbol().trim() : plan.symbol.trim();
+    return symbol || 'New plan';
+  }
 
   setSide(side: FillSide): void {
     this.draftSide.set(side);
@@ -217,8 +295,8 @@ export class AvgCalculatorComponent {
     this.persist();
   }
 
-  setTargetMode(mode: TargetMode): void {
-    this.targetMode.set(mode);
+  setRightTab(tab: RightTab): void {
+    this.rightTab.set(tab);
     this.targetError.set(null);
   }
 
@@ -249,7 +327,12 @@ export class AvgCalculatorComponent {
     this.persist();
   }
 
-  /** Quantity a new target should default to: whatever is still unallocated. */
+  setMarkFromDraft(): void {
+    const price = Number(this.draftMark);
+    this.markPrice.set(Number.isFinite(price) && price > 0 ? price : null);
+    this.persist();
+  }
+
   private defaultSliceQty(): number {
     const left = this.unallocatedQty();
     if (left > 0) return left;
@@ -272,11 +355,10 @@ export class AvgCalculatorComponent {
     this.persist();
   }
 
-  /** Turns "I want ₹X from this slice" into the exit price that nets exactly that. */
   addProfitTarget(): void {
     const position = this.position();
     if (!position) {
-      this.targetError.set('Add fills first so there is a position to target');
+      this.targetError.set('Add leftover lots first — sells already booked reduce what is left');
       return;
     }
     const goal = Number(this.draftProfit);
@@ -284,34 +366,64 @@ export class AvgCalculatorComponent {
       this.targetError.set('Enter the profit you are aiming for');
       return;
     }
-    const typedQty = Number(this.draftTargetQty);
+    if (this.addSolvedTarget(goal, Number(this.draftTargetQty))) {
+      this.draftProfit = '';
+      this.draftTargetQty = '';
+    }
+  }
+
+  addPresetTarget(profit: number): void {
+    this.addSolvedTarget(profit, this.defaultSliceQty());
+  }
+
+  addGuideProfit(): void {
+    const goal = Number(this.draftGuideProfit);
+    if (!Number.isFinite(goal) || goal === 0) {
+      this.targetError.set('Enter a profit or loss amount');
+      return;
+    }
+    if (this.addSolvedTarget(goal, this.defaultSliceQty())) {
+      this.draftGuideProfit = '';
+    }
+  }
+
+  private addSolvedTarget(netProfit: number, typedQty: number): boolean {
+    const position = this.position();
+    if (!position) {
+      this.targetError.set('Add buy lots first so there is a leftover position');
+      return false;
+    }
     const quantity =
       Number.isFinite(typedQty) && typedQty > 0 ? typedQty : this.defaultSliceQty();
     if (quantity <= 0) {
       this.targetError.set('Nothing left to allocate — reduce an existing target first');
-      return;
+      return false;
     }
 
-    const profit = this.profitUnit() === 'pct' ? (position.avgPrice * quantity * goal) / 100 : goal;
-    const solved = this.charges.profitTarget(
-      { ...this.tradeFor(position), quantity },
-      profit
-    );
+    const profit =
+      this.rightTab() === 'profit' && this.profitUnit() === 'pct'
+        ? (position.avgPrice * quantity * netProfit) / 100
+        : netProfit;
+    const solved = this.charges.profitTarget({ ...this.tradeFor(position), quantity }, profit);
     if (!solved) {
-      this.targetError.set('That profit is not reachable at a valid price');
-      return;
+      this.targetError.set('That amount is not reachable at a valid price');
+      return false;
     }
 
     this.targetError.set(null);
-    const price = roundToTick(solved.targetPrice, position.side === 'buy' ? 'up' : 'down');
+    const roundDir =
+      (position.side === 'buy' && profit >= 0) || (position.side === 'sell' && profit < 0)
+        ? 'up'
+        : 'down';
+    const price = roundToTick(solved.targetPrice, roundDir);
     this.targets.update((rows) => [...rows, createTarget(price, quantity)]);
-    this.draftProfit = '';
-    this.draftTargetQty = '';
     this.persist();
+    return true;
   }
 
   submitTarget(): void {
-    if (this.targetMode() === 'profit') this.addProfitTarget();
+    if (this.rightTab() === 'guide') this.addGuideProfit();
+    else if (this.rightTab() === 'profit') this.addProfitTarget();
     else this.addTarget();
   }
 
@@ -335,16 +447,13 @@ export class AvgCalculatorComponent {
     this.persist();
   }
 
-  /** Splits the position evenly across the existing targets. */
   splitEvenly(): void {
     const position = this.position();
     const rows = this.targets();
     if (!position || !rows.length) return;
     const each = Math.floor(position.quantity / rows.length);
     const remainder = position.quantity - each * rows.length;
-    this.targets.set(
-      rows.map((row, i) => ({ ...row, quantity: each + (i < remainder ? 1 : 0) }))
-    );
+    this.targets.set(rows.map((row, i) => ({ ...row, quantity: each + (i < remainder ? 1 : 0) })));
     this.persist();
   }
 
@@ -353,71 +462,54 @@ export class AvgCalculatorComponent {
     this.persist();
   }
 
-  clearAll(): void {
-    this.fills.set([]);
-    this.targets.set([]);
-    this.addError.set(null);
-    this.targetError.set(null);
-    this.notice.set(null);
-    this.persist();
+  newPlan(): void {
+    const plan = emptyPlan();
+    this.plans.update((rows) => [...rows, plan]);
+    this.selectPlan(plan.id);
   }
 
-  // ── Saved sheets (localStorage only) ─────────────────────────────────
+  duplicatePlan(): void {
+    const current = this.snapshot();
+    const copy = emptyPlan({
+      ...current,
+      id: crypto.randomUUID(),
+      symbol: current.symbol ? `${current.symbol} copy` : '',
+    });
+    this.plans.update((rows) => [...rows, copy]);
+    this.selectPlan(copy.id);
+  }
 
-  saveSheet(): void {
-    const symbol = this.symbol().trim().toUpperCase();
-    if (!symbol) {
-      this.notice.set('Add a stock name before saving');
+  selectPlan(id: string): void {
+    this.flushToPlans();
+    const plan = this.plans().find((row) => row.id === id);
+    if (!plan) return;
+    this.planId.set(id);
+    this.symbol.set(plan.symbol);
+    this.segment.set(plan.segment);
+    this.fills.set(plan.fills);
+    this.targets.set(plan.targets.map((t) => ({ ...t, quantity: t.quantity ?? 0 })));
+    this.markPrice.set(plan.markPrice);
+    this.draftMark = plan.markPrice != null ? String(plan.markPrice) : '';
+    this.notice.set(null);
+    this.targetError.set(null);
+    this.addError.set(null);
+    this.rightTab.set('guide');
+    this.writeStore();
+  }
+
+  deletePlan(id: string, event: Event): void {
+    event.stopPropagation();
+    this.flushToPlans();
+    const remaining = this.plans().filter((row) => row.id !== id);
+    if (!remaining.length) {
+      const fresh = emptyPlan();
+      this.plans.set([fresh]);
+      this.selectPlan(fresh.id);
       return;
     }
-    const id = this.sheetId() ?? crypto.randomUUID();
-    const sheet: AvgSheet = {
-      id,
-      symbol,
-      segment: this.segment(),
-      fills: this.fills(),
-      targets: this.targets(),
-      updatedAt: Date.now(),
-    };
-    this.sheets.update((rows) => {
-      const rest = rows.filter((row) => row.id !== id);
-      return [sheet, ...rest].sort((a, b) => b.updatedAt - a.updatedAt);
-    });
-    this.sheetId.set(id);
-    writeJson(SHEETS_KEY, this.sheets());
-    this.notice.set(`Saved ${symbol} on this browser`);
-    this.persist();
-  }
-
-  loadSheet(id: string): void {
-    const sheet = this.sheets().find((row) => row.id === id);
-    if (!sheet) return;
-    this.sheetId.set(sheet.id);
-    this.symbol.set(sheet.symbol);
-    this.segment.set(sheet.segment);
-    this.fills.set(sheet.fills);
-    this.targets.set(sheet.targets.map((t) => ({ ...t, quantity: t.quantity ?? 0 })));
-    this.notice.set(null);
-    this.targetError.set(null);
-    this.persist();
-  }
-
-  deleteSheet(id: string, event: Event): void {
-    event.stopPropagation();
-    this.sheets.update((rows) => rows.filter((row) => row.id !== id));
-    writeJson(SHEETS_KEY, this.sheets());
-    if (this.sheetId() === id) this.sheetId.set(null);
-    this.persist();
-  }
-
-  newSheet(): void {
-    this.sheetId.set(null);
-    this.symbol.set('');
-    this.fills.set([]);
-    this.targets.set([]);
-    this.notice.set(null);
-    this.targetError.set(null);
-    this.persist();
+    this.plans.set(remaining);
+    if (this.planId() === id) this.selectPlan(remaining[0].id);
+    else this.writeStore();
   }
 
   async addToTradeBook(): Promise<void> {
@@ -443,7 +535,7 @@ export class AvgCalculatorComponent {
         targetPrice: position.avgPrice,
         targets,
         pool: 'open',
-        notes: 'From avg calculator',
+        notes: 'From stock plan',
       });
       this.notice.set(`${symbol} added to the trade book`);
     } catch (error) {
@@ -467,15 +559,22 @@ export class AvgCalculatorComponent {
     }
   }
 
+  onMarkKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.setMarkFromDraft();
+    }
+  }
+
   remainingLabel(): string {
     const summary = this.summary();
     if (!summary.remainingSide) return 'Flat';
-    return summary.remainingSide === 'buy' ? 'Long leftover' : 'Short leftover';
+    return summary.remainingSide === 'buy' ? 'Left long' : 'Left short';
   }
 
   positionLabel(): string {
     const position = this.position();
-    if (!position) return 'No open position';
+    if (!position) return 'No leftover lots';
     const side = position.side === 'buy' ? 'Long' : 'Short';
     return `${side} ${position.quantity} at ${formatPrice(position.avgPrice)}`;
   }
@@ -489,14 +588,29 @@ export class AvgCalculatorComponent {
     };
   }
 
-  private persist(): void {
-    const payload: WorkingState = {
-      sheetId: this.sheetId(),
-      symbol: this.symbol(),
+  private snapshot(): StockPlan {
+    return {
+      id: this.planId(),
+      symbol: this.symbol().trim().toUpperCase(),
       segment: this.segment(),
       fills: this.fills(),
       targets: this.targets(),
+      markPrice: this.markPrice(),
+      updatedAt: Date.now(),
     };
-    writeJson(STATE_KEY, payload);
+  }
+
+  private flushToPlans(): void {
+    const current = this.snapshot();
+    this.plans.update((rows) => rows.map((row) => (row.id === current.id ? current : row)));
+  }
+
+  private persist(): void {
+    this.flushToPlans();
+    this.writeStore();
+  }
+
+  private writeStore(): void {
+    writeJson(PLANS_KEY, { plans: this.plans(), activeId: this.planId() } satisfies PlansStore);
   }
 }

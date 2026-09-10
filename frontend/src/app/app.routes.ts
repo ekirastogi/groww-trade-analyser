@@ -63,7 +63,7 @@ export const routes: Routes = [
         path: 'utils',
         loadComponent: () =>
           import('./components/utils/utils.component').then((m) => m.UtilsComponent),
-        data: { title: 'Utils', subtitle: 'Trading calculators and helpers' },
+        data: { title: 'Stock plans', subtitle: 'Buy/sell lots and charge-aware exit prices' },
       },
       {
         path: 'charges',

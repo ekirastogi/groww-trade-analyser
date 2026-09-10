@@ -1,84 +1,83 @@
 <div class="space-y-4">
-  <div class="avg-hero">
-    <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          {{ symbol() || 'Position average' }}
-        </p>
-        <p class="mt-1 text-2xl font-bold tabular-nums sm:text-3xl" [class]="summary().avgBuy != null ? 'text-white' : 'text-slate-500'">
-          {{ summary().avgBuy != null ? formatPrice(summary().avgBuy!) : '—' }}
-        </p>
-        <p class="mt-1 text-sm text-slate-400">Average buy price</p>
-      </div>
-      <button type="button" class="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:bg-white/10 hover:text-white" (click)="clearAll()">
-        Reset
-      </button>
-    </div>
-    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <div class="avg-kpi">
-        <p class="avg-kpi-label">Avg sell</p>
-        <p class="avg-kpi-value">{{ summary().avgSell != null ? formatPrice(summary().avgSell!) : '—' }}</p>
-      </div>
-      <div class="avg-kpi">
-        <p class="avg-kpi-label">Bought / Sold</p>
-        <p class="avg-kpi-value text-base sm:text-lg">{{ summary().buyQty | number }} / {{ summary().sellQty | number }}</p>
-      </div>
-      <div class="avg-kpi">
-        <p class="avg-kpi-label">Realised P&amp;L</p>
-        <p
-          class="avg-kpi-value"
-          [class.text-slate-300]="summary().realizedPnL == null || summary().realizedPnL === 0"
-          [class.text-emerald-300]="(summary().realizedPnL ?? 0) > 0"
-          [class.text-red-300]="(summary().realizedPnL ?? 0) < 0"
+  <div class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2">
+    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+      @for (plan of plans(); track plan.id) {
+        <button
+          type="button"
+          class="plan-tab"
+          [class.plan-tab-active]="planId() === plan.id"
+          (click)="selectPlan(plan.id)"
         >
-          {{ summary().realizedPnL == null ? '—' : formatCurrency(summary().realizedPnL!) }}
-        </p>
-      </div>
-      <div class="avg-kpi">
-        <p class="avg-kpi-label">{{ remainingLabel() }}</p>
-        <p class="avg-kpi-value text-base sm:text-lg">
-          {{ summary().remainingQty ? (summary().remainingQty | number) : '0' }}
-          @if (summary().remainingAvg != null) {
-            <span class="block text-xs font-medium text-slate-400">at {{ formatPrice(summary().remainingAvg!) }}</span>
-          }
-        </p>
-      </div>
+          {{ planLabel(plan) }}
+          <span
+            class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-600"
+            (click)="deletePlan(plan.id, $event)"
+            aria-label="Delete plan"
+          >
+            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </span>
+        </button>
+      }
     </div>
+    <button type="button" class="btn-primary !px-3 !py-1.5 text-xs" (click)="newPlan()">New plan</button>
+    <button type="button" class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-white hover:text-slate-800" (click)="duplicatePlan()">
+      Duplicate
+    </button>
   </div>
 
-  <!-- Saved sheets: this browser only -->
-  <div class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
-    <span class="pl-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Saved here</span>
-    @for (sheet of sheets(); track sheet.id) {
-      <button
-        type="button"
-        class="sheet-chip"
-        [class.sheet-chip-active]="sheetId() === sheet.id"
-        (click)="loadSheet(sheet.id)"
+  <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+    <div class="stat-chip">
+      <p class="field-label">Avg buy</p>
+      <p class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">
+        {{ summary().avgBuy != null ? formatPrice(summary().avgBuy!) : '—' }}
+      </p>
+    </div>
+    <div class="stat-chip">
+      <p class="field-label">Avg sell</p>
+      <p class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">
+        {{ summary().avgSell != null ? formatPrice(summary().avgSell!) : '—' }}
+      </p>
+    </div>
+    <div class="stat-chip">
+      <p class="field-label">Bought / Sold</p>
+      <p class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">
+        {{ summary().buyQty | number }} / {{ summary().sellQty | number }}
+      </p>
+    </div>
+    <div class="stat-chip">
+      <p class="field-label">Booked P&amp;L</p>
+      <p
+        class="mt-0.5 text-sm font-bold tabular-nums"
+        [class]="summary().realizedPnL == null ? 'text-slate-400' : pnlClass(summary().realizedPnL!)"
       >
-        {{ sheet.symbol }}
-        <span class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-600" (click)="deleteSheet(sheet.id, $event)" aria-label="Delete saved stock">
-          <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </span>
-      </button>
-    } @empty {
-      <span class="text-xs text-slate-500">Nothing saved yet — add a stock name and hit Save.</span>
-    }
-    <button type="button" class="ml-auto rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" (click)="newSheet()">
-      + New
-    </button>
+        {{ summary().realizedPnL == null ? '—' : formatCurrency(summary().realizedPnL!) }}
+      </p>
+    </div>
+    <div class="stat-chip col-span-2 sm:col-span-1">
+      <p class="field-label">{{ remainingLabel() }}</p>
+      <p class="mt-0.5 text-sm font-bold tabular-nums text-slate-900">
+        {{ summary().remainingQty ? (summary().remainingQty | number) : '0' }}
+        @if (summary().remainingAvg != null) {
+          <span class="block text-[11px] font-medium text-slate-500">at {{ formatPrice(summary().remainingAvg!) }}</span>
+        }
+      </p>
+    </div>
   </div>
 
   <div class="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
     <section class="card overflow-hidden">
       <div class="border-b border-slate-100 px-4 py-3">
-        <h3 class="text-sm font-semibold text-slate-900">Stock &amp; fills</h3>
-        <p class="mt-0.5 text-xs text-slate-500">Add buy and sell lots with quantity. Average and P&amp;L update live.</p>
+        <h3 class="text-sm font-semibold text-slate-900">Lots</h3>
+        <p class="mt-0.5 text-xs text-slate-500">
+          Partial buys and sells are fine. Booked P&amp;L is on matched qty; leftover uses the remaining average.
+        </p>
       </div>
       <div class="space-y-3 p-4">
         <div class="flex flex-wrap items-end gap-2">
           <label class="min-w-[9rem] flex-1 field-label">
-            Stock name
+            Stock
             <input
               class="input-field mt-0.5 !py-2 uppercase"
               type="text"
@@ -175,21 +174,48 @@
                 </p>
               </div>
               <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-red-600" (click)="removeFill(fill.id)" aria-label="Remove fill">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
           } @empty {
             <div class="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
-              <p class="text-sm font-medium text-slate-700">No fills yet</p>
-              <p class="mt-1 text-xs text-slate-500">Add buy lots to get average cost. Add sells to see realised P&amp;L.</p>
+              <p class="text-sm font-medium text-slate-700">No lots yet</p>
+              <p class="mt-1 text-xs text-slate-500">Add buys, then partial sells — leftover P&amp;L uses the remaining average.</p>
             </div>
           }
         </div>
 
+        @if (position()) {
+          <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
+            <p class="field-label">Leftover mark</p>
+            <div class="mt-1 flex items-end gap-2">
+              <label class="min-w-0 flex-1 field-label">
+                If leftover exits at
+                <input
+                  class="input-field mt-0.5 !py-2"
+                  type="number"
+                  inputmode="decimal"
+                  min="0"
+                  step="0.05"
+                  placeholder="spot / last"
+                  [(ngModel)]="draftMark"
+                  (keydown)="onMarkKeydown($event)"
+                  (blur)="setMarkFromDraft()"
+                />
+              </label>
+              @if (leftoverMark(); as mark) {
+                <div class="pb-1 text-right">
+                  <p class="text-sm font-bold tabular-nums" [class]="pnlClass(mark.netPnL)">{{ formatCurrency(mark.netPnL) }}</p>
+                  <p class="text-[11px] text-slate-500">net after charges</p>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
         <div class="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-          <button type="button" class="btn-secondary !px-3 !py-1.5 text-xs" [disabled]="!canSave()" (click)="saveSheet()">
-            {{ sheetId() ? 'Update saved' : 'Save' }}
-          </button>
           <button type="button" class="btn-primary !px-3 !py-1.5 text-xs" [disabled]="!canAddToBook() || savingToBook()" (click)="addToTradeBook()">
             {{ savingToBook() ? 'Adding…' : 'Add to trade book' }}
           </button>
@@ -202,114 +228,196 @@
     </section>
 
     <section class="card overflow-hidden">
-      <div class="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
-        <div>
-          <h3 class="text-sm font-semibold text-slate-900">Partial targets</h3>
-          <p class="mt-0.5 text-xs text-slate-500">{{ positionLabel() }} · sell in slices, net is after charges.</p>
+      <div class="border-b border-slate-100 px-4 py-3">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900">Exits</h3>
+            <p class="mt-0.5 text-xs text-slate-500">{{ positionLabel() }} · prices include charges.</p>
+          </div>
+          @if (targets().length > 1) {
+            <button type="button" class="rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" (click)="splitEvenly()">
+              Split leftover evenly
+            </button>
+          }
         </div>
-        @if (targets().length > 1) {
-          <button type="button" class="rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" (click)="splitEvenly()">
-            Split evenly
+        <div class="pill-tabs mt-3">
+          <button type="button" class="pill-tab" [class.pill-tab-active]="rightTab() === 'guide'" (click)="setRightTab('guide')">
+            Exit guide
           </button>
-        }
+          <button type="button" class="pill-tab" [class.pill-tab-active]="rightTab() === 'price'" (click)="setRightTab('price')">
+            By price
+          </button>
+          <button type="button" class="pill-tab" [class.pill-tab-active]="rightTab() === 'profit'" (click)="setRightTab('profit')">
+            By profit
+          </button>
+        </div>
       </div>
 
       <div class="space-y-3 p-4">
-        @if (position()) {
-          <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+        @if (rightTab() === 'guide') {
+          @if (position()) {
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <div>
+                <p class="field-label">Breakeven sell</p>
+                <p class="text-base font-bold tabular-nums text-slate-900">
+                  {{ breakeven() != null ? formatPrice(breakeven()!) : '—' }}
+                </p>
+              </div>
+              <div class="text-right">
+                <p class="field-label">Leftover capital</p>
+                <p class="text-base font-bold tabular-nums text-slate-900">{{ formatCurrency(capital()) }}</p>
+              </div>
+            </div>
+
+            <div class="overflow-hidden rounded-xl border border-slate-200">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th class="px-3 py-2">Net profit</th>
+                    <th class="px-3 py-2">Sell at</th>
+                    <th class="px-3 py-2">Move</th>
+                    <th class="px-3 py-2 text-right"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of exitGuideRows(); track row.profit) {
+                    <tr class="border-t border-slate-100">
+                      <td class="px-3 py-2 font-semibold tabular-nums text-slate-800">{{ formatCurrency(row.profit) }}</td>
+                      <td class="px-3 py-2 font-bold tabular-nums text-slate-900">
+                        {{ row.price != null ? formatPrice(row.price) : '—' }}
+                      </td>
+                      <td class="px-3 py-2 tabular-nums" [class]="row.movePct != null ? pnlClass(row.movePct) : 'text-slate-400'">
+                        {{ row.movePct != null ? formatPctSigned(row.movePct) : '—' }}
+                      </td>
+                      <td class="px-2 py-2 text-right">
+                        <button
+                          type="button"
+                          class="rounded-md px-2 py-1 text-[11px] font-semibold text-kairo-700 hover:bg-kairo-50"
+                          [disabled]="row.price == null"
+                          (click)="addPresetTarget(row.profit)"
+                        >
+                          Use
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex items-end gap-2">
+              <label class="min-w-0 flex-1 field-label">
+                Custom net (use negative for a stop)
+                <input
+                  class="input-field mt-0.5 !py-2"
+                  type="number"
+                  inputmode="decimal"
+                  step="500"
+                  placeholder="7500"
+                  [(ngModel)]="draftGuideProfit"
+                  (keydown)="onTargetKeydown($event)"
+                />
+              </label>
+              <button type="button" class="btn-secondary !px-3 !py-2 text-sm" (click)="addGuideProfit()">Solve</button>
+            </div>
+
             <div>
-              <p class="field-label">Breakeven exit</p>
-              <p class="text-base font-bold tabular-nums text-slate-900">{{ breakeven() != null ? formatPrice(breakeven()!) : '—' }}</p>
+              <p class="field-label mb-1.5">Cut leftover at</p>
+              <div class="flex flex-wrap gap-1.5">
+                @for (row of stopGuideRows(); track row.loss) {
+                  <button
+                    type="button"
+                    class="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left text-[11px] hover:border-red-200"
+                    [disabled]="row.price == null"
+                    (click)="addPresetTarget(-row.loss)"
+                  >
+                    <span class="font-semibold text-red-600">−{{ formatCurrency(row.loss) }}</span>
+                    <span class="mt-0.5 block tabular-nums text-slate-600">{{ row.price != null ? formatPrice(row.price) : '—' }}</span>
+                  </button>
+                }
+              </div>
             </div>
-            <div class="text-right">
-              <p class="field-label">Unallocated</p>
-              <p
-                class="text-base font-bold tabular-nums"
-                [class.text-slate-900]="unallocatedQty() === 0"
-                [class.text-amber-600]="unallocatedQty() > 0"
-                [class.text-red-600]="unallocatedQty() < 0"
-              >
-                {{ unallocatedQty() | number }}
-              </p>
+          } @else {
+            <div class="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
+              <p class="text-sm font-medium text-slate-700">Add leftover lots on the left</p>
+              <p class="mt-1 text-xs text-slate-500">Breakeven and profit sells are for remaining quantity after partial exits.</p>
             </div>
-          </div>
-          @if (unallocatedQty() < 0) {
-            <p class="text-xs text-red-600">Targets add up to more than the position. Trim a slice.</p>
           }
         }
 
-        <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
-          <div class="mb-2 flex rounded-lg bg-white p-0.5 shadow-sm">
-            <button type="button" class="mini-toggle flex-1" [class.mini-toggle-active]="targetMode() === 'price'" (click)="setTargetMode('price')">
-              By price
-            </button>
-            <button type="button" class="mini-toggle flex-1" [class.mini-toggle-active]="targetMode() === 'profit'" (click)="setTargetMode('profit')">
-              By profit
-            </button>
-          </div>
-
-          <div class="flex items-end gap-2">
-            @if (targetMode() === 'price') {
-              <label class="min-w-0 flex-1 field-label">
-                Target price
+        @if (rightTab() === 'price' || rightTab() === 'profit') {
+          <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
+            <div class="flex items-end gap-2">
+              @if (rightTab() === 'price') {
+                <label class="min-w-0 flex-1 field-label">
+                  Target price
+                  <input
+                    class="input-field mt-0.5 !py-2"
+                    type="number"
+                    inputmode="decimal"
+                    min="0"
+                    step="0.05"
+                    placeholder="0.00"
+                    [(ngModel)]="draftTarget"
+                    (keydown)="onTargetKeydown($event)"
+                  />
+                </label>
+              } @else {
+                <label class="min-w-0 flex-1 field-label">
+                  Profit I want (net)
+                  <input
+                    class="input-field mt-0.5 !py-2"
+                    type="number"
+                    inputmode="decimal"
+                    min="0"
+                    [step]="profitUnit() === 'pct' ? 0.5 : 100"
+                    [placeholder]="profitUnit() === 'pct' ? '2' : '5000'"
+                    [(ngModel)]="draftProfit"
+                    (keydown)="onTargetKeydown($event)"
+                  />
+                </label>
+                <div class="flex rounded-lg bg-white p-0.5 shadow-sm">
+                  <button type="button" class="mini-toggle" [class.mini-toggle-active]="profitUnit() === 'inr'" (click)="setProfitUnit('inr')">₹</button>
+                  <button type="button" class="mini-toggle" [class.mini-toggle-active]="profitUnit() === 'pct'" (click)="setProfitUnit('pct')">%</button>
+                </div>
+              }
+              <label class="w-24 field-label">
+                Qty
                 <input
                   class="input-field mt-0.5 !py-2"
                   type="number"
-                  inputmode="decimal"
-                  min="0"
-                  step="0.05"
-                  placeholder="0.00"
-                  [(ngModel)]="draftTarget"
+                  inputmode="numeric"
+                  min="1"
+                  step="1"
+                  [placeholder]="unallocatedQty() > 0 ? (unallocatedQty() | number) : 'all'"
+                  [(ngModel)]="draftTargetQty"
                   (keydown)="onTargetKeydown($event)"
                 />
               </label>
-            } @else {
-              <label class="min-w-0 flex-1 field-label">
-                Profit I want (net)
-                <input
-                  class="input-field mt-0.5 !py-2"
-                  type="number"
-                  inputmode="decimal"
-                  min="0"
-                  [step]="profitUnit() === 'pct' ? 0.5 : 100"
-                  [placeholder]="profitUnit() === 'pct' ? '2' : '5000'"
-                  [(ngModel)]="draftProfit"
-                  (keydown)="onTargetKeydown($event)"
-                />
-              </label>
-              <div class="flex rounded-lg bg-white p-0.5 shadow-sm">
-                <button type="button" class="mini-toggle" [class.mini-toggle-active]="profitUnit() === 'inr'" (click)="setProfitUnit('inr')">₹</button>
-                <button type="button" class="mini-toggle" [class.mini-toggle-active]="profitUnit() === 'pct'" (click)="setProfitUnit('pct')">%</button>
-              </div>
-            }
-            <label class="w-24 field-label">
-              Qty
-              <input
-                class="input-field mt-0.5 !py-2"
-                type="number"
-                inputmode="numeric"
-                min="1"
-                step="1"
-                [placeholder]="unallocatedQty() > 0 ? (unallocatedQty() | number) : 'all'"
-                [(ngModel)]="draftTargetQty"
-                (keydown)="onTargetKeydown($event)"
-              />
-            </label>
-            <button type="button" class="btn-secondary !px-3 !py-2 text-sm" (click)="submitTarget()">Add</button>
+              <button type="button" class="btn-secondary !px-3 !py-2 text-sm" (click)="submitTarget()">Add</button>
+            </div>
+            <p class="mt-2 text-[11px] text-slate-500">
+              @if (rightTab() === 'profit') {
+                Solves the exit price that leaves this much in hand for that many leftover shares, after charges.
+              } @else {
+                Leave quantity blank to use whatever leftover is still unallocated.
+              }
+            </p>
           </div>
+        }
 
-          <p class="mt-2 text-[11px] text-slate-500">
-            @if (targetMode() === 'profit') {
-              Solves the exit price that leaves this much in hand for that many shares, after all charges.
-            } @else {
-              Leave quantity blank to use whatever is still unallocated.
+        @if (targetError()) {
+          <p class="text-xs text-red-600">{{ targetError() }}</p>
+        }
+
+        @if (position() && unallocatedQty() !== 0) {
+          <p class="text-xs" [class.text-amber-600]="unallocatedQty() > 0" [class.text-red-600]="unallocatedQty() < 0">
+            Unallocated leftover: {{ unallocatedQty() | number }}
+            @if (unallocatedQty() < 0) {
+              — targets add up to more than remaining qty.
             }
           </p>
-
-          @if (targetError()) {
-            <p class="mt-2 text-xs text-red-600">{{ targetError() }}</p>
-          }
-        </div>
+        }
 
         <div class="space-y-2">
           @for (row of targetRows(); track row.target.id; let i = $index) {
@@ -317,7 +425,16 @@
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-baseline gap-2">
                   <span class="rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">T{{ i + 1 }}</span>
-                  <span class="text-lg font-bold tabular-nums text-slate-900">{{ formatPrice(row.target.price) }}</span>
+                  <input
+                    class="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-bold tabular-nums text-slate-900 focus:border-kairo-500 focus:outline-none"
+                    type="number"
+                    inputmode="decimal"
+                    min="0"
+                    step="0.05"
+                    [ngModel]="row.target.price || null"
+                    (ngModelChange)="setTargetPrice(row.target.id, $event)"
+                    aria-label="Target price"
+                  />
                   @if (row.slice && row.slice.quantity > 0) {
                     <span class="text-xs font-semibold tabular-nums" [class]="pnlClass(row.slice.movePct)">{{ formatPctSigned(row.slice.movePct) }}</span>
                   }
@@ -334,14 +451,16 @@
                     aria-label="Quantity to exit at this target"
                   />
                   <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600" (click)="removeTarget(row.target.id)" aria-label="Remove target">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                   </button>
                 </div>
               </div>
 
               @if (row.slice && row.slice.quantity > 0 && row.slice.price > 0) {
                 <p class="mt-1.5 text-[11px] text-slate-500">
-                  {{ row.slice.quantity | number }} shares · {{ row.slice.sharePct | number: '1.0-0' }}% of position
+                  {{ row.slice.quantity | number }} leftover · {{ row.slice.sharePct | number: '1.0-0' }}% of remaining
                 </p>
                 <div class="mt-2 grid grid-cols-3 gap-2">
                   <div class="target-metric">
@@ -359,17 +478,19 @@
                       [class.text-emerald-300]="row.slice.netPnL > 0"
                       [class.text-red-300]="row.slice.netPnL < 0"
                       [class.text-slate-200]="row.slice.netPnL === 0"
-                    >{{ formatCurrency(row.slice.netPnL) }}</p>
+                    >
+                      {{ formatCurrency(row.slice.netPnL) }}
+                    </p>
                   </div>
                 </div>
               } @else {
-                <p class="mt-2 text-xs text-slate-500">Set a quantity to see P&amp;L and charges for this slice.</p>
+                <p class="mt-2 text-xs text-slate-500">Set a quantity to see leftover P&amp;L and charges for this slice.</p>
               }
             </div>
           } @empty {
-            <div class="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
-              <p class="text-sm font-medium text-slate-700">No targets</p>
-              <p class="mt-1 text-xs text-slate-500">Sell in parts — add a price or a profit goal per slice.</p>
+            <div class="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center">
+              <p class="text-sm font-medium text-slate-700">No exit slices</p>
+              <p class="mt-1 text-xs text-slate-500">Use Exit guide, or add a price / profit for part of the leftover.</p>
             </div>
           }
         </div>
@@ -378,7 +499,7 @@
           @if (total.allocatedQty > 0) {
             <div class="rounded-xl border border-slate-900 bg-slate-900 p-3 text-white">
               <div class="flex items-center justify-between">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Whole ladder</p>
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Leftover ladder</p>
                 <p class="text-[11px] text-slate-400">
                   {{ total.allocatedQty | number }} shares · avg exit {{ formatPrice(total.avgExitPrice) }}
                 </p>

@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { ChartConfiguration } from 'chart.js';
+import { ChartConfiguration, TooltipItem } from 'chart.js';
 import { ReportStateService } from '../../services/report-state.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
@@ -28,6 +28,8 @@ import {
   isMobileChart,
   buildPnLBarDataset,
   buildLineDataset,
+  buildZeroSplitLineDataset,
+  buildCumulativeCandleDataset,
 } from '../../utils/chart-theme';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
@@ -448,19 +450,51 @@ export class AnalyticsComponent implements OnInit {
       cumulative += d.netPnL;
       return cumulative;
     });
-    const overallPositive = cumulative >= 0;
-    const lineColor = overallPositive ? CHART_COLORS.success : CHART_COLORS.danger;
-    const fillColor = overallPositive ? 'rgba(16,185,129,0.10)' : 'rgba(239,68,68,0.10)';
     const mobile = isMobileChart();
     return withDecimation({
       type: 'line',
       data: {
         labels: periodData.map((d) => abbreviateLabel(d.label, mobile ? 8 : 14)),
-        datasets: [
-          buildLineDataset('Cumulative Net P&L', cumData, lineColor, fillColor),
-        ],
+        datasets: [buildZeroSplitLineDataset('Cumulative Net P&L', cumData)],
       },
       options: lineChartOptions(''),
+    });
+  });
+
+  /**
+   * Each bar spans from the running total before a day to the running total after it, so
+   * the body height is that day's P&L and its position is the equity level at the time.
+   */
+  cumulativeCandleChartConfig = computed(() => {
+    this.chartVersion();
+    const daily = this.analysis()?.daily ?? [];
+    if (!daily.length) return null;
+    const mobile = isMobileChart();
+    const rows = [...daily].sort((a, b) => a.period.localeCompare(b.period));
+
+    return withDecimation({
+      type: 'bar',
+      data: {
+        labels: rows.map((d) => abbreviateLabel(d.label, mobile ? 6 : 12)),
+        datasets: [buildCumulativeCandleDataset('Day P&L', rows.map((d) => d.netPnL))],
+      },
+      options: {
+        ...barChartOptions(''),
+        plugins: {
+          ...baseLegendPublic(false),
+          tooltip: {
+            callbacks: {
+              label: (ctx: TooltipItem<'bar'>) => {
+                const [from, to] = ctx.raw as [number, number];
+                return [
+                  `Day: ${formatCurrency(to - from)}`,
+                  `Cumulative: ${formatCurrency(to)}`,
+                ];
+              },
+            },
+          },
+        },
+      },
     });
   });
 
