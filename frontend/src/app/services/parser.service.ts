@@ -1,14 +1,20 @@
 import { Injectable } from '@angular/core';
 import * as XLSX from 'xlsx';
 import {
-  ChargeItem,
-  ChargesSummary,
   Report,
-  ReportSummary,
   StockSummary,
   Trade,
   TradeType,
+  UnrealisedHolding,
+  UnrealisedLot,
 } from '../models/trade.models';
+import {
+  isJunkScripRow,
+  isUnrealisedSectionLabel,
+  mergeHoldingsWithLots,
+  parseHoldingsAsOf,
+} from '../utils/holdings.utils';
+import { normalizeSymbol } from '../utils/upload-merge.utils';
 
 const CHARGE_LABELS = [
   'Exchange Transaction Charges', 'SEBI Charges', 'STT', 'Stamp Duty',
@@ -41,7 +47,29 @@ export class ParserService {
           header: 1,
           defval: '',
         });
-        report.stockSummary = this.parseScripLevel(scripRows);
+        const scrip = this.parseScripLevel(scripRows);
+        report.stockSummary = scrip.realised;
+        const asOfDate =
+          scrip.asOfDate ||
+          report.unrealisedLots?.[0]?.closingDate ||
+          '';
+        report.unrealisedHoldings = mergeHoldingsWithLots(
+          scrip.unrealised,
+          report.unrealisedLots ?? [],
+          asOfDate
+        );
+        if (scrip.asOfDate && report.unrealisedHoldings.length) {
+          report.unrealisedHoldings = report.unrealisedHoldings.map((holding) => ({
+            ...holding,
+            asOfDate: scrip.asOfDate,
+          }));
+        }
+      } else if (report.unrealisedLots?.length) {
+        report.unrealisedHoldings = mergeHoldingsWithLots(
+          [],
+          report.unrealisedLots,
+          report.unrealisedLots[0]?.closingDate ?? ''
+        );
       }
       return report;
     }
@@ -54,20 +82,42 @@ export class ParserService {
       charges: { items: [], total: 0 },
       trades: [],
       stockSummary: [],
+      unrealisedHoldings: [],
+      unrealisedLots: [],
       dateRange: { min: '', max: '' },
       tradeTypes: ['all'],
     };
 
     this.parseHeaderSection(rows, report);
 
-    const headerIdx = this.findHeaderRow(rows, 'Stock name');
-    if (headerIdx === -1) throw new Error('Could not find trade header row (Stock name)');
+    const unrealisedIdx = this.findUnrealisedSection(rows);
+    const realisedHeaderIdx = this.findHeaderRowBefore(rows, 'Stock name', unrealisedIdx);
+    if (realisedHeaderIdx === -1) throw new Error('Could not find trade header row (Stock name)');
 
-    for (let i = headerIdx + 1; i < rows.length; i++) {
+    const realisedEnd = unrealisedIdx === -1 ? rows.length : unrealisedIdx;
+    for (let i = realisedHeaderIdx + 1; i < realisedEnd; i++) {
       const row = this.padRow(rows[i], 11);
-      if (!String(row[0]).trim() || row[0] === 'Stock name') continue;
+      if (isJunkScripRow(String(row[0]))) continue;
       const trade = this.parseTradeRow(row);
       if (trade) report.trades.push(trade);
+    }
+
+    if (unrealisedIdx !== -1) {
+      const lotHeaderIdx = this.findHeaderRowFrom(rows, 'Stock name', unrealisedIdx);
+      const start = lotHeaderIdx === -1 ? unrealisedIdx + 1 : lotHeaderIdx + 1;
+      for (let i = start; i < rows.length; i++) {
+        const row = this.padRow(rows[i], 11);
+        if (isJunkScripRow(String(row[0]))) continue;
+        const lot = this.parseUnrealisedLot(row);
+        if (lot) report.unrealisedLots!.push(lot);
+      }
+      if (!report.unrealisedHoldings?.length && report.unrealisedLots?.length) {
+        report.unrealisedHoldings = mergeHoldingsWithLots(
+          [],
+          report.unrealisedLots,
+          report.unrealisedLots[0]?.closingDate ?? ''
+        );
+      }
     }
 
     this.finalizeReport(report);
@@ -93,30 +143,85 @@ export class ParserService {
     }
   }
 
-  private parseScripLevel(rows: (string | number)[][]): StockSummary[] {
-    const headerIdx = this.findHeaderRow(rows, 'Stock name');
-    if (headerIdx === -1) return [];
+  private parseScripLevel(rows: (string | number)[][]): {
+    realised: StockSummary[];
+    unrealised: UnrealisedHolding[];
+    asOfDate: string;
+  } {
+    const unrealisedIdx = this.findUnrealisedSection(rows);
+    const realisedHeaderIdx = this.findHeaderRowBefore(rows, 'Stock name', unrealisedIdx);
+    const realised: StockSummary[] = [];
+    const unrealised: UnrealisedHolding[] = [];
+    let asOfDate = '';
 
-    const stocks: StockSummary[] = [];
-    for (let i = headerIdx + 1; i < rows.length; i++) {
-      const row = this.padRow(rows[i], 9);
-      if (!String(row[0]).trim()) continue;
-      stocks.push({
-        stockName: String(row[0]),
-        isin: String(row[1]),
-        quantity: this.parseFloat(row[2]),
-        avgBuyPrice: this.parseFloat(row[3]),
-        buyValue: this.parseFloat(row[4]),
-        avgSellPrice: this.parseFloat(row[5]),
-        sellValue: this.parseFloat(row[6]),
-        realisedPnL: this.parseFloat(row[7]),
-        realisedPnLPct: this.parseFloat(row[8]),
-        tradeCount: 0,
-        allocatedCharges: 0,
-        netPnL: 0,
-      });
+    if (unrealisedIdx !== -1) {
+      asOfDate = parseHoldingsAsOf(String(rows[unrealisedIdx][0] ?? '')) ?? '';
     }
-    return stocks;
+
+    if (realisedHeaderIdx !== -1) {
+      const end = unrealisedIdx === -1 ? rows.length : unrealisedIdx;
+      for (let i = realisedHeaderIdx + 1; i < end; i++) {
+        const stock = this.parseRealisedScripRow(rows[i]);
+        if (stock) realised.push(stock);
+      }
+    }
+
+    if (unrealisedIdx !== -1) {
+      const headerIdx = this.findHeaderRowFrom(rows, 'Stock name', unrealisedIdx);
+      const start = headerIdx === -1 ? unrealisedIdx + 1 : headerIdx + 1;
+      for (let i = start; i < rows.length; i++) {
+        const holding = this.parseUnrealisedScripRow(rows[i], asOfDate);
+        if (holding) unrealised.push(holding);
+      }
+    }
+
+    return { realised, unrealised, asOfDate };
+  }
+
+  private parseRealisedScripRow(raw: (string | number)[]): StockSummary | null {
+    const row = this.padRow(raw, 9);
+    const name = String(row[0]).trim();
+    if (isJunkScripRow(name)) return null;
+    return {
+      stockName: name,
+      isin: String(row[1]),
+      symbol: normalizeSymbol(name),
+      quantity: this.parseFloat(row[2]),
+      avgBuyPrice: this.parseFloat(row[3]),
+      buyValue: this.parseFloat(row[4]),
+      avgSellPrice: this.parseFloat(row[5]),
+      sellValue: this.parseFloat(row[6]),
+      realisedPnL: this.parseFloat(row[7]),
+      realisedPnLPct: this.parseFloat(row[8]),
+      tradeCount: 0,
+      allocatedCharges: 0,
+      netPnL: 0,
+    };
+  }
+
+  private parseUnrealisedScripRow(
+    raw: (string | number)[],
+    asOfDate: string
+  ): UnrealisedHolding | null {
+    const row = this.padRow(raw, 9);
+    const name = String(row[0]).trim();
+    if (isJunkScripRow(name)) return null;
+    const buyValue = this.parseFloat(row[4]);
+    const unrealisedPnL = this.parseFloat(row[7]);
+    return {
+      stockName: name,
+      isin: String(row[1]).trim(),
+      symbol: normalizeSymbol(name),
+      quantity: this.parseFloat(row[2]),
+      avgBuyPrice: this.parseFloat(row[3]),
+      buyValue,
+      closingPrice: this.parseFloat(row[5]),
+      closingValue: this.parseFloat(row[6]),
+      unrealisedPnL,
+      unrealisedPnLPct: this.parseFloat(row[8]) || (buyValue ? unrealisedPnL / buyValue : 0),
+      asOfDate,
+      lots: [],
+    };
   }
 
   private parseTradeRow(row: (string | number)[]): Trade | null {
@@ -144,6 +249,28 @@ export class ParserService {
       remark,
       tradeType,
       holdingDays,
+    };
+  }
+
+  private parseUnrealisedLot(row: (string | number)[]): UnrealisedLot | null {
+    const buyDate = this.parseDate(String(row[3]));
+    const closingDate = this.parseDate(String(row[6]));
+    if (!buyDate || !closingDate) return null;
+    const buyMs = new Date(buyDate).getTime();
+    const closeMs = new Date(closingDate).getTime();
+    return {
+      stockName: String(row[0]).trim(),
+      isin: String(row[1]).trim(),
+      quantity: this.parseFloat(row[2]),
+      buyDate,
+      buyPrice: this.parseFloat(row[4]),
+      buyValue: this.parseFloat(row[5]),
+      closingDate,
+      closingPrice: this.parseFloat(row[7]),
+      closingValue: this.parseFloat(row[8]),
+      unrealisedPnL: this.parseFloat(row[9]),
+      remark: String(row[10]).trim(),
+      holdingDays: Math.floor((closeMs - buyMs) / 86400000),
     };
   }
 
@@ -196,8 +323,27 @@ export class ParserService {
     });
   }
 
+  private findUnrealisedSection(rows: (string | number)[][]): number {
+    return rows.findIndex((row) => isUnrealisedSectionLabel(String(row[0] ?? '')));
+  }
+
   private findHeaderRow(rows: (string | number)[][], col: string): number {
     return rows.findIndex((row) => row.some((cell) => String(cell).trim() === col));
+  }
+
+  private findHeaderRowFrom(rows: (string | number)[][], col: string, from: number): number {
+    for (let i = from; i < rows.length; i++) {
+      if (rows[i].some((cell) => String(cell).trim() === col)) return i;
+    }
+    return -1;
+  }
+
+  private findHeaderRowBefore(rows: (string | number)[][], col: string, before: number): number {
+    const end = before === -1 ? rows.length : before;
+    for (let i = 0; i < end; i++) {
+      if (rows[i].some((cell) => String(cell).trim() === col)) return i;
+    }
+    return -1;
   }
 
   private padRow(row: (string | number)[], n: number): (string | number)[] {

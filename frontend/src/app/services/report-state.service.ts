@@ -16,7 +16,7 @@ import { AuthService } from './auth.service';
 
 const MAX_REPORT_HISTORY = 5;
 const HISTORY_STORAGE_KEY = 'groww-pl-report-history';
-const FIREBASE_REPORT_CACHE_PREFIX = 'kairo-firebase-report-v2';
+const FIREBASE_REPORT_CACHE_PREFIX = 'kairo-firebase-report-v3';
 
 interface CachedFirebaseReport {
   savedAt: number;
@@ -108,6 +108,10 @@ export class ReportStateService {
         if (current?.dailyAnalytics?.length && !report.dailyAnalytics?.length) {
           report.dailyAnalytics = current.dailyAnalytics;
         }
+        if (current?.unrealisedHoldings?.length && !report.unrealisedHoldings?.length) {
+          report.unrealisedHoldings = current.unrealisedHoldings;
+          report.unrealisedLots = current.unrealisedLots;
+        }
         this.applyFirebaseReport(report);
       }
     } catch {
@@ -179,6 +183,8 @@ export class ReportStateService {
           period: current.summary.period,
           unrealisedPnL: current.summary.unrealisedPnL,
         };
+        merged.unrealisedHoldings = current.unrealisedHoldings;
+        merged.unrealisedLots = current.unrealisedLots;
         this.applyFirebaseReport(merged);
       } finally {
         this.tradesLoading.set(false);
@@ -388,6 +394,7 @@ export class ReportStateService {
   private isValidReport(report: Report): boolean {
     if (!report?.summary?.clientCode) return false;
     if (report.stockSummary?.length) return true;
+    if (report.unrealisedHoldings?.length) return true;
     if (!Array.isArray(report.trades) || !report.trades.length) return false;
     return report.trades.every((trade) => Number.isFinite(trade.realisedPnL));
   }

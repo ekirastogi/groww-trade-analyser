@@ -49,22 +49,11 @@ func parseXLSX(r io.Reader) (*models.Report, error) {
 	report := &models.Report{}
 	parseHeaderSection(rows, report)
 
-	headerIdx := findHeaderRow(rows, "Stock name")
-	if headerIdx == -1 {
-		return nil, fmt.Errorf("could not find trade header row (Stock name)")
+	trades, err := parseRealisedTrades(rows)
+	if err != nil {
+		return nil, err
 	}
-
-	for i := headerIdx + 1; i < len(rows); i++ {
-		row := padRow(rows[i], 11)
-		if strings.TrimSpace(row[0]) == "" || row[0] == "Stock name" {
-			continue
-		}
-		trade, err := parseTradeRow(row)
-		if err != nil {
-			continue
-		}
-		report.Trades = append(report.Trades, trade)
-	}
+	report.Trades = trades
 
 	scripSheet := "Scrip Level"
 	if idx, _ := f.GetSheetIndex(scripSheet); idx != -1 {
@@ -90,22 +79,11 @@ func parseCSV(r io.Reader) (*models.Report, error) {
 	report := &models.Report{}
 	parseHeaderSection(rows, report)
 
-	headerIdx := findHeaderRow(rows, "Stock name")
-	if headerIdx == -1 {
-		return nil, fmt.Errorf("could not find trade header row (Stock name)")
+	trades, err := parseRealisedTrades(rows)
+	if err != nil {
+		return nil, err
 	}
-
-	for i := headerIdx + 1; i < len(rows); i++ {
-		row := padRow(rows[i], 11)
-		if strings.TrimSpace(row[0]) == "" || row[0] == "Stock name" {
-			continue
-		}
-		trade, err := parseTradeRow(row)
-		if err != nil {
-			continue
-		}
-		report.Trades = append(report.Trades, trade)
-	}
+	report.Trades = trades
 
 	finalizeReport(report)
 	return report, nil
@@ -158,16 +136,49 @@ func isChargeLabel(label string) bool {
 	return false
 }
 
+func parseRealisedTrades(rows [][]string) ([]models.Trade, error) {
+	unrealisedIdx := findUnrealisedSection(rows)
+	headerIdx := findHeaderRowBefore(rows, "Stock name", unrealisedIdx)
+	if headerIdx == -1 {
+		return nil, fmt.Errorf("could not find trade header row (Stock name)")
+	}
+
+	end := len(rows)
+	if unrealisedIdx != -1 {
+		end = unrealisedIdx
+	}
+
+	var trades []models.Trade
+	for i := headerIdx + 1; i < end; i++ {
+		row := padRow(rows[i], 11)
+		if isJunkScripRow(row[0]) {
+			continue
+		}
+		trade, err := parseTradeRow(row)
+		if err != nil {
+			continue
+		}
+		trades = append(trades, trade)
+	}
+	return trades, nil
+}
+
 func parseScripLevel(rows [][]string) []models.StockSummary {
-	headerIdx := findHeaderRow(rows, "Stock name")
+	unrealisedIdx := findUnrealisedSection(rows)
+	headerIdx := findHeaderRowBefore(rows, "Stock name", unrealisedIdx)
 	if headerIdx == -1 {
 		return nil
 	}
 
+	end := len(rows)
+	if unrealisedIdx != -1 {
+		end = unrealisedIdx
+	}
+
 	var stocks []models.StockSummary
-	for i := headerIdx + 1; i < len(rows); i++ {
+	for i := headerIdx + 1; i < end; i++ {
 		row := padRow(rows[i], 9)
-		if strings.TrimSpace(row[0]) == "" {
+		if isJunkScripRow(row[0]) {
 			continue
 		}
 		stocks = append(stocks, models.StockSummary{
@@ -276,14 +287,46 @@ func finalizeReport(report *models.Report) {
 }
 
 func findHeaderRow(rows [][]string, col string) int {
-	for i, row := range rows {
-		for _, cell := range row {
+	return findHeaderRowBefore(rows, col, -1)
+}
+
+func findHeaderRowBefore(rows [][]string, col string, before int) int {
+	end := len(rows)
+	if before != -1 {
+		end = before
+	}
+	for i := 0; i < end; i++ {
+		for _, cell := range rows[i] {
 			if strings.TrimSpace(cell) == col {
 				return i
 			}
 		}
 	}
 	return -1
+}
+
+func findUnrealisedSection(rows [][]string) int {
+	for i, row := range rows {
+		if len(row) == 0 {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(row[0])), "unrealised") {
+			return i
+		}
+	}
+	return -1
+}
+
+func isJunkScripRow(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	return lower == "" ||
+		lower == "stock name" ||
+		lower == "total" ||
+		lower == "realised" ||
+		lower == "realised trades" ||
+		lower == "unrealised trades" ||
+		strings.HasPrefix(lower, "unrealised") ||
+		strings.HasPrefix(lower, "disclaimer")
 }
 
 func padRow(row []string, n int) []string {

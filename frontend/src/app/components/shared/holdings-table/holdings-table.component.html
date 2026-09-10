@@ -1,0 +1,126 @@
+<div class="overflow-x-auto">
+  <table class="stock-table">
+    <thead>
+      <tr>
+        <th class="w-10 text-center">#</th>
+        @for (col of columns; track col.key) {
+          <th [class]="(col.key === 'stockName' ? 'text-left w-auto' : 'text-right') + ' ' + responsiveClass(col.key)">
+            <button
+              type="button"
+              class="sort-btn"
+              [class.sort-btn-active]="tableSort.isActive(col.key)"
+              (click)="tableSort.toggle(col.key, $event)"
+            >
+              {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
+            </button>
+          </th>
+        }
+        <th class="w-8"></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (holding of rows(); track rowKey(holding); let i = $index) {
+        <tr class="cursor-pointer" [class.bg-kairo-50]="isExpanded(holding)" (click)="toggleExpand(holding)">
+          <td class="text-center text-slate-400">{{ i + 1 }}</td>
+          @for (col of columns; track col.key) {
+            <td [class]="(col.key === 'stockName' ? 'col-name' : 'text-right tabular-nums') + ' ' + responsiveClass(col.key)">
+              @switch (col.key) {
+                @case ('stockName') {
+                  <a
+                    class="block truncate font-semibold text-kairo-700 hover:underline"
+                    [title]="holding.stockName"
+                    [routerLink]="['/stock', holding.symbol]"
+                    (click)="$event.stopPropagation()"
+                  >{{ holding.stockName }}</a>
+                  <span class="text-xs text-slate-400">{{ holding.isin || '—' }}</span>
+                }
+                @case ('quantity') { {{ holding.quantity | number }} }
+                @case ('avgBuyPrice') { {{ formatPrice(holding.avgBuyPrice) }} }
+                @case ('closingPrice') { {{ formatPrice(holding.closingPrice) }} }
+                @case ('buyValue') { {{ formatCurrency(holding.buyValue) }} }
+                @case ('closingValue') { {{ formatCurrency(holding.closingValue) }} }
+                @case ('lots') { {{ holding.lots.length || 1 }} }
+                @case ('unrealisedPnL') {
+                  <span class="font-semibold" [class]="pnlClass(holding.unrealisedPnL)">{{ formatCurrency(holding.unrealisedPnL) }}</span>
+                }
+                @case ('unrealisedPnLPct') {
+                  <span [class]="pnlClass(holding.unrealisedPnL)">{{ formatPct(holding.unrealisedPnLPct) }}</span>
+                }
+              }
+            </td>
+          }
+          <td class="text-slate-400">{{ isExpanded(holding) ? '▾' : '▸' }}</td>
+        </tr>
+        @if (isExpanded(holding) && holding.lots.length) {
+          <tr>
+            <td [attr.colspan]="columns.length + 2" class="bg-slate-50 px-4 py-3">
+              <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Open lots as of {{ holding.asOfDate }}</p>
+              <table class="data-table min-w-[520px]">
+                <thead>
+                  <tr>
+                    <th class="w-10 text-center">#</th>
+                    @for (col of lotColumns; track col.key) {
+                      <th [class]="col.key === 'buyDate' ? 'text-left' : 'text-right'">
+                        <button
+                          type="button"
+                          class="sort-btn"
+                          [class.sort-btn-active]="lotSort.isActive(col.key)"
+                          (click)="lotSort.toggle(col.key, $event)"
+                        >
+                          {{ col.label }} <span>{{ lotSort.indicator(col.key) }}</span>
+                        </button>
+                      </th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (lot of sortedLots(holding); track lot.isin + lot.buyDate + lot.quantity + $index; let j = $index) {
+                    <tr>
+                      <td class="text-center text-slate-400">{{ j + 1 }}</td>
+                      <td>{{ lot.buyDate }}</td>
+                      <td class="text-right tabular-nums">{{ lot.quantity | number }}</td>
+                      <td class="text-right tabular-nums">{{ formatPrice(lot.buyPrice) }}</td>
+                      <td class="text-right tabular-nums">{{ formatPrice(lot.closingPrice) }}</td>
+                      <td class="text-right tabular-nums font-semibold" [class]="pnlClass(lot.unrealisedPnL)">{{ formatCurrency(lot.unrealisedPnL) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        }
+      } @empty {
+        <tr>
+          <td [attr.colspan]="columns.length + 2" class="py-8 text-center text-sm text-slate-400">
+            {{ emptyMessage() }}
+          </td>
+        </tr>
+      }
+    </tbody>
+    @if (totals(); as sum) {
+      <tfoot>
+        <tr>
+          <td></td>
+          @for (col of columns; track col.key) {
+            <td [class]="(col.key === 'stockName' ? 'col-name font-semibold' : 'text-right tabular-nums font-semibold') + ' ' + responsiveClass(col.key)">
+              @switch (col.key) {
+                @case ('stockName') { {{ sum.stockCount }} holdings }
+                @case ('quantity') { {{ sum.quantity | number }} }
+                @case ('buyValue') { {{ formatCurrency(sum.buyValue) }} }
+                @case ('closingValue') { {{ formatCurrency(sum.closingValue) }} }
+                @case ('unrealisedPnL') {
+                  <span [class]="pnlClass(sum.unrealisedPnL)">{{ formatCurrency(sum.unrealisedPnL) }}</span>
+                }
+                @case ('unrealisedPnLPct') {
+                  <span [class]="pnlClass(sum.unrealisedPnL)">{{ sum.buyValue ? formatPct(sum.unrealisedPnL / sum.buyValue) : '—' }}</span>
+                }
+                @default { }
+              }
+            </td>
+          }
+          <td></td>
+        </tr>
+      </tfoot>
+    }
+  </table>
+</div>

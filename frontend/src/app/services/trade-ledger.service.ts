@@ -6,6 +6,8 @@ import {
   StoredTrade,
   Trade,
   TradeType,
+  UnrealisedHolding,
+  UnrealisedLot,
   UploadRecord,
   DailyAnalyticsRow,
 } from '../models/trade.models';
@@ -31,6 +33,7 @@ import {
 import { expandTradeTypes, effectiveTradeType, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
 import { profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
 import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
+import { buyLotKey } from '../utils/holdings.utils';
 
 export interface UploadResult {
   uploadId: string;
@@ -181,6 +184,60 @@ function isMissingColumnError(error: { message?: string; code?: string }, column
   );
 }
 
+function isMissingRelationError(error: { message?: string; code?: string }): boolean {
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    error.code === 'PGRST205' ||
+    error.code === '42P01' ||
+    message.includes('does not exist') ||
+    message.includes('schema cache')
+  );
+}
+
+function holdingFromRow(row: Record<string, unknown>): UnrealisedHolding {
+  const camel = rowToCamel<Record<string, unknown>>(row);
+  const lotsRaw = camel['lots'];
+  const lots = Array.isArray(lotsRaw) ? (lotsRaw as UnrealisedLot[]) : [];
+  return {
+    stockName: String(camel['stockName'] ?? ''),
+    isin: String(camel['isin'] ?? ''),
+    symbol: String(camel['symbol'] ?? ''),
+    quantity: Number(camel['quantity'] ?? 0),
+    avgBuyPrice: numField(camel, 'avgBuyPrice'),
+    buyValue: numField(camel, 'buyValue'),
+    closingPrice: numField(camel, 'closingPrice'),
+    closingValue: numField(camel, 'closingValue'),
+    unrealisedPnL: numField(camel, 'unrealisedPnL', 'unrealisedPnl'),
+    unrealisedPnLPct: numField(camel, 'unrealisedPnLPct', 'unrealisedPnlPct'),
+    asOfDate: String(camel['asOfDate'] ?? ''),
+    lots,
+  };
+}
+
+function holdingToRow(
+  holding: UnrealisedHolding,
+  userId: string,
+  clientCode: string
+): Record<string, unknown> {
+  return objectToSnake({
+    userId,
+    clientCode,
+    symbol: holding.symbol,
+    stockName: holding.stockName,
+    isin: holding.isin,
+    quantity: holding.quantity,
+    avgBuyPrice: holding.avgBuyPrice,
+    buyValue: holding.buyValue,
+    closingPrice: holding.closingPrice,
+    closingValue: holding.closingValue,
+    unrealisedPnl: holding.unrealisedPnL,
+    unrealisedPnlPct: holding.unrealisedPnLPct,
+    asOfDate: holding.asOfDate,
+    lots: holding.lots ?? [],
+    updatedAt: Date.now(),
+  });
+}
+
 function tradeToRow(trade: StoredTrade, userId: string): Record<string, unknown> {
   return objectToSnake({
     id: trade.dedupeKey,
@@ -261,6 +318,8 @@ export class TradeLedgerService {
   private chargesSvc = inject(ChargesService);
   /** null = unknown; false = `by_trade_type` column not on remote DB yet. */
   private stockProfilesSupportByTradeType: boolean | null = null;
+  /** null = unknown; false = `unrealised_holdings` table not on remote DB yet. */
+  private holdingsTableAvailable: boolean | null = null;
   /** The traded-label backfill only needs to run once per session. */
   private tradedLabelsSynced = false;
 
@@ -273,12 +332,13 @@ export class TradeLedgerService {
     const contentHash = await computeFileContentHash(buffer);
     const report = await this.parser.parseFile(file);
 
-    if (!report.trades.length) {
+    if (!report.trades.length && !(report.unrealisedHoldings?.length)) {
       throw new Error('No trades found in this file. Check that it is a Groww P&L export.');
     }
 
     const clientCode = report.summary.clientCode?.trim() || 'UNKNOWN';
     const clientName = report.summary.clientName?.trim() || clientCode;
+    const holdings = report.unrealisedHoldings ?? [];
 
     if (options.forceReingest) {
       await this.deleteClientData(clientCode);
@@ -295,7 +355,9 @@ export class TradeLedgerService {
         .limit(1)
         .maybeSingle();
       if (existingFile) {
-        const syncedReport = await this.syncDerivedData(clientCode, clientName);
+        await this.purgeMarkToMarketTrades(clientCode, report);
+        await this.replaceHoldings(clientCode, holdings);
+        const syncedReport = await this.syncDerivedData(clientCode, clientName, { holdings });
         return {
           uploadId: existingFile.id,
           clientCode,
@@ -303,7 +365,7 @@ export class TradeLedgerService {
           newTradesAdded: 0,
           duplicatesSkipped: 0,
           fileDuplicate: true,
-          affectedSymbols: [],
+          affectedSymbols: holdings.map((holding) => holding.symbol),
           report: syncedReport ?? undefined,
         };
       }
@@ -385,8 +447,12 @@ export class TradeLedgerService {
     );
     if (uploadError) throw uploadError;
 
+    await this.purgeMarkToMarketTrades(clientCode, report);
+    await this.replaceHoldings(clientCode, holdings);
+
     const syncedReport = await this.syncDerivedData(clientCode, clientName, {
       uploadMeta: uploadRecord,
+      holdings,
     });
 
     return {
@@ -688,7 +754,11 @@ export class TradeLedgerService {
       report.summary.clientName,
       undefined,
       undefined,
-      { totalTradeCount: trades.length, tradesLoaded: true }
+      {
+        totalTradeCount: trades.length,
+        tradesLoaded: true,
+        holdings: report.unrealisedHoldings,
+      }
     );
     return {
       ...merged,
@@ -696,7 +766,12 @@ export class TradeLedgerService {
       summary: {
         ...report.summary,
         realisedPnL: merged.summary.realisedPnL,
+        unrealisedPnL:
+          report.summary.unrealisedPnL ||
+          (report.unrealisedHoldings ?? []).reduce((sum, holding) => sum + holding.unrealisedPnL, 0),
       },
+      unrealisedHoldings: report.unrealisedHoldings ?? merged.unrealisedHoldings,
+      unrealisedLots: report.unrealisedLots ?? merged.unrealisedLots,
     };
   }
 
@@ -712,8 +787,9 @@ export class TradeLedgerService {
     const clientName = client?.clientName ?? clientCode;
     let stockProfiles = await this.getStockProfiles(clientCode);
     const totalTradeCount = await this.countTrades(clientCode);
+    const holdings = await this.getHoldings(clientCode);
 
-    if (!stockProfiles.length && totalTradeCount === 0) return null;
+    if (!stockProfiles.length && totalTradeCount === 0 && !holdings.length) return null;
 
     if (totalTradeCount > 0) {
       stockProfiles = await this.ensureStockProfilesWithBreakdown(clientCode, stockProfiles);
@@ -757,6 +833,7 @@ export class TradeLedgerService {
         totalTradeCount: totalTradeCount || client?.tradeCount || trades.length,
         tradesLoaded: loadTrades && trades.length > 0,
         dailyAnalytics,
+        holdings,
       }
     );
 
@@ -801,10 +878,12 @@ export class TradeLedgerService {
     options: {
       trades?: StoredTrade[];
       uploadMeta?: Omit<UploadRecord, 'id'>;
+      holdings?: UnrealisedHolding[];
     } = {}
   ): Promise<Report | null> {
     const trades = options.trades ?? (await this.getAllTrades(clientCode));
-    if (!trades.length) return null;
+    const holdings = options.holdings ?? (await this.getHoldings(clientCode));
+    if (!trades.length && !holdings.length) return null;
 
     let uploadMeta = options.uploadMeta;
     if (!uploadMeta) {
@@ -834,10 +913,16 @@ export class TradeLedgerService {
     await this.writeAnalyticsDaily(clientCode, buildDailyAnalyticsFromTrades(trades));
     await this.watchlists.syncPnlTierWatchlists(profiles);
     await this.registry.syncSymbols(
-      profiles.map((p) => ({ symbol: p.symbol, name: p.stockName, isin: p.isin })),
+      [
+        ...profiles.map((p) => ({ symbol: p.symbol, name: p.stockName, isin: p.isin })),
+        ...holdings.map((h) => ({ symbol: h.symbol, name: h.stockName, isin: h.isin })),
+      ],
       'pnl_upload'
     );
-    await this.tagTradedSymbols(profiles.map((p) => p.symbol));
+    await this.tagTradedSymbols([
+      ...profiles.map((p) => p.symbol),
+      ...holdings.map((h) => h.symbol),
+    ]);
 
     return this.buildReportFromStoredData(
       trades,
@@ -848,6 +933,7 @@ export class TradeLedgerService {
       {
         totalTradeCount: trades.length,
         tradesLoaded: true,
+        holdings,
       }
     );
   }
@@ -858,12 +944,19 @@ export class TradeLedgerService {
     clientName: string,
     uploadMeta: UploadRecord | Omit<UploadRecord, 'id'> | undefined,
     stockProfiles?: StockProfile[],
-    meta?: { totalTradeCount?: number; tradesLoaded?: boolean; dailyAnalytics?: DailyAnalyticsRow[] }
+    meta?: {
+      totalTradeCount?: number;
+      tradesLoaded?: boolean;
+      dailyAnalytics?: DailyAnalyticsRow[];
+      holdings?: UnrealisedHolding[];
+    }
   ): Report {
     const profiles =
       stockProfiles ??
       (trades.length ? this.buildStockProfilesFromTrades(trades, clientCode, clientName) : []);
     const stockSummary = profiles.map((profile) => profileToStockSummary(profile));
+    const holdings = meta?.holdings ?? [];
+    const holdingsPnL = holdings.reduce((sum, holding) => sum + holding.unrealisedPnL, 0);
     const plainTrades: Trade[] = trades.map(
       ({
         stockName,
@@ -921,7 +1014,7 @@ export class TradeLedgerService {
         clientCode,
         period: uploadMeta?.periodLabel ?? 'All trades',
         realisedPnL,
-        unrealisedPnL: uploadMeta?.reportUnrealisedPnL ?? 0,
+        unrealisedPnL: holdings.length ? holdingsPnL : (uploadMeta?.reportUnrealisedPnL ?? 0),
       },
       charges: {
         items: uploadMeta?.charges ?? [],
@@ -930,6 +1023,8 @@ export class TradeLedgerService {
       trades: plainTrades,
       stockSummary,
       stockProfiles: profiles,
+      unrealisedHoldings: holdings,
+      unrealisedLots: holdings.flatMap((holding) => holding.lots ?? []),
       dateRange: {
         min: dates[0] ?? '',
         max: dates[dates.length - 1] ?? '',
@@ -1159,6 +1254,14 @@ export class TradeLedgerService {
     const uid = await this.auth.getDataUserId();
     if (!uid) return;
 
+    const { error: deleteError } = await this.supabase.client
+      .from('stock_profiles')
+      .delete()
+      .eq('user_id', uid)
+      .eq('client_code', clientCode);
+    if (deleteError) throw deleteError;
+    if (!profiles.length) return;
+
     const includeByTradeType = this.stockProfilesSupportByTradeType !== false;
     for (let i = 0; i < profiles.length; i += UPSERT_BATCH_LIMIT) {
       const slice = profiles.slice(i, i + UPSERT_BATCH_LIMIT);
@@ -1177,6 +1280,145 @@ export class TradeLedgerService {
     }
   }
 
+  async getHoldings(clientCode: string): Promise<UnrealisedHolding[]> {
+    if (this.holdingsTableAvailable === false) return [];
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+
+    const { data, error } = await this.supabase.client
+      .from('unrealised_holdings')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('client_code', clientCode)
+      .order('unrealised_pnl', { ascending: false });
+
+    if (error) {
+      if (isMissingRelationError(error)) {
+        this.holdingsTableAvailable = false;
+        return [];
+      }
+      throw error;
+    }
+    this.holdingsTableAvailable = true;
+    return (data ?? []).map((row) => holdingFromRow(row as Record<string, unknown>));
+  }
+
+  private async replaceHoldings(clientCode: string, holdings: UnrealisedHolding[]): Promise<void> {
+    if (this.holdingsTableAvailable === false) return;
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return;
+
+    const { error: deleteError } = await this.supabase.client
+      .from('unrealised_holdings')
+      .delete()
+      .eq('user_id', uid)
+      .eq('client_code', clientCode);
+    if (deleteError) {
+      if (isMissingRelationError(deleteError)) {
+        this.holdingsTableAvailable = false;
+        return;
+      }
+      throw deleteError;
+    }
+
+    if (!holdings.length) {
+      this.holdingsTableAvailable = true;
+      return;
+    }
+
+    const rows = holdings.map((holding) => holdingToRow(holding, uid, clientCode));
+    const { error } = await this.supabase.client.from('unrealised_holdings').upsert(rows);
+    if (error) {
+      if (isMissingRelationError(error)) {
+        this.holdingsTableAvailable = false;
+        return;
+      }
+      throw error;
+    }
+    this.holdingsTableAvailable = true;
+  }
+
+  private async deleteHoldings(clientCode: string): Promise<void> {
+    if (this.holdingsTableAvailable === false) return;
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return;
+    const { error } = await this.supabase.client
+      .from('unrealised_holdings')
+      .delete()
+      .eq('user_id', uid)
+      .eq('client_code', clientCode);
+    if (error && isMissingRelationError(error)) {
+      this.holdingsTableAvailable = false;
+      return;
+    }
+    if (error) throw error;
+  }
+
+  /**
+   * Drop previously ingested mark-to-market rows for still-held lots.
+   * Groww writes open positions with the report's closing date as a fake sell,
+   * so each new file otherwise re-adds the same holding to realised P&L.
+   */
+  private async purgeMarkToMarketTrades(clientCode: string, report: Report): Promise<number> {
+    const lots = report.unrealisedLots?.length
+      ? report.unrealisedLots
+      : (report.unrealisedHoldings ?? []).flatMap((holding) => holding.lots ?? []);
+    if (!lots.length) return 0;
+
+    const openKeys = new Set(
+      lots.map((lot) => buyLotKey(lot.isin, lot.buyDate, lot.quantity, lot.buyPrice))
+    );
+    const realisedKeys = new Set(
+      report.trades.map((trade) =>
+        buyLotKey(trade.isin, trade.buyDate, trade.quantity, trade.buyPrice)
+      )
+    );
+    const periodEnds = await this.loadUploadPeriodEnds(clientCode);
+    for (const lot of lots) {
+      if (lot.closingDate) periodEnds.add(lot.closingDate);
+    }
+
+    const stored = await this.getAllTrades(clientCode);
+    const toDelete = stored
+      .filter((trade) => {
+        const key = buyLotKey(trade.isin, trade.buyDate, trade.quantity, trade.buyPrice);
+        if (openKeys.has(key)) return true;
+        if (!realisedKeys.has(key) || !periodEnds.has(trade.sellDate)) return false;
+        return !report.trades.some(
+          (candidate) =>
+            buyLotKey(candidate.isin, candidate.buyDate, candidate.quantity, candidate.buyPrice) ===
+              key && candidate.sellDate === trade.sellDate
+        );
+      })
+      .map((trade) => trade.dedupeKey)
+      .filter(Boolean);
+
+    const uniqueIds = [...new Set(toDelete)];
+    for (let i = 0; i < uniqueIds.length; i += UPSERT_BATCH_LIMIT) {
+      const chunk = uniqueIds.slice(i, i + UPSERT_BATCH_LIMIT);
+      const { error } = await this.supabase.client.from('trades').delete().in('id', chunk);
+      if (error) throw error;
+    }
+    return uniqueIds.length;
+  }
+
+  private async loadUploadPeriodEnds(clientCode: string): Promise<Set<string>> {
+    const uid = await this.auth.getDataUserId();
+    const ends = new Set<string>();
+    if (!uid) return ends;
+    const { data, error } = await this.supabase.client
+      .from('uploads')
+      .select('period_end')
+      .eq('user_id', uid)
+      .eq('client_code', clientCode);
+    if (error) return ends;
+    for (const row of data ?? []) {
+      const end = String((row as { period_end?: string }).period_end ?? '');
+      if (end) ends.add(end);
+    }
+    return ends;
+  }
+
   private async deleteClientData(clientCode: string): Promise<void> {
     const uid = await this.auth.getDataUserId();
     if (!uid) return;
@@ -1184,6 +1426,7 @@ export class TradeLedgerService {
     await this.deleteTableRows('uploads', uid, clientCode);
     await this.deleteTableRows('stock_profiles', uid, clientCode);
     await this.deleteTableRows('analytics_daily', uid, clientCode);
+    await this.deleteHoldings(clientCode);
     await this.clientSvc.deleteClient(clientCode);
   }
 

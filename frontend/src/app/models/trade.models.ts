@@ -22,6 +22,38 @@ export interface ReportSummary {
   unrealisedPnL: number;
 }
 
+/** Open lot from the Groww "Unrealised trades" section (mark-to-market, not a sale). */
+export interface UnrealisedLot {
+  stockName: string;
+  isin: string;
+  quantity: number;
+  buyDate: string;
+  buyPrice: number;
+  buyValue: number;
+  closingDate: string;
+  closingPrice: number;
+  closingValue: number;
+  unrealisedPnL: number;
+  remark: string;
+  holdingDays: number;
+}
+
+/** Open position snapshot from the Groww "Unrealised (Holdings as on …)" scrip section. */
+export interface UnrealisedHolding {
+  stockName: string;
+  isin: string;
+  symbol: string;
+  quantity: number;
+  avgBuyPrice: number;
+  buyValue: number;
+  closingPrice: number;
+  closingValue: number;
+  unrealisedPnL: number;
+  unrealisedPnLPct: number;
+  asOfDate: string;
+  lots: UnrealisedLot[];
+}
+
 export interface Trade {
   stockName: string;
   isin: string;
@@ -105,6 +137,9 @@ export interface Report {
   stockSummary: StockSummary[];
   /** Full profiles with per-trade-type aggregates (source of truth for filtered stock views). */
   stockProfiles?: StockProfile[];
+  /** Open positions from the latest P&L file — never mixed into realised P&L. */
+  unrealisedHoldings?: UnrealisedHolding[];
+  unrealisedLots?: UnrealisedLot[];
   dateRange: DateRange;
   tradeTypes: TradeType[];
   /** Authoritative trade count from DB (may exceed trades.length while trades load lazily). */
