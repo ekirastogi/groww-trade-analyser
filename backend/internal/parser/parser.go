@@ -310,7 +310,8 @@ func findUnrealisedSection(rows [][]string) int {
 		if len(row) == 0 {
 			continue
 		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(row[0])), "unrealised") {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(row[0])), "unrealised") &&
+			!strings.EqualFold(strings.TrimSpace(row[0]), "Unrealised P&L") {
 			return i
 		}
 	}

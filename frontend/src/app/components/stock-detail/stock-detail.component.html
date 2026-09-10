@@ -147,6 +147,15 @@
     <button
       type="button"
       class="stock-detail-tab"
+      [class.stock-detail-tab-active]="activeTab() === 'holdings'"
+      [class.stock-detail-tab-muted]="!myHolding()"
+      (click)="activeTab.set('holdings')"
+    >
+      Holdings
+    </button>
+    <button
+      type="button"
+      class="stock-detail-tab"
       [class.stock-detail-tab-active]="activeTab() === 'my-trades'"
       (click)="activeTab.set('my-trades')"
     >
@@ -283,6 +292,16 @@
           Chart and technicals appear when live quotes are available. Fundamentals from Screener are always accessible.
         </p>
         <button type="button" class="btn-secondary" (click)="activeTab.set('fundamentals')">View fundamentals</button>
+      </div>
+    }
+  } @else if (activeTab() === 'holdings') {
+    @if (myHolding()) {
+      <app-holdings-table [holdings]="holdingRows()" emptyMessage="No open position in this stock" />
+    } @else {
+      <div class="stock-detail-empty">
+        <div class="stock-detail-empty-icon" aria-hidden="true"></div>
+        <h2 class="stock-detail-empty-title">No open holding</h2>
+        <p class="stock-detail-empty-text">This stock is not in your latest unrealised holdings snapshot.</p>
       </div>
     }
   } @else {

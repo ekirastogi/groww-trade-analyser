@@ -16,7 +16,7 @@ export function parseHoldingsAsOf(label: string): string | null {
 
 export function isUnrealisedSectionLabel(label: string): boolean {
   const lower = label.trim().toLowerCase();
-  return lower.startsWith('unrealised');
+  return lower === 'unrealised trades' || lower.startsWith('unrealised (holdings');
 }
 
 export function isJunkScripRow(name: string): boolean {

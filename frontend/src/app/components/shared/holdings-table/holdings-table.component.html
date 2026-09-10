@@ -54,7 +54,7 @@
         @if (isExpanded(holding) && holding.lots.length) {
           <tr>
             <td [attr.colspan]="columns.length + 2" class="bg-slate-50 px-4 py-3">
-              <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Open lots as of {{ holding.asOfDate }}</p>
+              <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Open lots as of {{ formatDate(holding.asOfDate) }}</p>
               <table class="data-table min-w-[520px]">
                 <thead>
                   <tr>

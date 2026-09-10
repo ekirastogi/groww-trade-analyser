@@ -7,9 +7,25 @@
     </div>
   } @else {
     <div class="heatmap-toolbar">
-      <div class="flex items-center gap-2">
-        <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
-        <app-trade-type-filter [compact]="true" />
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="segmented-control">
+          @for (tab of bookTabs; track tab.id) {
+            <button
+              type="button"
+              class="segment-item"
+              [class.segment-item-active]="book() === tab.id"
+              (click)="book.set(tab.id)"
+            >
+              {{ tab.label }}
+            </button>
+          }
+        </div>
+        @if (book() !== 'holdings') {
+          <div class="flex items-center gap-2">
+            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
+            <app-trade-type-filter [compact]="true" />
+          </div>
+        }
       </div>
       <div class="heatmap-totals">
         <div class="heatmap-total heatmap-total-profit">

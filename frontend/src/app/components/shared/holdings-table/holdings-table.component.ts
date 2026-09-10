@@ -2,7 +2,7 @@ import { Component, computed, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { UnrealisedHolding, UnrealisedLot } from '../../../models/trade.models';
-import { formatCurrency, formatPct, formatPrice, pnlClass } from '../../../utils/format.utils';
+import { formatCurrency, formatDate, formatPct, formatPrice, pnlClass } from '../../../utils/format.utils';
 import { TableSortState } from '../../../utils/table-sort.utils';
 import { holdingsTotals } from '../../../utils/holdings.utils';
 
@@ -34,6 +34,7 @@ export class HoldingsTableComponent {
   readonly formatCurrency = formatCurrency;
   readonly formatPrice = formatPrice;
   readonly formatPct = formatPct;
+  readonly formatDate = formatDate;
   readonly pnlClass = pnlClass;
 
   readonly columns: { key: HoldingColumn; label: string }[] = [

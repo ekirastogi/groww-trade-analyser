@@ -7,6 +7,21 @@
     </div>
   }
 
+  <div class="segmented-control" role="tablist" aria-label="P&L book">
+    @for (tab of bookTabs; track tab.id) {
+      <button
+        type="button"
+        role="tab"
+        class="segment-item"
+        [class.segment-item-active]="book() === tab.id"
+        [attr.aria-selected]="book() === tab.id"
+        (click)="setBook(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    }
+  </div>
+
   <div class="segmented-control" role="tablist" aria-label="Watchlist type">
     @for (tab of mainTabs; track tab.id) {
       <button
@@ -47,13 +62,15 @@
         class="watchlist-filters"
         [class.watchlist-filters-collapsed]="!mobileFiltersOpen()"
       >
-        <app-date-range-filter />
-        <div class="watchlist-filter-divider hidden h-3 w-px bg-slate-200 sm:block"></div>
-        <div class="flex min-w-0 flex-wrap items-center gap-1">
-          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
-          <app-trade-type-filter [compact]="true" />
-        </div>
-        <div class="watchlist-filter-divider hidden h-3 w-px bg-slate-200 sm:block"></div>
+        @if (book() !== 'holdings') {
+          <app-date-range-filter />
+          <div class="watchlist-filter-divider hidden h-3 w-px bg-slate-200 sm:block"></div>
+          <div class="flex min-w-0 flex-wrap items-center gap-1">
+            <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
+            <app-trade-type-filter [compact]="true" />
+          </div>
+          <div class="watchlist-filter-divider hidden h-3 w-px bg-slate-200 sm:block"></div>
+        }
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cap</span>
           <app-market-cap-filter

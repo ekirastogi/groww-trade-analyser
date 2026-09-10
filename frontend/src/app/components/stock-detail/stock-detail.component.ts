@@ -16,16 +16,18 @@ import { ScreenerService } from '../../services/screener.service';
 import { TradingChartComponent } from '../trading-chart/trading-chart.component';
 import { ScreenerFundamentalsComponent } from '../screener-fundamentals/screener-fundamentals.component';
 import { StockLabelsManagerComponent } from '../stock-labels/stock-labels-manager.component';
+import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
 import { RegistryStock } from '../../models/trading-journal.models';
 import { formatCurrency, formatPct } from '../../utils/format.utils';
 import { formatDataAge, formatFetchedAt } from '../../utils/data-age.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { Trade } from '../../models/trade.models';
+import { normalizeSymbol } from '../../utils/upload-merge.utils';
 
 @Component({
   selector: 'app-stock-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, TradingChartComponent, ScreenerFundamentalsComponent, StockLabelsManagerComponent],
+  imports: [CommonModule, FormsModule, TradingChartComponent, ScreenerFundamentalsComponent, StockLabelsManagerComponent, HoldingsTableComponent],
   templateUrl: './stock-detail.component.html',
 })
 export class StockDetailComponent implements OnInit {
@@ -114,7 +116,7 @@ export class StockDetailComponent implements OnInit {
     { initialValue: undefined }
   );
 
-  activeTab = signal<'market' | 'fundamentals' | 'my-trades'>('fundamentals');
+  activeTab = signal<'market' | 'fundamentals' | 'holdings' | 'my-trades'>('fundamentals');
   fmt = formatCurrency;
   fmtPct = formatPct;
 
@@ -262,6 +264,24 @@ export class StockDetailComponent implements OnInit {
     const realisedPnL = trades.reduce((s, t) => s + t.realisedPnL, 0);
     const wins = trades.filter((t) => t.realisedPnL > 0).length;
     return { tradeCount: trades.length, realisedPnL, winRate: (wins / trades.length) * 100 };
+  });
+
+  myHolding = computed(() => {
+    const sym = this.symbol();
+    if (!sym) return null;
+    const target = sym.toUpperCase();
+    return (
+      (this.reportState.report()?.unrealisedHoldings ?? []).find(
+        (holding) =>
+          holding.symbol.toUpperCase() === target ||
+          normalizeSymbol(holding.stockName) === target
+      ) ?? null
+    );
+  });
+
+  holdingRows = computed(() => {
+    const holding = this.myHolding();
+    return holding ? [holding] : [];
   });
 
   goBack(): void {

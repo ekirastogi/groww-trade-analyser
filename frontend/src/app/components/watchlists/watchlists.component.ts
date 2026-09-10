@@ -21,6 +21,7 @@ import {
   tierDisplayName,
   tierShortLabel,
 } from '../../utils/pnl-watchlist.utils';
+import { holdingsToStockSummaries, PnLBook } from '../../utils/holdings.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
@@ -89,6 +90,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     const wl = readWatchlistFilters(this.router.routerState.snapshot.root.queryParamMap);
     if (wl.side) this.activeTab.set(wl.side);
     if (wl.bands) this.tierMode.set(wl.bands);
+    if (wl.book) this.book.set(wl.book);
     this.selectedAutoTierId.set(wl.tier ?? null);
     this.selectedMarketCapTiers.set(wl.marketCapTiers);
   }
@@ -100,9 +102,15 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     { id: 'profitable', label: 'Profitable' },
   ];
 
+  readonly bookTabs: { id: PnLBook; label: string }[] = [
+    { id: 'realised', label: 'Realised P&L' },
+    { id: 'holdings', label: 'Holdings' },
+  ];
+
   readonly allSubtabId = ALL_SUBTAB_ID;
 
   activeTab = signal<WatchlistTab>('losing');
+  book = signal<PnLBook>('realised');
   tierMode = signal<PnlTierMode>('band');
   selectedAutoTierId = signal<string | null>(null);
   expandedStockKey = signal<string | null>(null);
@@ -114,6 +122,13 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   readonly pnlClass = pnlClass;
   readonly tableSort = new TableSortState('netPnL');
 
+  bookStocks = computed((): StockSummary[] => {
+    if (this.book() === 'holdings') {
+      return holdingsToStockSummaries(this.state.report()?.unrealisedHoldings ?? []);
+    }
+    return this.filteredStocks.stocks();
+  });
+
   readonly tierStockColumns = [
     { key: 'stockName', label: 'Stock', align: 'left' as const, mobile: true },
     { key: 'realisedPnL', label: 'P&L', align: 'right' as const, mobile: false },
@@ -122,7 +137,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   ];
 
   autoTierTabs = computed((): AutoTierTab[] => {
-    const summaries = this.filterByMarketCap(this.filteredStocks.stocks());
+    const summaries = this.filterByMarketCap(this.bookStocks());
     const mode = this.tierMode();
 
     return PNL_WATCHLIST_TIERS.map((tier) => {
@@ -157,11 +172,14 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     const cap = caps.length ? caps.map((tier) => MARKET_CAP_LABELS[tier]).join(', ') : 'All caps';
     const report = this.state.report();
     const dates =
-      report &&
-      (this.state.startDate() !== report.dateRange.min || this.state.endDate() !== report.dateRange.max)
-        ? `${this.formatDate(this.state.startDate())} – ${this.formatDate(this.state.endDate())}`
-        : 'Inception';
-    return `${dates} · ${trade} · ${band} · ${cap}`;
+      this.book() === 'holdings'
+        ? 'Open positions'
+        : report &&
+            (this.state.startDate() !== report.dateRange.min || this.state.endDate() !== report.dateRange.max)
+          ? `${this.formatDate(this.state.startDate())} – ${this.formatDate(this.state.endDate())}`
+          : 'Inception';
+    const book = this.book() === 'holdings' ? 'Holdings' : 'Realised';
+    return `${book} · ${dates} · ${trade} · ${band} · ${cap}`;
   });
 
   lossTierTabs = computed(() =>
@@ -175,7 +193,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   visibleAutoTierTabs = computed((): AutoTierTab[] => {
     const tiers =
       this.activeTab() === 'profitable' ? this.profitTierTabs() : this.lossTierTabs();
-    const summaries = this.filterByMarketCap(this.filteredStocks.stocks());
+    const summaries = this.filterByMarketCap(this.bookStocks());
     const allCount = summaries.filter((stock) =>
       this.activeTab() === 'profitable' ? stock.netPnL > 0 : stock.netPnL < 0
     ).length;
@@ -215,7 +233,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   activeViewLabel = computed(() => this.activeAutoTierMeta()?.fullLabel ?? '');
 
   tierStocks = computed(() => {
-    const stockSummaries = this.filterByMarketCap(this.filteredStocks.stocks());
+    const stockSummaries = this.filterByMarketCap(this.bookStocks());
     const watchlist = this.activeAutoWatchlist();
     if (!watchlist) return [] as StockSummary[];
 
@@ -273,6 +291,18 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     });
   }
 
+  setBook(book: PnLBook): void {
+    this.book.set(book);
+    this.selectedAutoTierId.set(null);
+    this.expandedStockKey.set(null);
+    this.expandedDayKey.set(null);
+    this.lazyTrades.clear();
+    this.filterUrl.patchWatchlistQuery({
+      [FILTER_QUERY_KEYS.book]: book === 'realised' ? null : book,
+      [FILTER_QUERY_KEYS.tier]: null,
+    });
+  }
+
   setTierMode(mode: PnlTierMode): void {
     this.tierMode.set(mode);
     this.selectedAutoTierId.set(null);
@@ -320,6 +350,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
 
   toggleStockExpand(stock: StockSummary, event?: Event): void {
     event?.stopPropagation();
+    if (this.book() === 'holdings') return;
     const key = this.stockRowKey(stock);
     const expanding = this.expandedStockKey() !== key;
     this.expandedStockKey.set(expanding ? key : null);

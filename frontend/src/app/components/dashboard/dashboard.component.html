@@ -76,7 +76,7 @@
             <p class="text-xs text-slate-500">
               Still-held stocks from your latest P&amp;L file.
               @if (holdingsSummary(); as open) {
-                Mark-to-market as of {{ open.asOfDate }} · {{ open.stockCount }} stocks · {{ formatCurrency(open.unrealisedPnL) }} unrealised.
+                Mark-to-market as of {{ formatDate(open.asOfDate) }} · {{ open.stockCount }} stocks · {{ formatCurrency(open.unrealisedPnL) }} unrealised.
               } @else {
                 These are not included in realised P&amp;L.
               }

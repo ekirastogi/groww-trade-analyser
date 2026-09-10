@@ -14,6 +14,7 @@ import { ReportStateService } from '../../services/report-state.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
 import { StockSummary } from '../../models/trade.models';
 import { formatCurrency } from '../../utils/format.utils';
+import { holdingsToStockSummaries, PnLBook } from '../../utils/holdings.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { layoutTreemap, minRectDimension, rectToPercentStyle } from '../../utils/treemap.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
@@ -68,12 +69,22 @@ export class HeatmapComponent implements OnInit {
   readonly filteredStocks = inject(FilteredStockService);
   readonly fmt = formatCurrency;
   readonly heatmapHeight = HEATMAP_HEIGHT_PX;
+  readonly bookTabs: { id: PnLBook; label: string }[] = [
+    { id: 'realised', label: 'Realised P&L' },
+    { id: 'holdings', label: 'Holdings' },
+  ];
+  book = signal<PnLBook>('realised');
 
   private columnsEl = viewChild<ElementRef<HTMLElement>>('columnsEl');
   private paneWidth = signal(0);
   private paneHeight = signal(0);
 
-  private stockRows = computed((): StockSummary[] => this.filteredStocks.stocks());
+  private stockRows = computed((): StockSummary[] => {
+    if (this.book() === 'holdings') {
+      return holdingsToStockSummaries(this.reportState.report()?.unrealisedHoldings ?? []);
+    }
+    return this.filteredStocks.stocks();
+  });
 
   profitableSection = computed(() =>
     this.buildSection(this.stockRows().filter((s) => s.netPnL > 0), true)

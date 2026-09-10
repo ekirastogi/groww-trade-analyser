@@ -374,7 +374,7 @@
               <p class="text-xs text-slate-500">
                 Still-held stocks are kept out of realised P&amp;L.
                 @if (holdingsSummary(); as open) {
-                  Mark-to-market as of {{ open.asOfDate }} · {{ formatCurrency(open.unrealisedPnL) }}.
+                  Mark-to-market as of {{ formatDate(open.asOfDate) }} · {{ formatCurrency(open.unrealisedPnL) }}.
                 }
               </p>
             </div>

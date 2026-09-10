@@ -13,7 +13,7 @@ import { ReportStateService } from '../../services/report-state.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
 import { AnalysisService } from '../../services/analysis.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
-import { formatCompactCurrency, formatCurrency, pnlClass } from '../../utils/format.utils';
+import { formatCompactCurrency, formatCurrency, formatDate, pnlClass } from '../../utils/format.utils';
 import { holdingsTotals } from '../../utils/holdings.utils';
 import {
   CHART_COLORS,
@@ -133,6 +133,7 @@ export class AnalyticsComponent implements OnInit {
   private analysisSvc = inject(AnalysisService);
   readonly formatCurrency = formatCurrency;
   readonly formatCompactCurrency = formatCompactCurrency;
+  readonly formatDate = formatDate;
   readonly pnlClass = pnlClass;
   readonly tradeTypeLabels = TRADE_TYPE_LABELS;
   readonly tabs: { id: AnalyticsTab; label: string }[] = [

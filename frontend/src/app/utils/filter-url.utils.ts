@@ -2,6 +2,7 @@ import { ParamMap } from '@angular/router';
 import { TradeType } from '../models/trade.models';
 import { MarketCapTier } from './market-cap.utils';
 import { PnlTierMode } from './pnl-watchlist.utils';
+import { PnLBook } from './holdings.utils';
 import { defaultTradeTypesForRoute } from './trade-type-filter.utils';
 
 export { defaultTradeTypesForRoute };
@@ -32,6 +33,7 @@ export interface WatchlistFilterParams {
   bands?: PnlTierMode;
   tier?: string | null;
   marketCapTiers: MarketCapTier[];
+  book?: PnLBook;
 }
 
 export function parseTradeTypes(raw: string | null, fallback: TradeType[]): TradeType[] {
@@ -90,10 +92,13 @@ export function readWatchlistFilters(params: ParamMap): WatchlistFilterParams {
   const bandsRaw = params.get(FILTER_QUERY_KEYS.bands);
   const bands = bandsRaw === 'band' || bandsRaw === 'cumulative' ? bandsRaw : undefined;
   const tier = params.get(FILTER_QUERY_KEYS.tier);
+  const bookRaw = params.get(FILTER_QUERY_KEYS.book);
+  const book = bookRaw === 'holdings' || bookRaw === 'realised' ? bookRaw : undefined;
   return {
     side,
     bands,
     tier: tier || null,
     marketCapTiers: parseMarketCapTiers(params.get(FILTER_QUERY_KEYS.cap)),
+    book,
   };
 }
