@@ -39,7 +39,7 @@
             <p>{{ data.summary.winRate | number:'1.1-1' }}% win rate</p>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <div class="analytics-kpi">
             <p class="analytics-kpi-label">Realised P&amp;L</p>
             <p class="analytics-kpi-value" [class]="pnlClass(data.summary.realisedPnL)">{{ formatCurrency(data.summary.realisedPnL) }}</p>
@@ -59,14 +59,6 @@
           <div class="analytics-kpi">
             <p class="analytics-kpi-label">Avg loss</p>
             <p class="analytics-kpi-value text-red-300">{{ formatCurrency(avgPnLPerOutcome().avgLossPerTrade) }}</p>
-          </div>
-          <div class="analytics-kpi hidden sm:block">
-            <p class="analytics-kpi-label">Best day</p>
-            <p class="analytics-kpi-value text-emerald-300">{{ bestWorstDays().best ? formatCurrency(bestWorstDays().best!.netPnL) : '—' }}</p>
-          </div>
-          <div class="analytics-kpi hidden sm:block">
-            <p class="analytics-kpi-label">Worst day</p>
-            <p class="analytics-kpi-value text-red-300">{{ bestWorstDays().worst ? formatCurrency(bestWorstDays().worst!.netPnL) : '—' }}</p>
           </div>
         </div>
       </div>
@@ -129,6 +121,12 @@
               }
             </div>
           </div>
+
+          <app-pnl-candle-chart
+            [candles]="pnlCandles()"
+            title="Cumulative P&amp;L candles"
+            subtitle="Your running P&amp;L as a candlestick chart — each candle is one trading day, opening where the previous day closed"
+          />
 
           <app-chart-card
             [config]="cumulativeChartConfig()"

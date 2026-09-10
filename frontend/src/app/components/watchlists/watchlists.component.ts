@@ -26,10 +26,8 @@ import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
-import { MarketCapFilterComponent } from '../shared/market-cap-filter/market-cap-filter.component';
-import { MARKET_CAP_LABELS, MarketCapTier, matchesMarketCapFilter } from '../../utils/market-cap.utils';
 import { summariseTradesByDay, TradeDaySummary } from '../../utils/trade-day-summary.utils';
-import { FILTER_QUERY_KEYS, readWatchlistFilters, serializeMarketCapTiers } from '../../utils/filter-url.utils';
+import { FILTER_QUERY_KEYS, readWatchlistFilters } from '../../utils/filter-url.utils';
 
 const ALL_SUBTAB_ID = '__all__';
 
@@ -58,7 +56,7 @@ interface AutoTierTab {
 @Component({
   selector: 'app-watchlists',
   standalone: true,
-  imports: [CommonModule, RouterLink, TradeTypeFilterComponent, DateRangeFilterComponent, MarketCapFilterComponent],
+  imports: [CommonModule, RouterLink, TradeTypeFilterComponent, DateRangeFilterComponent],
   templateUrl: './watchlists.component.html',
 })
 export class WatchlistsComponent implements OnInit, OnDestroy {
@@ -92,18 +90,17 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     if (wl.bands) this.tierMode.set(wl.bands);
     if (wl.book) this.book.set(wl.book);
     this.selectedAutoTierId.set(wl.tier ?? null);
-    this.selectedMarketCapTiers.set(wl.marketCapTiers);
   }
 
   readonly formatDate = formatDate;
 
   readonly mainTabs: { id: WatchlistTab; label: string }[] = [
-    { id: 'losing', label: 'Loss making' },
-    { id: 'profitable', label: 'Profitable' },
+    { id: 'losing', label: 'Losses' },
+    { id: 'profitable', label: 'Profits' },
   ];
 
   readonly bookTabs: { id: PnLBook; label: string }[] = [
-    { id: 'realised', label: 'Realised P&L' },
+    { id: 'realised', label: 'Realised' },
     { id: 'holdings', label: 'Holdings' },
   ];
 
@@ -115,7 +112,6 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   selectedAutoTierId = signal<string | null>(null);
   expandedStockKey = signal<string | null>(null);
   expandedDayKey = signal<string | null>(null);
-  selectedMarketCapTiers = signal<MarketCapTier[]>([]);
   mobileFiltersOpen = signal(false);
 
   readonly formatCurrency = formatCurrency;
@@ -137,7 +133,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   ];
 
   autoTierTabs = computed((): AutoTierTab[] => {
-    const summaries = this.filterByMarketCap(this.bookStocks());
+    const summaries = this.bookStocks();
     const mode = this.tierMode();
 
     return PNL_WATCHLIST_TIERS.map((tier) => {
@@ -168,8 +164,6 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
       ? 'All trades'
       : tradeTypes.map((type) => TRADE_TYPE_LABELS[type] || type).join(', ');
     const band = this.tierMode() === 'band' ? 'Exclusive' : 'Cumulative';
-    const caps = this.selectedMarketCapTiers();
-    const cap = caps.length ? caps.map((tier) => MARKET_CAP_LABELS[tier]).join(', ') : 'All caps';
     const report = this.state.report();
     const dates =
       this.book() === 'holdings'
@@ -179,7 +173,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
           ? `${this.formatDate(this.state.startDate())} – ${this.formatDate(this.state.endDate())}`
           : 'Inception';
     const book = this.book() === 'holdings' ? 'Holdings' : 'Realised';
-    return `${book} · ${dates} · ${trade} · ${band} · ${cap}`;
+    return `${book} · ${dates} · ${trade} · ${band}`;
   });
 
   lossTierTabs = computed(() =>
@@ -193,7 +187,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   visibleAutoTierTabs = computed((): AutoTierTab[] => {
     const tiers =
       this.activeTab() === 'profitable' ? this.profitTierTabs() : this.lossTierTabs();
-    const summaries = this.filterByMarketCap(this.bookStocks());
+    const summaries = this.bookStocks();
     const allCount = summaries.filter((stock) =>
       this.activeTab() === 'profitable' ? stock.netPnL > 0 : stock.netPnL < 0
     ).length;
@@ -233,7 +227,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   activeViewLabel = computed(() => this.activeAutoTierMeta()?.fullLabel ?? '');
 
   tierStocks = computed(() => {
-    const stockSummaries = this.filterByMarketCap(this.bookStocks());
+    const stockSummaries = this.bookStocks();
     const watchlist = this.activeAutoWatchlist();
     if (!watchlist) return [] as StockSummary[];
 
@@ -317,17 +311,6 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
 
   toggleMobileFilters(): void {
     this.mobileFiltersOpen.update((open) => !open);
-  }
-
-  setMarketCapTiers(tiers: MarketCapTier[]): void {
-    this.selectedMarketCapTiers.set(tiers);
-    this.selectedAutoTierId.set(null);
-    this.expandedStockKey.set(null);
-    this.expandedDayKey.set(null);
-    this.lazyTrades.clear();
-    this.filterUrl.patchWatchlistQuery({
-      [FILTER_QUERY_KEYS.cap]: serializeMarketCapTiers(tiers),
-    });
   }
 
   selectAutoTier(id: string): void {
@@ -477,19 +460,6 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
       stock,
       this.state.report(),
       this.state.analysisOptions()
-    );
-  }
-
-  private marketCapForStock(stock: StockSummary): number | undefined {
-    const symbol = this.stockSymbol(stock).toUpperCase();
-    return this.stocks().find((s) => s.symbol === symbol)?.marketCap;
-  }
-
-  private filterByMarketCap(stocks: StockSummary[]): StockSummary[] {
-    const selected = this.selectedMarketCapTiers();
-    if (!selected.length) return stocks;
-    return stocks.filter((stock) =>
-      matchesMarketCapFilter(this.marketCapForStock(stock), selected)
     );
   }
 }

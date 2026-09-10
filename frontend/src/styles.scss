@@ -154,8 +154,24 @@
     }
   }
 
+  .watchlist-desk {
+    @apply flex flex-wrap items-end justify-between gap-x-8 gap-y-1 border-b border-slate-200;
+  }
+
+  .watchlist-desk-group {
+    @apply flex min-w-0 items-end;
+  }
+
+  .watchlist-desk-tab {
+    @apply relative -mb-px border-b-2 border-transparent px-3 pb-2 pt-1 text-[13px] font-semibold tracking-wide text-slate-400 transition hover:text-slate-700;
+  }
+
+  .watchlist-desk-tab-active {
+    @apply border-kairo-600 text-slate-900;
+  }
+
   .watchlist-sticky-toolbar {
-    @apply sticky z-20 -mx-3 space-y-2 border-b border-slate-200/80 bg-slate-50/95 px-3 py-2 backdrop-blur-md sm:-mx-5 sm:px-5;
+    @apply sticky z-20 -mx-3 space-y-2.5 border-b border-slate-200/80 bg-slate-50/95 px-3 py-2 backdrop-blur-md sm:-mx-5 sm:px-5;
     top: var(--app-top-offset);
   }
 
@@ -255,11 +271,7 @@
   }
 
   .watchlist-tier-tabs {
-    @apply overflow-x-auto rounded-xl border border-slate-200 bg-white px-2 py-2;
-  }
-
-  .watchlist-tier-tabs .tier-segmented-control {
-    @apply min-w-max;
+    @apply overflow-x-auto;
   }
 
   .mobile-tab-bar {

@@ -517,38 +517,6 @@ export function buildZeroSplitLineDataset(label: string, values: number[]) {
   };
 }
 
-/**
- * Floating-bar dataset that reads like a candle chart: each bar spans from the running
- * total before the day to the running total after it, coloured by that day's result. Spans
- * are emitted low-to-high because Chart.js draws a floating bar between its two bounds.
- */
-export function buildCumulativeCandleDataset(label: string, dailyValues: number[]) {
-  let running = 0;
-  const spans = dailyValues.map((value) => {
-    const from = running;
-    running += value;
-    return [Math.min(from, running), Math.max(from, running)] as [number, number];
-  });
-
-  return {
-    label,
-    data: spans,
-    backgroundColor: dailyValues.map((v) => pnlColor(v)),
-    hoverBackgroundColor: dailyValues.map((v) => pnlColor(v, 1)),
-    borderColor: dailyValues.map((v) => pnlColor(v, 1)),
-    borderWidth: 1,
-    borderSkipped: false,
-    barPercentage: 0.7,
-    categoryPercentage: 0.9,
-  };
-}
-
-/** Running totals after each entry, for labelling a cumulative candle series. */
-export function runningTotals(values: number[]): number[] {
-  let running = 0;
-  return values.map((value) => (running += value));
-}
-
 export function buildLineDataset(
   label: string,
   values: number[],

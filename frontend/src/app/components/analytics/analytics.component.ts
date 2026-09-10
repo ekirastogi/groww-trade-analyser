@@ -31,14 +31,13 @@ import {
   buildPnLBarDataset,
   buildLineDataset,
   buildZeroSplitLineDataset,
-  buildCumulativeCandleDataset,
-  runningTotals,
 } from '../../utils/chart-theme';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
+import { PnlCandle, PnlCandleChartComponent } from '../shared/pnl-candle-chart/pnl-candle-chart.component';
 import { StockBreakdownTableComponent } from '../shared/stock-breakdown-table/stock-breakdown-table.component';
 import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
 import {
@@ -70,6 +69,7 @@ type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'ho
     ReportHistoryComponent,
     StockBreakdownTableComponent,
     HoldingsTableComponent,
+    PnlCandleChartComponent,
   ],
   templateUrl: './analytics.component.html',
   styles: `
@@ -272,14 +272,6 @@ export class AnalyticsComponent implements OnInit {
   topDailyLosses = computed(() =>
     [...(this.analysis()?.daily ?? [])].sort((a, b) => a.netPnL - b.netPnL).slice(0, 5)
   );
-
-  bestWorstDays = computed(() => {
-    const daily = this.analysis()?.daily ?? [];
-    if (!daily.length) return { best: null, worst: null } as const;
-    const best = daily.reduce((max, day) => (day.netPnL > max.netPnL ? day : max), daily[0]);
-    const worst = daily.reduce((min, day) => (day.netPnL < min.netPnL ? day : min), daily[0]);
-    return { best, worst } as const;
-  });
 
   bestWorstTrades = computed(() => {
     const trades = this.analysis()?.filteredTrades ?? [];
@@ -517,38 +509,34 @@ export class AnalyticsComponent implements OnInit {
   });
 
   /**
-   * Each bar spans from the running total before a day to the running total after it, so
-   * the body height is that day's P&L and its position is the equity level at the time.
+   * Cumulative P&L as OHLC candles, one per trading day. Open is the previous day's close
+   * and close is the new running total, so the body is that day's result. Statements carry
+   * no intraday times, so the wicks use the widest equity swing the day could have taken:
+   * the high assumes every winning trade landed first, the low every losing trade did.
    */
-  cumulativeCandleChartConfig = computed(() => {
-    this.chartVersion();
-    const daily = this.analysis()?.daily ?? [];
-    if (!daily.length) return null;
-    const mobile = isMobileChart();
-    const rows = [...daily].sort((a, b) => a.period.localeCompare(b.period));
-    const dayValues = rows.map((d) => d.netPnL);
-    const cumulative = runningTotals(dayValues);
+  pnlCandles = computed<PnlCandle[]>(() => {
+    const rows = this.sortedDaily();
+    let open = 0;
 
-    return withDecimation({
-      type: 'bar',
-      data: {
-        labels: rows.map((d) => abbreviateLabel(d.label, mobile ? 6 : 12)),
-        datasets: [buildCumulativeCandleDataset('Day P&L', dayValues)],
-      },
-      options: {
-        ...barChartOptions(''),
-        plugins: {
-          ...baseLegendPublic(false),
-          tooltip: {
-            callbacks: {
-              label: (ctx) => [
-                `Day: ${formatCurrency(dayValues[ctx.dataIndex] ?? 0)}`,
-                `Cumulative: ${formatCurrency(cumulative[ctx.dataIndex] ?? 0)}`,
-              ],
-            },
-          },
-        },
-      },
+    return rows.map((day) => {
+      const close = open + day.netPnL;
+      let gains = 0;
+      let losses = 0;
+      for (const trade of day.trades) {
+        const net = trade.netPnL ?? trade.realisedPnL - (trade.allocatedCharges ?? 0);
+        if (net >= 0) gains += net;
+        else losses += net;
+      }
+
+      const candle: PnlCandle = {
+        time: day.period,
+        open,
+        close,
+        high: Math.max(open, close, open + gains),
+        low: Math.min(open, close, open + losses),
+      };
+      open = close;
+      return candle;
     });
   });
 
