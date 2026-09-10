@@ -23,7 +23,9 @@ export interface TradeTypeSource {
 
 export function defaultTradeTypesForRoute(url: string): TradeType[] {
   if (ROUTES_WITH_ALL_DEFAULT.some((route) => url.includes(route))) return ['all'];
-  return ROUTES_WITH_INTRADAY_DEFAULT.some((route) => url.includes(route)) ? ['intraday'] : ['all'];
+  return ROUTES_WITH_INTRADAY_DEFAULT.some((route) => url.includes(route))
+    ? ['intraday', 'delivery']
+    : ['all'];
 }
 
 export function routeNeedsDefaultTypes(url: string, hasTypesParam: boolean): boolean {
@@ -31,6 +33,13 @@ export function routeNeedsDefaultTypes(url: string, hasTypesParam: boolean): boo
     ROUTES_WITH_INTRADAY_DEFAULT.some((route) => url.includes(route)) ||
     ROUTES_WITH_ALL_DEFAULT.some((route) => url.includes(route));
   return needsDefault && !hasTypesParam;
+}
+
+/** Previous default was Intraday-only; upgrade those URLs to Intraday + Delivery. */
+export function typesParamIsStaleIntradayDefault(url: string, typesParam: string | null): boolean {
+  return (
+    ROUTES_WITH_INTRADAY_DEFAULT.some((route) => url.includes(route)) && typesParam === 'intraday'
+  );
 }
 
 /**

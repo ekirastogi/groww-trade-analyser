@@ -101,7 +101,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
 
   readonly bookTabs: { id: PnLBook; label: string }[] = [
     { id: 'realised', label: 'Realised' },
-    { id: 'holdings', label: 'Holdings' },
+    { id: 'holdings', label: 'Unrealised' },
   ];
 
   readonly allSubtabId = ALL_SUBTAB_ID;
@@ -173,7 +173,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
             (this.state.startDate() !== report.dateRange.min || this.state.endDate() !== report.dateRange.max)
           ? `${this.formatDate(this.state.startDate())} – ${this.formatDate(this.state.endDate())}`
           : 'Inception';
-    const book = this.book() === 'holdings' ? 'Holdings' : 'Realised';
+    const book = this.book() === 'holdings' ? 'Unrealised' : 'Realised';
     return `${book} · ${dates} · ${trade} · ${band}`;
   });
 

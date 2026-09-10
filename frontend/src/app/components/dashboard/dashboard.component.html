@@ -42,18 +42,53 @@
     </div>
 
     <div class="filter-toolbar mb-2">
-      <app-trade-type-filter [compact]="true" />
-      <span class="filter-toolbar-rule" aria-hidden="true"></span>
-      <app-date-range-filter />
+      <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+        <span class="filter-toolbar-label">Book</span>
+        <div class="period-track" role="radiogroup" aria-label="Realised or unrealised">
+          @for (tab of bookTabs; track tab.id) {
+            <button
+              type="button"
+              role="radio"
+              class="period-seg"
+              [class.period-seg-active]="book() === tab.id"
+              [attr.aria-checked]="book() === tab.id"
+              (click)="setBook(tab.id)"
+            >
+              {{ tab.label }}
+            </button>
+          }
+        </div>
+      </div>
+      @if (book() !== 'holdings') {
+        <span class="filter-toolbar-rule" aria-hidden="true"></span>
+        <app-trade-type-filter [compact]="true" />
+        <span class="filter-toolbar-rule" aria-hidden="true"></span>
+        <app-date-range-filter />
+      }
     </div>
 
     <div class="card overflow-hidden">
+      @if (book() === 'holdings') {
+        <div class="p-0">
+          <div class="border-b border-slate-100 px-4 py-3">
+            <h3 class="text-sm font-semibold text-slate-900">Unrealised holdings</h3>
+            <p class="text-xs text-slate-500">
+              Still-held stocks from your latest P&amp;L file.
+              @if (holdingsSummary(); as open) {
+                Mark-to-market as of {{ formatDate(open.asOfDate) }} · {{ open.stockCount }} stocks · {{ formatCurrency(open.unrealisedPnL) }} unrealised.
+              } @else {
+                These are not included in realised P&amp;L.
+              }
+            </p>
+          </div>
+          <app-holdings-table [holdings]="holdings()" />
+        </div>
+      } @else {
       <!-- Tabs -->
       <div class="overflow-x-auto border-b border-slate-200">
         <div class="flex min-w-max px-2">
           @for (tab of [
             { id: 'stocks', label: 'Per Stock' },
-            { id: 'holdings', label: 'Holdings' },
             { id: 'daily', label: 'Daily' },
             { id: 'weekly', label: 'Weekly' },
             { id: 'monthly', label: 'Monthly' },
@@ -70,21 +105,6 @@
       </div>
 
       <div class="p-0">
-        @if (activeTab() === 'holdings') {
-          <div class="border-b border-slate-100 px-4 py-3">
-            <h3 class="text-sm font-semibold text-slate-900">Open holdings</h3>
-            <p class="text-xs text-slate-500">
-              Still-held stocks from your latest P&amp;L file.
-              @if (holdingsSummary(); as open) {
-                Mark-to-market as of {{ formatDate(open.asOfDate) }} · {{ open.stockCount }} stocks · {{ formatCurrency(open.unrealisedPnL) }} unrealised.
-              } @else {
-                These are not included in realised P&amp;L.
-              }
-            </p>
-          </div>
-          <app-holdings-table [holdings]="holdings()" />
-        }
-
         @if (activeTab() === 'daily' || activeTab() === 'weekly' || activeTab() === 'monthly') {
           <div class="border-b border-slate-100 px-4 py-1.5 sm:px-4">
             <div class="flex items-center justify-between">
@@ -714,6 +734,7 @@
           </div>
         }
       </div>
+      }
     </div>
   }
 }

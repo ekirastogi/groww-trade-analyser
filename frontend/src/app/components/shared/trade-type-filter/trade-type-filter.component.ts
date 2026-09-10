@@ -60,9 +60,9 @@ export class TradeTypeFilterComponent {
 
   availableTypes = computed(() => {
     const hidden = new Set(this.hiddenTypes());
-    const types = this.state.report()?.tradeTypes ?? ['all', 'intraday', 'delivery', 'mtf'];
+    const types = this.state.report()?.tradeTypes ?? ['all', 'intraday', 'delivery'];
     const filtered = types.filter(
-      (t) => t !== 'all' && t !== 'same_day' && t !== 'fno' && !hidden.has(t)
+      (t) => t !== 'all' && t !== 'same_day' && t !== 'fno' && t !== 'mtf' && !hidden.has(t)
     );
     return filtered.length ? filtered : (['intraday', 'delivery'] as TradeType[]).filter((t) => !hidden.has(t));
   });

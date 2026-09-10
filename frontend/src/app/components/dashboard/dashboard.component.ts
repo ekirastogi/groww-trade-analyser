@@ -37,8 +37,9 @@ import {
   operatorsForColumn,
   persistStockScenarios,
 } from '../../utils/stock-scenario.utils';
-import { holdingsTotals } from '../../utils/holdings.utils';
+import { holdingsTotals, PnLBook } from '../../utils/holdings.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
+import { FILTER_QUERY_KEYS, readWatchlistFilters } from '../../utils/filter-url.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
@@ -106,7 +107,12 @@ export class DashboardComponent implements OnInit {
     await this.state.ensureTradesLoaded();
     this.clients.set(await this.clientSvc.listClients());
     const params = this.route.snapshot.queryParamMap;
-    if (params.get('tab') === 'custom') {
+    const wl = readWatchlistFilters(params);
+    if (wl.book) this.book.set(wl.book);
+    if (params.get('tab') === 'holdings') {
+      this.book.set('holdings');
+      this.activeTab.set('stocks');
+    } else if (params.get('tab') === 'custom') {
       this.activeTab.set('custom');
       this.resetSortForTab('custom');
       const listId = params.get('list');
@@ -115,6 +121,12 @@ export class DashboardComponent implements OnInit {
     }
   }
 
+  readonly bookTabs: { id: PnLBook; label: string }[] = [
+    { id: 'realised', label: 'Realised' },
+    { id: 'holdings', label: 'Unrealised' },
+  ];
+
+  book = signal<PnLBook>('realised');
   activeTab = signal<TabId>('stocks');
   sortColumn = signal('realisedPnL');
   sortDirection = signal<SortDir>('desc');
@@ -295,7 +307,23 @@ export class DashboardComponent implements OnInit {
     this.clients.set(await this.clientSvc.listClients());
   }
 
+  setBook(book: PnLBook): void {
+    this.book.set(book);
+    this.expandedPeriod.set(null);
+    this.expandedStock.set(null);
+    this.expandedPerStock.set(null);
+    this.expandedDayKey.set(null);
+    this.lazyTrades.clear();
+    this.filterUrl.patchWatchlistQuery({
+      [FILTER_QUERY_KEYS.book]: book === 'realised' ? null : book,
+    });
+  }
+
   setTab(tab: TabId): void {
+    if (tab === 'holdings') {
+      this.setBook('holdings');
+      return;
+    }
     this.activeTab.set(tab);
     this.expandedPeriod.set(null);
     this.expandedStock.set(null);

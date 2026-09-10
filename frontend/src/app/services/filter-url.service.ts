@@ -9,7 +9,7 @@ import {
   readGlobalFilters,
   serializeTradeTypes,
 } from '../utils/filter-url.utils';
-import { routeNeedsDefaultTypes } from '../utils/trade-type-filter.utils';
+import { routeNeedsDefaultTypes, typesParamIsStaleIntradayDefault } from '../utils/trade-type-filter.utils';
 import {
   defaultDateRangeForRoute,
   routeNeedsDefaultDateRange,
@@ -54,7 +54,10 @@ export class FilterUrlService {
     const report = this.state.report();
     const isWatchlist = path.includes('/watchlists');
 
-    const needsDefaultTypes = routeNeedsDefaultTypes(path, paramMap.has(FILTER_QUERY_KEYS.types));
+    const typesParam = paramMap.get(FILTER_QUERY_KEYS.types);
+    const needsDefaultTypes =
+      routeNeedsDefaultTypes(path, paramMap.has(FILTER_QUERY_KEYS.types)) ||
+      typesParamIsStaleIntradayDefault(path, typesParam);
     const needsDefaultBands = isWatchlist && !paramMap.has(FILTER_QUERY_KEYS.bands);
     const needsDefaultDateRange =
       !!report &&
@@ -74,6 +77,7 @@ export class FilterUrlService {
       this.applyParsedFilters(
         {
           ...parsed,
+          tradeTypes: needsDefaultTypes ? defaults : parsed.tradeTypes,
           startDate: dateDefaults?.start ?? parsed.startDate,
           endDate: dateDefaults?.end ?? parsed.endDate,
         },

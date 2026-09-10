@@ -44,7 +44,8 @@ export function parseTradeTypes(raw: string | null, fallback: TradeType[]): Trad
     .filter(Boolean) as TradeType[];
   if (!parts.length) return fallback;
   if (parts.includes('all')) return ['all'];
-  return parts;
+  const withoutMtf = parts.filter((part) => part !== 'mtf');
+  return withoutMtf.length ? withoutMtf : fallback;
 }
 
 export function serializeTradeTypes(types: TradeType[]): string | null {

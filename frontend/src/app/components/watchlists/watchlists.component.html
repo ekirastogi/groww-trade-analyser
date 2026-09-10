@@ -30,20 +30,6 @@
             </button>
           }
         </div>
-        <div class="watchlist-desk-group" role="tablist" aria-label="P&amp;L book">
-          @for (tab of bookTabs; track tab.id) {
-            <button
-              type="button"
-              role="tab"
-              class="watchlist-desk-tab"
-              [class.watchlist-desk-tab-active]="book() === tab.id"
-              [attr.aria-selected]="book() === tab.id"
-              (click)="setBook(tab.id)"
-            >
-              {{ tab.label }}
-            </button>
-          }
-        </div>
       </div>
 
       <button
@@ -63,6 +49,24 @@
         class="watchlist-filters"
         [class.watchlist-filters-collapsed]="!mobileFiltersOpen()"
       >
+        <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Book</span>
+          <div class="period-track" role="radiogroup" aria-label="Realised or unrealised">
+            @for (tab of bookTabs; track tab.id) {
+              <button
+                type="button"
+                role="radio"
+                class="period-seg"
+                [class.period-seg-active]="book() === tab.id"
+                [attr.aria-checked]="book() === tab.id"
+                (click)="setBook(tab.id)"
+              >
+                {{ tab.label }}
+              </button>
+            }
+          </div>
+        </div>
+        <div class="watchlist-filter-divider hidden h-3 w-px bg-slate-200 sm:block"></div>
         @if (book() !== 'holdings') {
           <app-date-range-filter />
           <div class="watchlist-filter-divider hidden h-3 w-px bg-slate-200 sm:block"></div>
