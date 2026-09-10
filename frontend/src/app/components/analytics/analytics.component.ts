@@ -14,6 +14,7 @@ import { FilteredStockService } from '../../services/filtered-stock.service';
 import { AnalysisService } from '../../services/analysis.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
 import { formatCompactCurrency, formatCurrency, pnlClass } from '../../utils/format.utils';
+import { holdingsTotals } from '../../utils/holdings.utils';
 import {
   CHART_COLORS,
   abbreviateLabel,
@@ -39,6 +40,7 @@ import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
 import { StockBreakdownTableComponent } from '../shared/stock-breakdown-table/stock-breakdown-table.component';
+import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
 import {
   aggregateByWeekday,
   aggregateByDayOfMonth,
@@ -53,7 +55,7 @@ import {
   filterDailyAnalytics,
 } from '../../utils/analytics-aggregation.utils';
 
-type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'costs';
+type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'holdings' | 'costs';
 
 @Component({
   selector: 'app-analytics',
@@ -67,6 +69,7 @@ type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'co
     ChartCardComponent,
     ReportHistoryComponent,
     StockBreakdownTableComponent,
+    HoldingsTableComponent,
   ],
   templateUrl: './analytics.component.html',
   styles: `
@@ -138,6 +141,7 @@ export class AnalyticsComponent implements OnInit {
     { id: 'weekly', label: 'Weekly' },
     { id: 'monthly', label: 'Monthly' },
     { id: 'stocks', label: 'Stocks' },
+    { id: 'holdings', label: 'Holdings' },
     { id: 'costs', label: 'Costs' },
   ];
   readonly heatClass = heatClass;
@@ -187,6 +191,30 @@ export class AnalyticsComponent implements OnInit {
     const filtered = this.filteredStocks.stocks();
     if (filtered.length) return filtered;
     return this.analysis()?.stocks ?? [];
+  });
+
+  holdings = computed(() => this.state.report()?.unrealisedHoldings ?? []);
+  holdingsSummary = computed(() => {
+    const holdings = this.holdings();
+    if (!holdings.length) return null;
+    return holdingsTotals(holdings);
+  });
+
+  holdingsChartConfig = computed(() => {
+    this.chartVersion();
+    const holdings = [...this.holdings()].sort(
+      (a, b) => Math.abs(b.unrealisedPnL) - Math.abs(a.unrealisedPnL)
+    );
+    if (!holdings.length) return null;
+    const mobile = isMobileChart();
+    return {
+      type: 'bar' as const,
+      data: {
+        labels: holdings.map((h) => abbreviateLabel(h.stockName, mobile ? 14 : 22)),
+        datasets: [buildPnLBarDataset('Unrealised P&L', holdings.map((h) => h.unrealisedPnL))],
+      },
+      options: barChartOptions('', true),
+    };
   });
 
   weekdayBuckets = computed(() => {

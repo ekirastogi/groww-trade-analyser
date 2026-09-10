@@ -45,6 +45,10 @@
             <p class="analytics-kpi-value" [class]="pnlClass(data.summary.realisedPnL)">{{ formatCurrency(data.summary.realisedPnL) }}</p>
           </div>
           <div class="analytics-kpi">
+            <p class="analytics-kpi-label">Unrealised</p>
+            <p class="analytics-kpi-value" [class]="pnlClass(state.report()!.summary.unrealisedPnL)">{{ formatCurrency(state.report()!.summary.unrealisedPnL) }}</p>
+          </div>
+          <div class="analytics-kpi">
             <p class="analytics-kpi-label">Charges</p>
             <p class="analytics-kpi-value text-red-300">{{ formatCurrency(data.summary.allocatedCharges) }}</p>
           </div>
@@ -356,9 +360,29 @@
         <div class="card overflow-hidden">
           <div class="border-b border-slate-100 px-4 py-3">
             <h3 class="text-sm font-semibold text-slate-900">Stock-level analysis</h3>
-            <p class="text-xs text-slate-500">{{ visibleStocks().length }} stocks in filtered view</p>
+            <p class="text-xs text-slate-500">{{ visibleStocks().length }} realised stocks in filtered view</p>
           </div>
           <app-stock-breakdown-table [stocks]="visibleStocks()" />
+        </div>
+      }
+
+      @if (activeTab() === 'holdings') {
+        <div class="space-y-4">
+          <div class="card overflow-hidden">
+            <div class="border-b border-slate-100 px-4 py-3">
+              <h3 class="text-sm font-semibold text-slate-900">Open holdings</h3>
+              <p class="text-xs text-slate-500">
+                Still-held stocks are kept out of realised P&amp;L.
+                @if (holdingsSummary(); as open) {
+                  Mark-to-market as of {{ open.asOfDate }} · {{ formatCurrency(open.unrealisedPnL) }}.
+                }
+              </p>
+            </div>
+            <app-holdings-table [holdings]="holdings()" />
+          </div>
+          @if (holdingsChartConfig()) {
+            <app-chart-card [config]="holdingsChartConfig()" title="Unrealised P&amp;L by stock" subtitle="Open positions only — not mixed with realised trades" />
+          }
         </div>
       }
 

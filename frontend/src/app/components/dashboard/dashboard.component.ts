@@ -37,9 +37,11 @@ import {
   operatorsForColumn,
   persistStockScenarios,
 } from '../../utils/stock-scenario.utils';
+import { holdingsTotals } from '../../utils/holdings.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
+import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
 
 type PeriodColumnKey = 'period' | 'tradeCount' | 'totalBuyValue' | 'totalSellValue' | 'realisedPnL' | 'allocatedCharges' | 'netPnL' | 'winRate';
 
@@ -47,7 +49,7 @@ const DEFAULT_VISIBLE_PERIOD_COLUMNS: PeriodColumnKey[] = [
   'period', 'tradeCount', 'realisedPnL', 'allocatedCharges', 'netPnL', 'winRate',
 ];
 type SortDir = 'asc' | 'desc';
-type TabId = 'daily' | 'weekly' | 'monthly' | 'stocks' | 'custom';
+type TabId = 'daily' | 'weekly' | 'monthly' | 'stocks' | 'holdings' | 'custom';
 type StockColumnKey =
   | 'stockName'
   | 'tradeCount'
@@ -71,7 +73,7 @@ const DEFAULT_VISIBLE_STOCK_COLUMNS: StockColumnKey[] = [
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent, DateRangeFilterComponent],
+  imports: [CommonModule, FormsModule, RouterLink, TradeTypeFilterComponent, DateRangeFilterComponent, HoldingsTableComponent],
   templateUrl: './dashboard.component.html',
 })
 export class DashboardComponent implements OnInit {
@@ -180,6 +182,13 @@ export class DashboardComponent implements OnInit {
   );
 
   analysis = computed(() => this.state.analysis());
+
+  holdings = computed(() => this.state.report()?.unrealisedHoldings ?? []);
+  holdingsSummary = computed(() => {
+    const holdings = this.holdings();
+    if (!holdings.length) return null;
+    return holdingsTotals(holdings);
+  });
 
   stockDayWinRateSummary = computed(() => {
     const trades = this.analysis()?.filteredTrades ?? [];
@@ -753,6 +762,7 @@ export class DashboardComponent implements OnInit {
       weekly: { column: 'period', direction: 'desc' },
       monthly: { column: 'period', direction: 'desc' },
       stocks: { column: 'realisedPnL', direction: 'desc' },
+      holdings: { column: 'unrealisedPnL', direction: 'desc' },
       custom: { column: 'realisedPnL', direction: 'desc' },
     };
     const { column, direction } = defaults[tab];

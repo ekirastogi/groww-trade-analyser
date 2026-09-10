@@ -74,7 +74,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  @for (lot of sortedLots(holding); track lot.isin + lot.buyDate + lot.quantity + $index; let j = $index) {
+                  @for (lot of sortedLots(holding); track lot.isin + lot.buyDate + lot.quantity + lot.buyPrice; let j = $index) {
                     <tr>
                       <td class="text-center text-slate-400">{{ j + 1 }}</td>
                       <td>{{ lot.buyDate }}</td>

@@ -16,6 +16,7 @@ export const FILTER_QUERY_KEYS = {
   side: 'side',
   bands: 'bands',
   tier: 'tier',
+  book: 'book',
 } as const;
 
 export interface GlobalFilterParams {
