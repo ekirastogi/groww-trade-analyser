@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { ChartConfiguration, TooltipItem } from 'chart.js';
+import { ChartConfiguration } from 'chart.js';
 import { ReportStateService } from '../../services/report-state.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
@@ -484,7 +484,7 @@ export class AnalyticsComponent implements OnInit {
           ...baseLegendPublic(false),
           tooltip: {
             callbacks: {
-              label: (ctx: TooltipItem<'bar'>) => {
+              label: (ctx) => {
                 const [from, to] = ctx.raw as [number, number];
                 return [
                   `Day: ${formatCurrency(to - from)}`,
