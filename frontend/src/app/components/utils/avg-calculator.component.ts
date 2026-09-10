@@ -25,7 +25,8 @@ import { ChargesService } from '../../services/charges.service';
 import { TradePlanService } from '../../services/trade-plan.service';
 import { readJson, writeJson } from '../../utils/local-store.utils';
 
-const PLANS_KEY = 'kairo-stock-plans-v1';
+const PLANS_KEY = 'kairo-stock-plans-v2';
+const LEGACY_PLANS_KEY = 'kairo-stock-plans-v1';
 const LEGACY_SHEETS_KEY = 'kairo-avg-sheets-v1';
 const LEGACY_STATE_KEY = 'kairo-avg-calculator-v2';
 
@@ -33,16 +34,14 @@ type ProfitUnit = 'inr' | 'pct';
 type RightTab = 'guide' | 'price' | 'profit';
 
 const PROFIT_PRESETS = [1000, 5000, 10000, 25000, 50000] as const;
-const STOP_PRESETS = [1000, 5000, 10000] as const;
 
-/** A saved calculator plan. Browser-only — never synced to the backend. */
 interface StockPlan {
   id: string;
   symbol: string;
   segment: ChargeSegment;
   fills: AvgFill[];
+  exits: AvgFill[];
   targets: AvgTarget[];
-  markPrice: number | null;
   updatedAt: number;
 }
 
@@ -57,41 +56,42 @@ function emptyPlan(partial?: Partial<StockPlan>): StockPlan {
     symbol: '',
     segment: 'delivery',
     fills: [],
+    exits: [],
     targets: [],
-    markPrice: null,
     updatedAt: Date.now(),
     ...partial,
   };
 }
 
-function normalizePlan(raw: Partial<StockPlan> & { id?: string }): StockPlan {
+function normalizePlan(raw: Partial<StockPlan> & { id?: string; markPrice?: number | null }): StockPlan {
   return emptyPlan({
     id: raw.id ?? crypto.randomUUID(),
     symbol: raw.symbol ?? '',
     segment: raw.segment ?? 'delivery',
     fills: Array.isArray(raw.fills) ? raw.fills : [],
+    exits: Array.isArray(raw.exits) ? raw.exits : [],
     targets: Array.isArray(raw.targets)
       ? raw.targets.map((t) => ({ ...t, quantity: t.quantity ?? 0 }))
       : [],
-    markPrice: raw.markPrice ?? null,
     updatedAt: raw.updatedAt ?? Date.now(),
   });
 }
 
 function loadStore(): PlansStore {
-  const stored = readJson<PlansStore | null>(PLANS_KEY, null);
-  if (stored?.plans?.length && stored.activeId) {
-    const plans = stored.plans.map(normalizePlan);
-    const activeId = plans.some((p) => p.id === stored.activeId) ? stored.activeId : plans[0].id;
-    return { plans, activeId };
+  for (const key of [PLANS_KEY, LEGACY_PLANS_KEY]) {
+    const stored = readJson<PlansStore | null>(key, null);
+    if (stored?.plans?.length && stored.activeId) {
+      const plans = stored.plans.map(normalizePlan);
+      const activeId = plans.some((p) => p.id === stored.activeId) ? stored.activeId : plans[0].id;
+      return { plans, activeId };
+    }
   }
 
   const legacySheets = readJson<StockPlan[]>(LEGACY_SHEETS_KEY, []);
   const legacyWorking = readJson<Partial<StockPlan> & { sheetId?: string | null }>(LEGACY_STATE_KEY, {});
   if (legacySheets.length) {
     const plans = legacySheets.map(normalizePlan);
-    const activeId =
-      plans.find((p) => p.id === legacyWorking.sheetId)?.id ?? plans[0].id;
+    const activeId = plans.find((p) => p.id === legacyWorking.sheetId)?.id ?? plans[0].id;
     return { plans, activeId };
   }
 
@@ -143,8 +143,11 @@ function loadStore(): PlansStore {
     .qty-input {
       @apply w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm font-semibold tabular-nums text-slate-900 focus:border-kairo-500 focus:outline-none;
     }
-    .stat-chip {
-      @apply rounded-xl border border-slate-200 bg-white px-3 py-2;
+    .help-backdrop {
+      @apply fixed inset-0 z-40 bg-slate-900/40;
+    }
+    .help-dialog {
+      @apply fixed inset-x-4 top-[12%] z-50 mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:inset-x-auto;
     }
   `,
 })
@@ -163,20 +166,24 @@ export class AvgCalculatorComponent {
   symbol = signal<string>(this.activePlan().symbol);
   segment = signal<ChargeSegment>(this.activePlan().segment);
   fills = signal<AvgFill[]>(this.activePlan().fills);
+  exits = signal<AvgFill[]>(this.activePlan().exits);
   targets = signal<AvgTarget[]>(this.activePlan().targets);
-  markPrice = signal<number | null>(this.activePlan().markPrice);
 
   draftSide = signal<FillSide>('buy');
+  draftExitSide = signal<FillSide>('sell');
   draftPrice = '';
   draftQty = '';
+  draftExitPrice = '';
+  draftExitQty = '';
   draftTarget = '';
   draftTargetQty = '';
   draftProfit = '';
   draftGuideProfit = '';
-  draftMark = '';
   rightTab = signal<RightTab>('guide');
   profitUnit = signal<ProfitUnit>('inr');
+  helpOpen = signal(false);
   addError = signal<string | null>(null);
+  exitError = signal<string | null>(null);
   targetError = signal<string | null>(null);
   notice = signal<string | null>(null);
   savingToBook = signal(false);
@@ -186,12 +193,11 @@ export class AvgCalculatorComponent {
   readonly formatPctSigned = formatPctSigned;
   readonly pnlClass = pnlClass;
   readonly segmentLabels = CHARGE_SEGMENT_LABELS;
-  readonly segments = CHARGE_SEGMENTS;
+  readonly segments = CHARGE_SEGMENTS.filter((segment) => segment !== 'mtf');
   readonly profitPresets = PROFIT_PRESETS;
-  readonly stopPresets = STOP_PRESETS;
 
-  summary = computed(() => summarizeFills(this.fills()));
-  position = computed(() => openPosition(this.summary()));
+  book = computed(() => summarizeFills([...this.fills(), ...this.exits()]));
+  position = computed(() => openPosition(this.book()));
 
   ladder = computed(() => {
     const position = this.position();
@@ -228,16 +234,6 @@ export class AvgCalculatorComponent {
     return position ? position.avgPrice * position.quantity : 0;
   });
 
-  leftoverMark = computed(() => {
-    const position = this.position();
-    const mark = this.markPrice();
-    if (!position || mark == null || mark <= 0) return null;
-    return this.charges.roundTrip({
-      ...this.tradeFor(position),
-      exitPrice: mark,
-    });
-  });
-
   exitGuideRows = computed(() => {
     const position = this.position();
     if (!position) return [];
@@ -245,29 +241,21 @@ export class AvgCalculatorComponent {
     const tick = position.side === 'buy' ? 'up' : 'down';
     return PROFIT_PRESETS.map((profit) => {
       const solved = this.charges.profitTarget(trade, profit);
-      if (!solved) return { profit, price: null as number | null, movePct: null as number | null, charges: null as number | null };
-      const price = roundToTick(solved.targetPrice, tick);
+      if (!solved) {
+        return {
+          profit,
+          price: null as number | null,
+          movePerShare: null as number | null,
+          movePct: null as number | null,
+          charges: null as number | null,
+        };
+      }
       return {
         profit,
-        price,
+        price: roundToTick(solved.targetPrice, tick),
+        movePerShare: solved.movePerShare,
         movePct: solved.movePct,
         charges: solved.roundTrip.charges,
-      };
-    });
-  });
-
-  stopGuideRows = computed(() => {
-    const position = this.position();
-    if (!position) return [];
-    const trade = this.tradeFor(position);
-    const tick = position.side === 'buy' ? 'down' : 'up';
-    return STOP_PRESETS.map((loss) => {
-      const solved = this.charges.profitTarget(trade, -loss);
-      if (!solved) return { loss, price: null as number | null, movePct: null as number | null };
-      return {
-        loss,
-        price: roundToTick(solved.targetPrice, tick),
-        movePct: solved.movePct,
       };
     });
   });
@@ -276,6 +264,12 @@ export class AvgCalculatorComponent {
     () => this.symbol().trim().length > 0 && this.position() != null && this.targets().length > 0
   );
 
+  suggestedExitSide(): FillSide {
+    const position = this.position();
+    if (!position) return this.draftExitSide();
+    return position.side === 'buy' ? 'sell' : 'buy';
+  }
+
   planLabel(plan: StockPlan): string {
     const symbol = plan.id === this.planId() ? this.symbol().trim() : plan.symbol.trim();
     return symbol || 'New plan';
@@ -283,6 +277,10 @@ export class AvgCalculatorComponent {
 
   setSide(side: FillSide): void {
     this.draftSide.set(side);
+  }
+
+  setExitSide(side: FillSide): void {
+    this.draftExitSide.set(side);
   }
 
   setSegment(segment: ChargeSegment): void {
@@ -304,21 +302,27 @@ export class AvgCalculatorComponent {
     this.profitUnit.set(unit);
   }
 
+  toggleHelp(): void {
+    this.helpOpen.update((open) => !open);
+  }
+
   addFill(): void {
-    const price = Number(this.draftPrice);
-    const quantity = Number(this.draftQty);
-    if (!Number.isFinite(price) || price <= 0) {
-      this.addError.set('Enter a valid price');
-      return;
-    }
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      this.addError.set('Enter a valid quantity');
-      return;
-    }
-    this.addError.set(null);
-    this.fills.update((rows) => [...rows, createFill(this.draftSide(), price, quantity)]);
+    const parsed = this.parseLot(this.draftPrice, this.draftQty, this.addError);
+    if (!parsed) return;
+    this.fills.update((rows) => [...rows, createFill(this.draftSide(), parsed.price, parsed.quantity)]);
     this.draftPrice = '';
     this.draftQty = '';
+    this.persist();
+  }
+
+  addCustomExit(): void {
+    const parsed = this.parseLot(this.draftExitPrice, this.draftExitQty, this.exitError);
+    if (!parsed) return;
+    const side = this.position() ? this.suggestedExitSide() : this.draftExitSide();
+    this.exits.update((rows) => [...rows, createFill(side, parsed.price, parsed.quantity)]);
+    this.draftExitPrice = '';
+    this.draftExitQty = '';
+    this.draftExitSide.set(side);
     this.persist();
   }
 
@@ -327,10 +331,42 @@ export class AvgCalculatorComponent {
     this.persist();
   }
 
-  setMarkFromDraft(): void {
-    const price = Number(this.draftMark);
-    this.markPrice.set(Number.isFinite(price) && price > 0 ? price : null);
+  removeExit(id: string): void {
+    this.exits.update((rows) => rows.filter((row) => row.id !== id));
     this.persist();
+  }
+
+  resetLots(): void {
+    this.fills.set([]);
+    this.addError.set(null);
+    this.persist();
+  }
+
+  resetExits(): void {
+    this.exits.set([]);
+    this.targets.set([]);
+    this.exitError.set(null);
+    this.targetError.set(null);
+    this.persist();
+  }
+
+  private parseLot(
+    priceRaw: string,
+    qtyRaw: string,
+    error: ReturnType<typeof signal<string | null>>
+  ): { price: number; quantity: number } | null {
+    const price = Number(priceRaw);
+    const quantity = Number(qtyRaw);
+    if (!Number.isFinite(price) || price <= 0) {
+      error.set('Enter a valid price');
+      return null;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      error.set('Enter a valid quantity');
+      return null;
+    }
+    error.set(null);
+    return { price, quantity };
   }
 
   private defaultSliceQty(): number {
@@ -358,7 +394,7 @@ export class AvgCalculatorComponent {
   addProfitTarget(): void {
     const position = this.position();
     if (!position) {
-      this.targetError.set('Add leftover lots first — sells already booked reduce what is left');
+      this.targetError.set('Add lots on the left, then optional partial exits');
       return;
     }
     const goal = Number(this.draftProfit);
@@ -390,7 +426,7 @@ export class AvgCalculatorComponent {
   private addSolvedTarget(netProfit: number, typedQty: number): boolean {
     const position = this.position();
     if (!position) {
-      this.targetError.set('Add buy lots first so there is a leftover position');
+      this.targetError.set('Open quantity is zero after the exits you added');
       return false;
     }
     const quantity =
@@ -487,12 +523,12 @@ export class AvgCalculatorComponent {
     this.symbol.set(plan.symbol);
     this.segment.set(plan.segment);
     this.fills.set(plan.fills);
+    this.exits.set(plan.exits);
     this.targets.set(plan.targets.map((t) => ({ ...t, quantity: t.quantity ?? 0 })));
-    this.markPrice.set(plan.markPrice);
-    this.draftMark = plan.markPrice != null ? String(plan.markPrice) : '';
     this.notice.set(null);
     this.targetError.set(null);
     this.addError.set(null);
+    this.exitError.set(null);
     this.rightTab.set('guide');
     this.writeStore();
   }
@@ -552,6 +588,13 @@ export class AvgCalculatorComponent {
     }
   }
 
+  onExitKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.addCustomExit();
+    }
+  }
+
   onTargetKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -559,24 +602,21 @@ export class AvgCalculatorComponent {
     }
   }
 
-  onMarkKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      this.setMarkFromDraft();
-    }
-  }
-
-  remainingLabel(): string {
-    const summary = this.summary();
-    if (!summary.remainingSide) return 'Flat';
-    return summary.remainingSide === 'buy' ? 'Left long' : 'Left short';
-  }
-
   positionLabel(): string {
     const position = this.position();
-    if (!position) return 'No leftover lots';
+    if (!position) return 'No open quantity';
     const side = position.side === 'buy' ? 'Long' : 'Short';
     return `${side} ${position.quantity} at ${formatPrice(position.avgPrice)}`;
+  }
+
+  exitActionLabel(): string {
+    return this.suggestedExitSide() === 'buy' ? 'Buy to cover' : 'Sell';
+  }
+
+  signedMove(value: number | null): string {
+    if (value == null || !Number.isFinite(value)) return '—';
+    const sign = value > 0 ? '+' : '';
+    return `${sign}${formatPrice(value)}`;
   }
 
   private tradeFor(position: AvgPosition) {
@@ -594,8 +634,8 @@ export class AvgCalculatorComponent {
       symbol: this.symbol().trim().toUpperCase(),
       segment: this.segment(),
       fills: this.fills(),
+      exits: this.exits(),
       targets: this.targets(),
-      markPrice: this.markPrice(),
       updatedAt: Date.now(),
     };
   }

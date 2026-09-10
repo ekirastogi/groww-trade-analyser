@@ -131,6 +131,7 @@ export class AnalyticsComponent implements OnInit {
   readonly state = inject(ReportStateService);
   readonly filteredStocks = inject(FilteredStockService);
   private analysisSvc = inject(AnalysisService);
+  readonly hiddenTradeTypes: TradeType[] = ['mtf'];
   readonly formatCurrency = formatCurrency;
   readonly formatCompactCurrency = formatCompactCurrency;
   readonly formatDate = formatDate;

@@ -150,7 +150,7 @@ export class ProfitTargetComponent {
   readonly formatPctSigned = formatPctSigned;
   readonly pnlClass = pnlClass;
   readonly segmentLabels = CHARGE_SEGMENT_LABELS;
-  readonly segments = CHARGE_SEGMENTS;
+  readonly segments = CHARGE_SEGMENTS.filter((segment) => segment !== 'mtf');
 
   ready = computed(() => this.entryPrice() > 0 && this.quantity() > 0);
 

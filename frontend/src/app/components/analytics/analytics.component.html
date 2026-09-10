@@ -17,7 +17,7 @@
     <div class="analytics-page space-y-5">
       <div class="space-y-1">
         <div class="filter-toolbar">
-          <app-trade-type-filter [compact]="true" />
+          <app-trade-type-filter [compact]="true" [hiddenTypes]="hiddenTradeTypes" />
           <span class="filter-toolbar-rule" aria-hidden="true"></span>
           <app-date-range-filter />
         </div>

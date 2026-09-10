@@ -56,11 +56,15 @@ export class TradeTypeFilterComponent {
   private filterUrl = inject(FilterUrlService);
   readonly labels = TRADE_TYPE_LABELS;
   compact = input(false);
+  hiddenTypes = input<TradeType[]>([]);
 
   availableTypes = computed(() => {
+    const hidden = new Set(this.hiddenTypes());
     const types = this.state.report()?.tradeTypes ?? ['all', 'intraday', 'delivery', 'mtf'];
-    const filtered = types.filter((t) => t !== 'all' && t !== 'same_day' && t !== 'fno');
-    return filtered.length ? filtered : (['intraday', 'delivery', 'mtf'] as TradeType[]);
+    const filtered = types.filter(
+      (t) => t !== 'all' && t !== 'same_day' && t !== 'fno' && !hidden.has(t)
+    );
+    return filtered.length ? filtered : (['intraday', 'delivery'] as TradeType[]).filter((t) => !hidden.has(t));
   });
 
   isSelected(type: TradeType): boolean {

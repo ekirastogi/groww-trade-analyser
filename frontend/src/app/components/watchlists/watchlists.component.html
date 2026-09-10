@@ -16,20 +16,6 @@
   } @else {
     <div class="watchlist-sticky-toolbar">
       <div class="watchlist-desk">
-        <div class="watchlist-desk-group" role="tablist" aria-label="P&amp;L book">
-          @for (tab of bookTabs; track tab.id) {
-            <button
-              type="button"
-              role="tab"
-              class="watchlist-desk-tab"
-              [class.watchlist-desk-tab-active]="book() === tab.id"
-              [attr.aria-selected]="book() === tab.id"
-              (click)="setBook(tab.id)"
-            >
-              {{ tab.label }}
-            </button>
-          }
-        </div>
         <div class="watchlist-desk-group" role="tablist" aria-label="Side">
           @for (tab of mainTabs; track tab.id) {
             <button
@@ -39,6 +25,20 @@
               [class.watchlist-desk-tab-active]="activeTab() === tab.id"
               [attr.aria-selected]="activeTab() === tab.id"
               (click)="setTab(tab.id)"
+            >
+              {{ tab.label }}
+            </button>
+          }
+        </div>
+        <div class="watchlist-desk-group" role="tablist" aria-label="P&amp;L book">
+          @for (tab of bookTabs; track tab.id) {
+            <button
+              type="button"
+              role="tab"
+              class="watchlist-desk-tab"
+              [class.watchlist-desk-tab-active]="book() === tab.id"
+              [attr.aria-selected]="book() === tab.id"
+              (click)="setBook(tab.id)"
             >
               {{ tab.label }}
             </button>
@@ -68,7 +68,7 @@
           <div class="watchlist-filter-divider hidden h-3 w-px bg-slate-200 sm:block"></div>
           <div class="flex min-w-0 flex-wrap items-center gap-1">
             <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
-            <app-trade-type-filter [compact]="true" />
+            <app-trade-type-filter [compact]="true" [hiddenTypes]="hiddenTradeTypes" />
           </div>
           <div class="watchlist-filter-divider hidden h-3 w-px bg-slate-200 sm:block"></div>
         }

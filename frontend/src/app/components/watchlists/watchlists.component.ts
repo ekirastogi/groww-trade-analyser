@@ -10,7 +10,7 @@ import { LazyTradeLoaderService } from '../../services/lazy-trade-loader.service
 import { FilteredStockService } from '../../services/filtered-stock.service';
 import { FilterUrlService } from '../../services/filter-url.service';
 import { Watchlist } from '../../models/watchlist.models';
-import { StockSummary, TRADE_TYPE_LABELS, Trade } from '../../models/trade.models';
+import { StockSummary, TRADE_TYPE_LABELS, Trade, TradeType } from '../../models/trade.models';
 import { StockSnapshot } from '../../models/market.models';
 import { formatCurrency, formatDate, pnlClass } from '../../utils/format.utils';
 import {
@@ -114,6 +114,8 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   expandedDayKey = signal<string | null>(null);
   mobileFiltersOpen = signal(false);
 
+  readonly hiddenTradeTypes: TradeType[] = ['mtf'];
+  readonly hiddenTradeTypes: TradeType[] = ['mtf'];
   readonly formatCurrency = formatCurrency;
   readonly pnlClass = pnlClass;
   readonly tableSort = new TableSortState('netPnL');
