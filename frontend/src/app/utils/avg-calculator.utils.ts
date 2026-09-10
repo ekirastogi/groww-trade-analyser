@@ -26,6 +26,8 @@ export interface AvgCalculatorSummary {
   matchedQty: number;
   netQty: number;
   realizedPnL: number | null;
+  matchedAvgBuy: number | null;
+  matchedAvgSell: number | null;
   remainingSide: FillSide | null;
   remainingQty: number;
   remainingAvg: number | null;
@@ -50,32 +52,68 @@ export function createTarget(price: number, quantity: number): AvgTarget {
   return { id: newId(), price, quantity };
 }
 
+interface OpenLot {
+  price: number;
+  quantity: number;
+}
+
 export function summarizeFills(fills: AvgFill[]): AvgCalculatorSummary {
   let buyQty = 0;
   let buyValue = 0;
   let sellQty = 0;
   let sellValue = 0;
+  const buyLots: OpenLot[] = [];
+  const sellLots: OpenLot[] = [];
 
   for (const fill of fills) {
     const value = fill.price * fill.quantity;
     if (fill.side === 'buy') {
       buyQty += fill.quantity;
       buyValue += value;
+      buyLots.push({ price: fill.price, quantity: fill.quantity });
     } else {
       sellQty += fill.quantity;
       sellValue += value;
+      sellLots.push({ price: fill.price, quantity: fill.quantity });
     }
+  }
+
+  let matchedQty = 0;
+  let matchedBuyValue = 0;
+  let matchedSellValue = 0;
+  let bi = 0;
+  let si = 0;
+  while (bi < buyLots.length && si < sellLots.length) {
+    const buy = buyLots[bi];
+    const sell = sellLots[si];
+    const qty = Math.min(buy.quantity, sell.quantity);
+    matchedQty += qty;
+    matchedBuyValue += qty * buy.price;
+    matchedSellValue += qty * sell.price;
+    buy.quantity -= qty;
+    sell.quantity -= qty;
+    if (buy.quantity <= 0) bi += 1;
+    if (sell.quantity <= 0) si += 1;
+  }
+
+  let remainingQty = 0;
+  let remainingValue = 0;
+  let remainingSide: FillSide | null = null;
+  for (let i = bi; i < buyLots.length; i++) {
+    remainingQty += buyLots[i].quantity;
+    remainingValue += buyLots[i].quantity * buyLots[i].price;
+    remainingSide = 'buy';
+  }
+  for (let i = si; i < sellLots.length; i++) {
+    remainingQty += sellLots[i].quantity;
+    remainingValue += sellLots[i].quantity * sellLots[i].price;
+    remainingSide = 'sell';
   }
 
   const avgBuy = buyQty > 0 ? buyValue / buyQty : null;
   const avgSell = sellQty > 0 ? sellValue / sellQty : null;
-  const matchedQty = Math.min(buyQty, sellQty);
-  const realizedPnL =
-    matchedQty > 0 && avgBuy != null && avgSell != null ? matchedQty * (avgSell - avgBuy) : null;
-  const netQty = buyQty - sellQty;
-  const remainingQty = Math.abs(netQty);
-  const remainingSide: FillSide | null = netQty > 0 ? 'buy' : netQty < 0 ? 'sell' : null;
-  const remainingAvg = remainingSide === 'buy' ? avgBuy : remainingSide === 'sell' ? avgSell : null;
+  const realizedPnL = matchedQty > 0 ? matchedSellValue - matchedBuyValue : null;
+  const remainingAvg = remainingQty > 0 ? remainingValue / remainingQty : null;
 
   return {
     buyQty,
@@ -85,8 +123,10 @@ export function summarizeFills(fills: AvgFill[]): AvgCalculatorSummary {
     sellValue,
     avgSell,
     matchedQty,
-    netQty,
+    netQty: buyQty - sellQty,
     realizedPnL,
+    matchedAvgBuy: matchedQty > 0 ? matchedBuyValue / matchedQty : null,
+    matchedAvgSell: matchedQty > 0 ? matchedSellValue / matchedQty : null,
     remainingSide,
     remainingQty,
     remainingAvg,

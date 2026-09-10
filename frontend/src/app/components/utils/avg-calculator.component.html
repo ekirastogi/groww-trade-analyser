@@ -197,14 +197,10 @@
         <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
           <p class="field-label mb-1.5">Custom exit</p>
           <div class="flex flex-wrap items-end gap-2">
-            @if (!position()) {
-              <div class="flex rounded-full bg-white p-0.5 shadow-sm">
-                <button type="button" class="rounded-full px-3 py-1.5 text-xs font-semibold" [class.bg-emerald-600]="draftExitSide() === 'buy'" [class.text-white]="draftExitSide() === 'buy'" [class.text-slate-500]="draftExitSide() !== 'buy'" (click)="setExitSide('buy')">Buy</button>
-                <button type="button" class="rounded-full px-3 py-1.5 text-xs font-semibold" [class.bg-red-600]="draftExitSide() === 'sell'" [class.text-white]="draftExitSide() === 'sell'" [class.text-slate-500]="draftExitSide() !== 'sell'" (click)="setExitSide('sell')">Sell</button>
-              </div>
-            } @else {
-              <span class="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">{{ exitActionLabel() }}</span>
-            }
+            <div class="flex rounded-full bg-white p-0.5 shadow-sm">
+              <button type="button" class="rounded-full px-3 py-1.5 text-xs font-semibold" [class.bg-emerald-600]="draftExitSide() === 'buy'" [class.text-white]="draftExitSide() === 'buy'" [class.text-slate-500]="draftExitSide() !== 'buy'" (click)="setExitSide('buy')">Buy</button>
+              <button type="button" class="rounded-full px-3 py-1.5 text-xs font-semibold" [class.bg-red-600]="draftExitSide() === 'sell'" [class.text-white]="draftExitSide() === 'sell'" [class.text-slate-500]="draftExitSide() !== 'sell'" (click)="setExitSide('sell')">Sell</button>
+            </div>
             <label class="min-w-[7rem] flex-1 field-label">
               Price
               <input class="input-field mt-0.5 !py-2" type="number" inputmode="decimal" min="0" step="0.05" placeholder="0.00" [(ngModel)]="draftExitPrice" (keydown)="onExitKeydown($event)" />
@@ -215,7 +211,7 @@
             </label>
             <button type="button" class="btn-secondary !px-3 !py-2 text-sm" (click)="addCustomExit()">Add</button>
           </div>
-          <p class="mt-1.5 text-[11px] text-slate-500">If you shorted, add a partial buy here. The guide below uses only what is still open.</p>
+          <p class="mt-1.5 text-[11px] text-slate-500">Partial cover or book-out. Blank qty uses the still-open size. The table below is for what remains.</p>
         </div>
 
         @if (exitError()) {
@@ -250,11 +246,11 @@
                 </button>
               </div>
             }
-            @if (book().realizedPnL != null) {
+            @if (bookedTrip(); as booked) {
               <p class="text-xs text-slate-500">
                 Booked
-                <span class="font-semibold tabular-nums" [class]="pnlClass(book().realizedPnL!)">{{ formatCurrency(book().realizedPnL!) }}</span>
-                on closed qty.
+                <span class="font-semibold tabular-nums" [class]="pnlClass(booked.netPnL)">{{ formatCurrency(booked.netPnL) }}</span>
+                net after charges on {{ book().matchedQty | number }} qty.
               </p>
             }
           </div>
@@ -262,16 +258,23 @@
 
         @if (rightTab() === 'guide') {
           @if (position()) {
-            <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 sm:grid-cols-3">
               <div>
-                <p class="field-label">Breakeven</p>
+                <p class="field-label">Booked net</p>
+                <p class="text-base font-bold tabular-nums" [class]="bookedTrip() ? pnlClass(bookedTrip()!.netPnL) : 'text-slate-400'">
+                  {{ bookedTrip() ? formatCurrency(bookedTrip()!.netPnL) : '—' }}
+                </p>
+              </div>
+              <div>
+                <p class="field-label">Open</p>
+                <p class="text-base font-bold tabular-nums text-slate-900">{{ position()!.quantity | number }}</p>
+                <p class="text-[11px] text-slate-500">at {{ formatPrice(position()!.avgPrice) }}</p>
+              </div>
+              <div class="col-span-2 sm:col-span-1">
+                <p class="field-label">Open breakeven</p>
                 <p class="text-base font-bold tabular-nums text-slate-900">
                   {{ breakeven() != null ? formatPrice(breakeven()!) : '—' }}
                 </p>
-              </div>
-              <div class="text-right">
-                <p class="field-label">Open capital</p>
-                <p class="text-base font-bold tabular-nums text-slate-900">{{ formatCurrency(capital()) }}</p>
               </div>
             </div>
 
@@ -279,7 +282,7 @@
               <table class="w-full text-left text-xs">
                 <thead class="bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                   <tr>
-                    <th class="px-3 py-2">Net</th>
+                    <th class="px-3 py-2">Goal</th>
                     <th class="px-3 py-2">Exit at</th>
                     <th class="px-3 py-2">₹ / sh</th>
                     <th class="px-3 py-2">Move %</th>
@@ -288,9 +291,21 @@
                   </tr>
                 </thead>
                 <tbody>
+                  @if (stayGreen(); as stop) {
+                    <tr class="border-t border-slate-100 bg-amber-50/70">
+                      <td class="px-3 py-2 font-semibold text-amber-900">{{ stop.label }}</td>
+                      <td class="px-3 py-2 font-bold tabular-nums text-slate-900">{{ formatPrice(stop.price) }}</td>
+                      <td class="px-3 py-2 tabular-nums" [class]="pnlClass(stop.movePerShare)">{{ signedMove(stop.movePerShare) }}</td>
+                      <td class="px-3 py-2 tabular-nums" [class]="pnlClass(stop.movePct)">{{ formatPctSigned(stop.movePct) }}</td>
+                      <td class="px-3 py-2 tabular-nums text-red-600">{{ formatPrice(stop.charges) }}</td>
+                      <td class="px-2 py-2 text-right">
+                        <button type="button" class="rounded-md px-2 py-1 text-[11px] font-semibold text-kairo-700 hover:bg-kairo-50" (click)="addPresetTarget(stop.goal)">Use</button>
+                      </td>
+                    </tr>
+                  }
                   @for (row of exitGuideRows(); track row.profit) {
                     <tr class="border-t border-slate-100">
-                      <td class="px-3 py-2 font-semibold tabular-nums text-slate-800">{{ formatCurrency(row.profit) }}</td>
+                      <td class="px-3 py-2 font-semibold tabular-nums text-slate-800">+{{ formatCurrency(row.profit) }} more</td>
                       <td class="px-3 py-2 font-bold tabular-nums text-slate-900">
                         {{ row.price != null ? formatPrice(row.price) : '—' }}
                       </td>
@@ -318,26 +333,19 @@
                 </tbody>
               </table>
             </div>
-
-            <div class="flex items-end gap-2">
-              <label class="min-w-0 flex-1 field-label">
-                Custom net (negative for a stop)
-                <input
-                  class="input-field mt-0.5 !py-2"
-                  type="number"
-                  inputmode="decimal"
-                  step="500"
-                  placeholder="7500"
-                  [(ngModel)]="draftGuideProfit"
-                  (keydown)="onTargetKeydown($event)"
-                />
-              </label>
-              <button type="button" class="btn-secondary !px-3 !py-2 text-sm" (click)="addGuideProfit()">Solve</button>
-            </div>
           } @else {
             <div class="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
-              <p class="text-sm font-medium text-slate-700">No open quantity</p>
-              <p class="mt-1 text-xs text-slate-500">Add lots on the left, or remove a custom exit so something is still open.</p>
+              @if (bookedTrip(); as booked) {
+                <p class="text-sm font-medium text-slate-700">Fully closed</p>
+                <p class="mt-1 text-xs text-slate-500">
+                  Booked
+                  <span class="font-semibold tabular-nums" [class]="pnlClass(booked.netPnL)">{{ formatCurrency(booked.netPnL) }}</span>
+                  net after charges.
+                </p>
+              } @else {
+                <p class="text-sm font-medium text-slate-700">No open quantity</p>
+                <p class="mt-1 text-xs text-slate-500">Add lots on the left, then a partial exit on the right.</p>
+              }
             </div>
           }
         }
@@ -521,11 +529,9 @@
       <button type="button" class="text-xs font-semibold text-slate-500" (click)="toggleHelp()">Close</button>
     </div>
     <div class="space-y-3 text-sm text-slate-600">
-      <p><span class="font-semibold text-slate-800">Lots</span> are the trades that opened the position (buys for a long, sells for a short).</p>
-      <p><span class="font-semibold text-slate-800">Custom exit</span> books a partial close now — for a short, a buy to cover. Booked P&amp;L updates, and the table uses only the still-open quantity.</p>
-      <p><span class="font-semibold text-slate-800">Net</span> is money in hand after charges. <span class="font-semibold text-slate-800">Exit at</span> is the price that delivers that net on the open qty.</p>
-      <p><span class="font-semibold text-slate-800">₹ / sh</span> is the price move from average. <span class="font-semibold text-slate-800">Move %</span> is that move as a percent. <span class="font-semibold text-slate-800">Charges</span> are round-trip fees at that exit.</p>
-      <p><span class="font-semibold text-slate-800">Use / Solve</span> adds that level as a planned slice. Reset on each side clears only that side.</p>
+      <p><span class="font-semibold text-slate-800">Lots</span> open the position. <span class="font-semibold text-slate-800">Custom exit</span> is a partial cover or book-out — the table then uses remaining qty and FIFO average.</p>
+      <p><span class="font-semibold text-slate-800">Booked net</span> is closed P&amp;L after charges. <span class="font-semibold text-slate-800">Stop to stay green</span> is the remaining exit that keeps the whole trade at least flat.</p>
+      <p><span class="font-semibold text-slate-800">+₹1,000 more</span> is extra net profit on the still-open qty, after charges.</p>
     </div>
   </div>
 }

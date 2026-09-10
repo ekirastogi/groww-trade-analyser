@@ -178,7 +178,6 @@ export class AvgCalculatorComponent {
   draftTarget = '';
   draftTargetQty = '';
   draftProfit = '';
-  draftGuideProfit = '';
   rightTab = signal<RightTab>('guide');
   profitUnit = signal<ProfitUnit>('inr');
   helpOpen = signal(false);
@@ -229,9 +228,45 @@ export class AvgCalculatorComponent {
     return this.charges.breakevenPrice(this.tradeFor(position));
   });
 
-  capital = computed(() => {
+  bookedTrip = computed(() => {
+    const book = this.book();
+    if (book.matchedQty <= 0 || book.matchedAvgBuy == null || book.matchedAvgSell == null) {
+      return null;
+    }
+    const isShort = this.openingWasShort();
+    return this.charges.roundTrip({
+      segment: this.segment(),
+      direction: isShort ? 'short' : 'long',
+      quantity: book.matchedQty,
+      entryPrice: isShort ? book.matchedAvgSell : book.matchedAvgBuy,
+      exitPrice: isShort ? book.matchedAvgBuy : book.matchedAvgSell,
+    });
+  });
+
+  stayGreen = computed(() => {
     const position = this.position();
-    return position ? position.avgPrice * position.quantity : 0;
+    const booked = this.bookedTrip();
+    if (!position) return null;
+    const bookedNet = booked?.netPnL ?? 0;
+    const goal = -bookedNet;
+    const tick =
+      position.side === 'buy'
+        ? goal >= 0
+          ? 'up'
+          : 'down'
+        : goal >= 0
+          ? 'down'
+          : 'up';
+    const solved = this.charges.profitTarget(this.tradeFor(position), goal);
+    if (!solved) return null;
+    return {
+      label: bookedNet >= 0 ? 'Stop to stay green' : 'Cover to get green',
+      goal,
+      price: roundToTick(solved.targetPrice, tick),
+      movePerShare: solved.movePerShare,
+      movePct: solved.movePct,
+      charges: solved.roundTrip.charges,
+    };
   });
 
   exitGuideRows = computed(() => {
@@ -313,16 +348,17 @@ export class AvgCalculatorComponent {
     this.draftPrice = '';
     this.draftQty = '';
     this.persist();
+    this.draftExitSide.set(this.suggestedExitSide());
   }
 
   addCustomExit(): void {
-    const parsed = this.parseLot(this.draftExitPrice, this.draftExitQty, this.exitError);
+    const remaining = this.position()?.quantity ?? 0;
+    const parsed = this.parseLot(this.draftExitPrice, this.draftExitQty, this.exitError, remaining);
     if (!parsed) return;
-    const side = this.position() ? this.suggestedExitSide() : this.draftExitSide();
+    const side = this.draftExitSide();
     this.exits.update((rows) => [...rows, createFill(side, parsed.price, parsed.quantity)]);
     this.draftExitPrice = '';
     this.draftExitQty = '';
-    this.draftExitSide.set(side);
     this.persist();
   }
 
@@ -353,10 +389,17 @@ export class AvgCalculatorComponent {
   private parseLot(
     priceRaw: string,
     qtyRaw: string,
-    error: ReturnType<typeof signal<string | null>>
+    error: ReturnType<typeof signal<string | null>>,
+    fallbackQty = 0
   ): { price: number; quantity: number } | null {
     const price = Number(priceRaw);
-    const quantity = Number(qtyRaw);
+    const typedQty = Number(qtyRaw);
+    const quantity =
+      Number.isFinite(typedQty) && typedQty > 0
+        ? typedQty
+        : fallbackQty > 0
+          ? fallbackQty
+          : NaN;
     if (!Number.isFinite(price) || price <= 0) {
       error.set('Enter a valid price');
       return null;
@@ -412,17 +455,6 @@ export class AvgCalculatorComponent {
     this.addSolvedTarget(profit, this.defaultSliceQty());
   }
 
-  addGuideProfit(): void {
-    const goal = Number(this.draftGuideProfit);
-    if (!Number.isFinite(goal) || goal === 0) {
-      this.targetError.set('Enter a profit or loss amount');
-      return;
-    }
-    if (this.addSolvedTarget(goal, this.defaultSliceQty())) {
-      this.draftGuideProfit = '';
-    }
-  }
-
   private addSolvedTarget(netProfit: number, typedQty: number): boolean {
     const position = this.position();
     if (!position) {
@@ -458,8 +490,7 @@ export class AvgCalculatorComponent {
   }
 
   submitTarget(): void {
-    if (this.rightTab() === 'guide') this.addGuideProfit();
-    else if (this.rightTab() === 'profit') this.addProfitTarget();
+    if (this.rightTab() === 'profit') this.addProfitTarget();
     else this.addTarget();
   }
 
@@ -609,10 +640,6 @@ export class AvgCalculatorComponent {
     return `${side} ${position.quantity} at ${formatPrice(position.avgPrice)}`;
   }
 
-  exitActionLabel(): string {
-    return this.suggestedExitSide() === 'buy' ? 'Buy to cover' : 'Sell';
-  }
-
   signedMove(value: number | null): string {
     if (value == null || !Number.isFinite(value)) return '—';
     const sign = value > 0 ? '+' : '';
@@ -626,6 +653,14 @@ export class AvgCalculatorComponent {
       quantity: position.quantity,
       entryPrice: position.avgPrice,
     };
+  }
+
+  private openingWasShort(): boolean {
+    const remaining = this.book().remainingSide;
+    if (remaining === 'sell') return true;
+    if (remaining === 'buy') return false;
+    const first = this.fills()[0] ?? this.exits()[0];
+    return first?.side === 'sell';
   }
 
   private snapshot(): StockPlan {
