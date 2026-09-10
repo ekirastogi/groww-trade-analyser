@@ -252,7 +252,8 @@ export class AnalysisService {
     return { year: date.getUTCFullYear(), week };
   }
 
-  private aggregateByStock(trades: Trade[], chargeRatio: number): StockSummary[] {
+  /** Public so callers can build the same per-stock rows for a narrower slice, e.g. one day. */
+  aggregateByStock(trades: Trade[], chargeRatio: number): StockSummary[] {
     const map = new Map<string, StockSummary>();
 
     for (const t of trades) {

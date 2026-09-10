@@ -1,0 +1,82 @@
+<div class="overflow-x-auto">
+  <table class="stock-table">
+    <thead>
+      <tr>
+        <th class="w-10 text-center">#</th>
+        @for (col of columns; track col.key) {
+          <th [class]="(col.key === 'stockName' ? 'text-left w-auto' : 'text-right') + ' ' + responsiveClass(col.key)">
+            <button
+              type="button"
+              class="sort-btn"
+              [class.sort-btn-active]="isSortedColumn(col.key)"
+              (click)="toggleSort(col.key)"
+            >
+              {{ col.label }} <span>{{ sortIndicator(col.key) }}</span>
+            </button>
+          </th>
+        }
+      </tr>
+    </thead>
+    <tbody>
+      @for (stock of rows(); track stock.isin || stock.stockName; let i = $index) {
+        <tr>
+          <td class="text-center text-slate-400">{{ i + 1 }}</td>
+          @for (col of columns; track col.key) {
+            <td [class]="(col.key === 'stockName' ? 'col-name' : cellClass(col.key, stock)) + ' ' + responsiveClass(col.key)">
+              @switch (col.key) {
+                @case ('stockName') {
+                  <a
+                    class="block truncate font-semibold text-kairo-700 hover:underline"
+                    [title]="stock.stockName"
+                    [routerLink]="['/stock', stockSymbol(stock)]"
+                  >{{ stock.stockName }}</a>
+                  <span class="text-xs text-slate-400">{{ stock.isin || '—' }}</span>
+                }
+                @case ('tradeCount') { {{ stock.tradeCount }} }
+                @case ('quantity') { {{ stock.quantity | number }} }
+                @case ('buyValue') { {{ formatCurrency(stock.buyValue) }} }
+                @case ('sellValue') { {{ formatCurrency(stock.sellValue) }} }
+                @case ('realisedPnL') { {{ formatCurrency(stock.realisedPnL) }} }
+                @case ('realisedPnLPct') { {{ formatPct(stock.realisedPnLPct) }} }
+                @case ('allocatedCharges') { {{ formatCurrency(stock.allocatedCharges) }} }
+                @case ('netPnL') { {{ formatCurrency(stock.netPnL) }} }
+                @case ('winRate') {
+                  {{ stock.winRate != null ? (stock.winRate | number: '1.0-0') + '%' : '—' }}
+                }
+              }
+            </td>
+          }
+        </tr>
+      } @empty {
+        <tr>
+          <td [attr.colspan]="columns.length + 1" class="py-8 text-center text-sm text-slate-400">
+            {{ emptyMessage() }}
+          </td>
+        </tr>
+      }
+    </tbody>
+    @if (totals(); as sum) {
+      <tfoot>
+        <tr>
+          <td class="text-center text-slate-400"></td>
+          @for (col of columns; track col.key) {
+            <td [class]="(col.key === 'stockName' ? 'col-name font-semibold' : totalsCellClass(col.key)) + ' ' + responsiveClass(col.key)">
+              @switch (col.key) {
+                @case ('stockName') { {{ sum.stockCount }} stocks }
+                @case ('tradeCount') { {{ sum.tradeCount }} }
+                @case ('quantity') { {{ sum.quantity | number }} }
+                @case ('buyValue') { {{ formatCurrency(sum.buyValue) }} }
+                @case ('sellValue') { {{ formatCurrency(sum.sellValue) }} }
+                @case ('realisedPnL') { {{ formatCurrency(sum.realisedPnL) }} }
+                @case ('realisedPnLPct') { {{ formatPct(sum.realisedPnLPct) }} }
+                @case ('allocatedCharges') { {{ formatCurrency(sum.allocatedCharges) }} }
+                @case ('netPnL') { {{ formatCurrency(sum.netPnL) }} }
+                @case ('winRate') { — }
+              }
+            </td>
+          }
+        </tr>
+      </tfoot>
+    }
+  </table>
+</div>

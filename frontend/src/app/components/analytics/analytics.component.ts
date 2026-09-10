@@ -11,6 +11,7 @@ import { RouterLink } from '@angular/router';
 import { ChartConfiguration } from 'chart.js';
 import { ReportStateService } from '../../services/report-state.service';
 import { FilteredStockService } from '../../services/filtered-stock.service';
+import { AnalysisService } from '../../services/analysis.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
 import { formatCompactCurrency, formatCurrency, pnlClass } from '../../utils/format.utils';
 import {
@@ -30,12 +31,14 @@ import {
   buildLineDataset,
   buildZeroSplitLineDataset,
   buildCumulativeCandleDataset,
+  runningTotals,
 } from '../../utils/chart-theme';
 import { FilterPanelComponent } from '../shared/filter-panel/filter-panel.component';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
+import { StockBreakdownTableComponent } from '../shared/stock-breakdown-table/stock-breakdown-table.component';
 import {
   aggregateByWeekday,
   aggregateByDayOfMonth,
@@ -43,7 +46,6 @@ import {
   heatClass,
   pickExtremeBucket,
   pickExtremePeriod,
-  sortedStocks,
 } from '../../utils/analytics-insights.utils';
 import {
   aggregateDayOfMonthFromDaily,
@@ -52,12 +54,20 @@ import {
 } from '../../utils/analytics-aggregation.utils';
 
 type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'costs';
-type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
 
 @Component({
   selector: 'app-analytics',
   standalone: true,
-  imports: [CommonModule, RouterLink, FilterPanelComponent, TradeTypeFilterComponent, DateRangeFilterComponent, ChartCardComponent, ReportHistoryComponent],
+  imports: [
+    CommonModule,
+    RouterLink,
+    FilterPanelComponent,
+    TradeTypeFilterComponent,
+    DateRangeFilterComponent,
+    ChartCardComponent,
+    ReportHistoryComponent,
+    StockBreakdownTableComponent,
+  ],
   templateUrl: './analytics.component.html',
   styles: `
     .analytics-hero {
@@ -117,6 +127,7 @@ type StockSortKey = 'netPnL' | 'realisedPnL' | 'tradeCount' | 'winRate';
 export class AnalyticsComponent implements OnInit {
   readonly state = inject(ReportStateService);
   readonly filteredStocks = inject(FilteredStockService);
+  private analysisSvc = inject(AnalysisService);
   readonly formatCurrency = formatCurrency;
   readonly formatCompactCurrency = formatCompactCurrency;
   readonly pnlClass = pnlClass;
@@ -135,7 +146,6 @@ export class AnalyticsComponent implements OnInit {
   private chartVersion = signal(0);
   winRateShowDots = signal(false);
   activeTab = signal<AnalyticsTab>('overview');
-  stockSort = signal<StockSortKey>('netPnL');
 
   analysis = computed(() => this.state.analysis());
   chargeRatio = computed(() => this.analysis()?.summary.chargeRatio ?? 0);
@@ -148,10 +158,29 @@ export class AnalyticsComponent implements OnInit {
   setTab(tab: AnalyticsTab): void {
     this.activeTab.set(tab);
     this.chartVersion.update((v) => v + 1);
-    if (tab === 'overview' || tab === 'stocks') {
+    // The daily drilldown needs per-trade data to break a day down by stock.
+    if (tab === 'overview' || tab === 'stocks' || tab === 'daily') {
       void this.state.ensureTradesLoaded();
     }
   }
+
+  selectedDate = signal<string | null>(null);
+
+  /** Click a date to open its per-stock breakdown; clicking the open one closes it. */
+  toggleDate(period: string): void {
+    this.selectedDate.update((current) => (current === period ? null : period));
+  }
+
+  selectedDay = computed(
+    () => this.analysis()?.daily.find((d) => d.period === this.selectedDate()) ?? null
+  );
+
+  /** Same per-stock rows the dashboard shows, narrowed to the selected day's trades. */
+  selectedDateStocks = computed(() => {
+    const trades = this.selectedDay()?.trades ?? [];
+    if (!trades.length) return [];
+    return this.analysisSvc.aggregateByStock(trades, this.chargeRatio());
+  });
 
   /** Stock summaries for charts — filtered query with fallback to analysis stocks. */
   visibleStocks = computed(() => {
@@ -159,10 +188,6 @@ export class AnalyticsComponent implements OnInit {
     if (filtered.length) return filtered;
     return this.analysis()?.stocks ?? [];
   });
-
-  setStockSort(key: StockSortKey): void {
-    this.stockSort.set(key);
-  }
 
   weekdayBuckets = computed(() => {
     const trades = this.analysis()?.filteredTrades ?? [];
@@ -193,8 +218,6 @@ export class AnalyticsComponent implements OnInit {
   bestMonth = computed(() => pickExtremePeriod(this.analysis()?.monthly ?? [], 'best'));
   worstMonth = computed(() => pickExtremePeriod(this.analysis()?.monthly ?? [], 'worst'));
 
-  stockRows = computed(() => sortedStocks(this.visibleStocks(), this.stockSort()));
-
   weekdayMaxAbs = computed(() =>
     Math.max(...this.weekdayBuckets().map((b) => Math.abs(b.netPnL)), 1)
   );
@@ -209,6 +232,9 @@ export class AnalyticsComponent implements OnInit {
   sortedDaily = computed(() =>
     [...(this.analysis()?.daily ?? [])].sort((a, b) => a.period.localeCompare(b.period))
   );
+
+  /** Newest first, so the most recent trading day is at the top of the list. */
+  tradingDays = computed(() => [...this.sortedDaily()].reverse());
 
   topDailyWins = computed(() =>
     [...(this.analysis()?.daily ?? [])].sort((a, b) => b.netPnL - a.netPnL).slice(0, 5)
@@ -471,12 +497,14 @@ export class AnalyticsComponent implements OnInit {
     if (!daily.length) return null;
     const mobile = isMobileChart();
     const rows = [...daily].sort((a, b) => a.period.localeCompare(b.period));
+    const dayValues = rows.map((d) => d.netPnL);
+    const cumulative = runningTotals(dayValues);
 
     return withDecimation({
       type: 'bar',
       data: {
         labels: rows.map((d) => abbreviateLabel(d.label, mobile ? 6 : 12)),
-        datasets: [buildCumulativeCandleDataset('Day P&L', rows.map((d) => d.netPnL))],
+        datasets: [buildCumulativeCandleDataset('Day P&L', dayValues)],
       },
       options: {
         ...barChartOptions(''),
@@ -484,13 +512,10 @@ export class AnalyticsComponent implements OnInit {
           ...baseLegendPublic(false),
           tooltip: {
             callbacks: {
-              label: (ctx) => {
-                const [from, to] = ctx.raw as [number, number];
-                return [
-                  `Day: ${formatCurrency(to - from)}`,
-                  `Cumulative: ${formatCurrency(to)}`,
-                ];
-              },
+              label: (ctx) => [
+                `Day: ${formatCurrency(dayValues[ctx.dataIndex] ?? 0)}`,
+                `Cumulative: ${formatCurrency(cumulative[ctx.dataIndex] ?? 0)}`,
+              ],
             },
           },
         },
@@ -651,23 +676,6 @@ export class AnalyticsComponent implements OnInit {
     });
   });
 
-  topStocksChartConfig = computed(() => {
-    this.chartVersion();
-    const stocks = [...this.visibleStocks()].sort((a, b) => b.netPnL - a.netPnL);
-    const n = this.state.topStocksCount();
-    const top = stocks.slice(0, n);
-    if (!top.length) return null;
-    const mobile = isMobileChart();
-    return {
-      type: 'bar' as const,
-      data: {
-        labels: top.map((s) => abbreviateLabel(s.stockName, mobile ? 16 : 24)),
-        datasets: [buildPnLBarDataset('Net P&L', top.map((s) => s.netPnL))],
-      },
-      options: barChartOptions('', true),
-    };
-  });
-
   bottomStocksChartConfig = computed(() => {
     this.chartVersion();
     const stocks = [...this.visibleStocks()].sort((a, b) => a.netPnL - b.netPnL);
@@ -801,98 +809,6 @@ export class AnalyticsComponent implements OnInit {
         }],
       },
       options: countBarChartOptions(''),
-    };
-  });
-
-  pnlEfficiencyChartConfig = computed(() => {
-    this.chartVersion();
-    const stocks = [...this.visibleStocks()]
-      .filter((s) => s.tradeCount > 0)
-      .map((s) => ({ ...s, pnlPerTrade: s.netPnL / s.tradeCount }))
-      .sort((a, b) => Math.abs(b.pnlPerTrade) - Math.abs(a.pnlPerTrade))
-      .slice(0, 12);
-    if (!stocks.length) return null;
-    const mobile = isMobileChart();
-    return {
-      type: 'bar' as const,
-      data: {
-        labels: stocks.map((s) => abbreviateLabel(s.stockName, mobile ? 12 : 18)),
-        datasets: [buildPnLBarDataset('Net P&L / Trade', stocks.map((s) => s.pnlPerTrade))],
-      },
-      options: barChartOptions('', true),
-    };
-  });
-
-  winLossByStockChartConfig = computed(() => {
-    this.chartVersion();
-    const trades = this.analysis()?.filteredTrades ?? [];
-    const mobile = isMobileChart();
-
-    if (trades.length) {
-      const map = new Map<string, { wins: number; losses: number }>();
-      for (const t of trades) {
-        const k = t.stockName;
-        if (!map.has(k)) map.set(k, { wins: 0, losses: 0 });
-        const entry = map.get(k)!;
-        if (t.realisedPnL > 0) entry.wins++;
-        else entry.losses++;
-      }
-      const sorted = [...map.entries()]
-        .sort((a, b) => (b[1].wins + b[1].losses) - (a[1].wins + a[1].losses))
-        .slice(0, 12);
-      if (!sorted.length) return null;
-      return {
-        type: 'bar' as const,
-        data: {
-          labels: sorted.map(([name]) => abbreviateLabel(name, mobile ? 10 : 16)),
-          datasets: [
-            {
-              label: 'Winning',
-              data: sorted.map(([, v]) => v.wins),
-              backgroundColor: 'rgba(16,185,129,0.82)',
-              borderRadius: 4,
-              maxBarThickness: 32,
-            },
-            {
-              label: 'Losing',
-              data: sorted.map(([, v]) => v.losses),
-              backgroundColor: 'rgba(239,68,68,0.82)',
-              borderRadius: 4,
-              maxBarThickness: 32,
-            },
-          ],
-        },
-        options: groupedBarChartOptions(''),
-      };
-    }
-
-    const stocks = this.visibleStocks()
-      .filter((s) => s.tradeCount > 0 && ((s.winningTrades ?? 0) + (s.losingTrades ?? 0) > 0))
-      .sort((a, b) => b.tradeCount - a.tradeCount)
-      .slice(0, 12);
-    if (!stocks.length) return null;
-    return {
-      type: 'bar' as const,
-      data: {
-        labels: stocks.map((s) => abbreviateLabel(s.stockName, mobile ? 10 : 16)),
-        datasets: [
-          {
-            label: 'Winning',
-            data: stocks.map((s) => s.winningTrades ?? 0),
-            backgroundColor: 'rgba(16,185,129,0.82)',
-            borderRadius: 4,
-            maxBarThickness: 32,
-          },
-          {
-            label: 'Losing',
-            data: stocks.map((s) => s.losingTrades ?? 0),
-            backgroundColor: 'rgba(239,68,68,0.82)',
-            borderRadius: 4,
-            maxBarThickness: 32,
-          },
-        ],
-      },
-      options: groupedBarChartOptions(''),
     };
   });
 

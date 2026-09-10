@@ -78,7 +78,8 @@ export class StockBreakdownTableComponent {
       buyValue,
       sellValue: sum((s) => s.sellValue),
       realisedPnL,
-      realisedPnLPct: buyValue > 0 ? (realisedPnL / buyValue) * 100 : 0,
+      // Stored as a fraction; formatPct scales it to a percentage for display.
+      realisedPnLPct: buyValue > 0 ? realisedPnL / buyValue : 0,
       allocatedCharges: sum((s) => s.allocatedCharges),
       netPnL: sum((s) => s.netPnL),
     };
