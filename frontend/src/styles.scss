@@ -1294,6 +1294,18 @@
   @apply absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-kairo-600 shadow;
 }
 
+.stock-detail-52w-stats {
+  @apply mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs font-semibold;
+}
+
+.stock-detail-52w-up {
+  @apply text-emerald-600;
+}
+
+.stock-detail-52w-down {
+  @apply text-red-600;
+}
+
 .stock-detail-tabs {
   @apply flex gap-1 border-b border-slate-200;
 }
