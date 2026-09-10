@@ -115,7 +115,6 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   mobileFiltersOpen = signal(false);
 
   readonly hiddenTradeTypes: TradeType[] = ['mtf'];
-  readonly hiddenTradeTypes: TradeType[] = ['mtf'];
   readonly formatCurrency = formatCurrency;
   readonly pnlClass = pnlClass;
   readonly tableSort = new TableSortState('netPnL');
