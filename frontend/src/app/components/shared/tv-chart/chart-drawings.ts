@@ -40,15 +40,15 @@ export interface DrawingToolMeta {
 }
 
 export const DRAWING_TOOLS: DrawingToolMeta[] = [
-  { value: 'cursor', label: 'Crosshair', hint: 'Pan and zoom the chart', twoStep: false, paths: ['M12 3v18', 'M3 12h18'] },
-  { value: 'trend', label: 'Trend line', hint: 'Click the start, then the end', twoStep: true, paths: ['M4 18L20 6'] },
-  { value: 'ray', label: 'Ray', hint: 'Click the start, then a point on the ray', twoStep: true, paths: ['M4 18L16 8', 'M16 8l4-2', 'M16 8l2 4'] },
-  { value: 'horizontal', label: 'Horizontal', hint: 'Click to place a price level', twoStep: false, paths: ['M3 12h18'] },
-  { value: 'vertical', label: 'Vertical', hint: 'Click to mark a date', twoStep: false, paths: ['M12 3v18'] },
-  { value: 'rect', label: 'Rectangle', hint: 'Click one corner, then the opposite', twoStep: true, paths: ['M5 6h14v12H5z'] },
-  { value: 'fib', label: 'Fib retracement', hint: 'Click the swing low, then the swing high', twoStep: true, paths: ['M4 7h16', 'M4 12h16', 'M4 17h16', 'M5 19L19 5'] },
+  { value: 'cursor', label: 'Crosshair', hint: 'Drag to pan · scroll to zoom', twoStep: false, paths: ['M12 3v18', 'M3 12h18'] },
+  { value: 'trend', label: 'Trend line', hint: 'Press, drag, and release', twoStep: true, paths: ['M4 18L20 6'] },
+  { value: 'ray', label: 'Ray', hint: 'Press, drag, and release', twoStep: true, paths: ['M4 18L16 8', 'M16 8l4-2', 'M16 8l2 4'] },
+  { value: 'horizontal', label: 'Horizontal', hint: 'Drag to a price, then release', twoStep: false, paths: ['M3 12h18'] },
+  { value: 'vertical', label: 'Vertical', hint: 'Drag to a date, then release', twoStep: false, paths: ['M12 3v18'] },
+  { value: 'rect', label: 'Rectangle', hint: 'Press, drag, and release', twoStep: true, paths: ['M5 6h14v12H5z'] },
+  { value: 'fib', label: 'Fib retracement', hint: 'Drag from swing low to swing high', twoStep: true, paths: ['M4 7h16', 'M4 12h16', 'M4 17h16', 'M5 19L19 5'] },
   { value: 'text', label: 'Text', hint: 'Click to place a note', twoStep: false, paths: ['M6 6h12', 'M12 6v12', 'M8 18h8'] },
-  { value: 'measure', label: 'Measure', hint: 'Click two points to measure the move', twoStep: true, paths: ['M4 8h16v8H4z', 'M8 8v8', 'M12 8v8', 'M16 8v8'] },
+  { value: 'measure', label: 'Measure', hint: 'Press, drag, and release', twoStep: true, paths: ['M4 8h16v8H4z', 'M8 8v8', 'M12 8v8', 'M16 8v8'] },
   { value: 'zoom', label: 'Zoom box', hint: 'Drag a region to zoom in', twoStep: true, paths: ['M11 19a8 8 0 100-16 8 8 0 000 16z', 'M21 21l-4.35-4.35'] },
   { value: 'erase', label: 'Eraser', hint: 'Click a drawing to delete it', twoStep: false, paths: ['M19 13l-6 6H5l-2-2 12-12 4 4z', 'M16 5l3 3'] },
 ];

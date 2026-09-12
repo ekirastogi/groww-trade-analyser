@@ -57,7 +57,6 @@ import {
   DrawingPoint,
   DrawingTool,
   hitTest,
-  isTwoStep,
   parseDrawings,
   renderDrawings,
 } from './chart-drawings';
@@ -163,11 +162,14 @@ export class TvChartComponent implements OnDestroy {
   range = signal<ChartRange>('all');
   hover = signal<TvCandle | null>(null);
   textDraft = signal<{ x: number; y: number; point: DrawingPoint; value: string } | null>(null);
+  logicalRange = signal<{ from: number; to: number } | null>(null);
 
   private undoStack: Drawing[][] = [];
   private redoStack: Drawing[][] = [];
-  private zoomStart: DrawingPoint | null = null;
   private zoomPixel: { x: number; y: number } | null = null;
+  private dragging = false;
+  private scrollerDrag: { pointerId: number; startX: number; from: number; span: number } | null = null;
+  private appliedFitKey = '';
 
   private anchor = signal<DrawingPoint | null>(null);
   private cursorPt = signal<DrawingPoint | null>(null);
@@ -194,13 +196,23 @@ export class TvChartComponent implements OnDestroy {
 
   timeframeLabel = computed(() => CANDLE_TIMEFRAME_LABELS[this.timeframe()]);
 
+  scrollerThumb = computed(() => {
+    const count = Math.max(this.view().length, 1);
+    const range = this.logicalRange();
+    const from = range?.from ?? 0;
+    const to = range?.to ?? count;
+    const span = Math.max(to - from, 1);
+    const left = (from / count) * 100;
+    const width = Math.min(100, Math.max((span / count) * 100, 8));
+    return { left: `${left}%`, width: `${width}%` };
+  });
+
   activeHint = computed(() => {
     const tool = this.tool();
     if (tool === 'cursor') return null;
     const meta = DRAWING_TOOLS.find((t) => t.value === tool);
     if (!meta) return null;
-    if (this.anchor()) return 'Click again to finish, or press Escape to cancel';
-    if (this.zoomStart) return 'Drag to select a region, then release';
+    if (this.anchor()) return 'Release to finish, or press Escape to cancel';
     return meta.hint;
   });
 
@@ -242,7 +254,7 @@ export class TvChartComponent implements OnDestroy {
       if (hasNegativePrices(data) && this.scaleMode() === 'log') {
         this.scaleMode.set('normal');
       }
-      this.applyVisibleRange(this.range(), data);
+      this.syncVisibleRange(data);
       this.paint();
     });
 
@@ -265,8 +277,7 @@ export class TvChartComponent implements OnDestroy {
     });
 
     effect(() => {
-      const armed = this.overlayArmed();
-      this.chart?.applyOptions({ handleScroll: !armed, handleScale: !armed });
+      this.applyChartInteraction(!this.overlayArmed());
     });
 
     effect(() => {
@@ -359,6 +370,7 @@ export class TvChartComponent implements OnDestroy {
     this.drawings.set(this.readDrawings(timeframe));
     this.undoStack = [];
     this.redoStack = [];
+    this.appliedFitKey = '';
     safeWrite(this.key('timeframe'), timeframe);
   }
 
@@ -370,11 +382,13 @@ export class TvChartComponent implements OnDestroy {
 
   setRange(range: ChartRange): void {
     this.range.set(range);
+    this.appliedFitKey = '';
     this.applyVisibleRange(range, this.view());
   }
 
   fitContent(): void {
     this.range.set('all');
+    this.appliedFitKey = '';
     this.chart?.timeScale().fitContent();
   }
 
@@ -469,16 +483,14 @@ export class TvChartComponent implements OnDestroy {
 
   onPointerDown(event: PointerEvent): void {
     if (!this.overlayArmed()) return;
+    event.preventDefault();
+    event.stopPropagation();
     const tool = this.tool();
     const point = this.toChartPoint(event);
     if (!point) return;
 
-    if (tool === 'zoom') {
-      this.zoomStart = point;
-      this.zoomPixel = this.toPixel(event);
-      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
-      return;
-    }
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    this.dragging = true;
 
     if (tool === 'erase') {
       if (this.hidden()) return;
@@ -496,56 +508,86 @@ export class TvChartComponent implements OnDestroy {
       return;
     }
 
-    if (!isTwoStep(tool)) {
-      this.addDrawing(tool, point, point);
-      return;
-    }
-
-    const anchor = this.anchor();
-    if (!anchor) {
-      this.anchor.set(point);
-      this.cursorPt.set(point);
-      return;
-    }
-    this.addDrawing(tool, anchor, point);
-    this.cancelPending();
+    this.anchor.set(point);
+    this.cursorPt.set(point);
+    this.zoomPixel = this.toPixel(event);
   }
 
   onPointerMove(event: PointerEvent): void {
-    if (this.tool() === 'zoom' && this.zoomStart) {
-      this.cursorPt.set(this.toChartPoint(event));
-      this.zoomPixel = this.toPixel(event);
-      this.paint();
-      return;
-    }
-    if (this.tool() === 'cursor' || !this.anchor()) return;
-    this.cursorPt.set(this.toChartPoint(event));
+    if (!this.dragging || !this.anchor()) return;
+    event.preventDefault();
+    const point = this.toChartPoint(event);
+    if (point) this.cursorPt.set(point);
+    this.zoomPixel = this.toPixel(event);
   }
 
   onPointerUp(event: PointerEvent): void {
-    if (this.tool() !== 'zoom' || !this.zoomStart) return;
-    const end = this.toChartPoint(event);
-    const start = this.zoomStart;
-    this.zoomStart = null;
+    if (!this.dragging) return;
+    event.preventDefault();
+    const tool = this.tool();
+    const start = this.anchor();
+    const end = this.toChartPoint(event) ?? this.cursorPt() ?? start;
+    this.dragging = false;
     this.zoomPixel = null;
-    this.cursorPt.set(null);
-    if (!end || !this.chart) {
+    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+
+    if (tool === 'erase' || tool === 'text' || tool === 'cursor' || !start || !end) {
+      this.cancelPending();
+      return;
+    }
+
+    if (tool === 'zoom') {
+      if (this.chart && Math.abs(end.logical - start.logical) >= 1) {
+        this.chart.timeScale().setVisibleLogicalRange({
+          from: Math.min(start.logical, end.logical),
+          to: Math.max(start.logical, end.logical),
+        });
+        this.range.set('all');
+        this.appliedFitKey = '';
+        this.setTool('cursor');
+      }
+      this.cancelPending();
       this.paint();
       return;
     }
-    const from = Math.min(start.logical, end.logical);
-    const to = Math.max(start.logical, end.logical);
-    if (to - from < 1) {
-      this.paint();
-      return;
-    }
-    this.chart.timeScale().setVisibleLogicalRange({ from, to });
-    this.range.set('all');
-    this.setTool('cursor');
+
+    this.addDrawing(tool, start, end);
+    this.cancelPending();
   }
 
-  onPointerLeave(): void {
-    if (this.anchor()) this.cursorPt.set(null);
+  onScrollerDown(event: PointerEvent): void {
+    event.preventDefault();
+    const range = this.logicalRange();
+    if (!range) return;
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    this.scrollerDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      from: range.from,
+      span: Math.max(range.to - range.from, 1),
+    };
+  }
+
+  onScrollerMove(event: PointerEvent): void {
+    const drag = this.scrollerDrag;
+    if (!drag || !this.chart) return;
+    event.preventDefault();
+    const track = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const count = Math.max(this.view().length, 1);
+    const dx = event.clientX - drag.startX;
+    const shift = (dx / Math.max(track.width, 1)) * count;
+    let from = drag.from + shift;
+    const maxFrom = Math.max(count - drag.span, 0);
+    from = Math.min(Math.max(from, 0), maxFrom);
+    this.chart.timeScale().setVisibleLogicalRange({ from, to: from + drag.span });
+    this.range.set('all');
+    this.appliedFitKey = '';
+  }
+
+  onScrollerUp(event: PointerEvent): void {
+    if (!this.scrollerDrag) return;
+    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+    this.scrollerDrag = null;
   }
 
   onTextInput(event: Event): void {
@@ -631,8 +673,8 @@ export class TvChartComponent implements OnDestroy {
   private cancelPending(): void {
     this.anchor.set(null);
     this.cursorPt.set(null);
-    this.zoomStart = null;
     this.zoomPixel = null;
+    this.dragging = false;
     this.textDraft.set(null);
   }
 
@@ -716,9 +758,20 @@ export class TvChartComponent implements OnDestroy {
       });
     }
 
-    const onRange = () => this.paint();
+    const onRange = () => {
+      const range = this.chart?.timeScale().getVisibleLogicalRange();
+      if (range) this.logicalRange.set({ from: range.from, to: range.to });
+      this.paint();
+    };
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
     this.detach.push(() => this.chart?.timeScale().unsubscribeVisibleLogicalRangeChange(onRange));
+
+    const wrap = host.parentElement;
+    if (wrap) {
+      const onWheel = (event: WheelEvent) => event.preventDefault();
+      wrap.addEventListener('wheel', onWheel, { passive: false });
+      this.detach.push(() => wrap.removeEventListener('wheel', onWheel));
+    }
 
     const onMove = (param: MouseEventParams) => {
       if (!param.time || !this.series) {
@@ -773,6 +826,13 @@ export class TvChartComponent implements OnDestroy {
     this.sma50Series?.setData(smaPoints(data, 50).map((p) => ({ time: p.time as Time, value: p.value })));
   }
 
+  private syncVisibleRange(data: TvCandle[]): void {
+    const key = `${this.timeframe()}:${this.range()}:${data.length}:${data[0]?.time ?? ''}:${data.at(-1)?.close ?? ''}`;
+    if (key === this.appliedFitKey) return;
+    this.appliedFitKey = key;
+    this.applyVisibleRange(this.range(), data);
+  }
+
   private applyVisibleRange(range: ChartRange, data: TvCandle[]): void {
     if (!this.chart || !data.length) return;
     if (range === 'all') {
@@ -785,6 +845,24 @@ export class TvChartComponent implements OnDestroy {
     this.chart.timeScale().setVisibleRange({
       from: start.time as Time,
       to: data[data.length - 1].time as Time,
+    });
+  }
+
+  private applyChartInteraction(enabled: boolean): void {
+    this.chart?.applyOptions({
+      handleScroll: {
+        mouseWheel: enabled,
+        pressedMouseMove: enabled,
+        horzTouchDrag: enabled,
+        vertTouchDrag: enabled,
+      },
+      handleScale: {
+        axisPressedMouseMove: enabled,
+        mouseWheel: enabled,
+        pinch: enabled,
+        axisDoubleClickReset: true,
+      },
+      kineticScroll: { touch: enabled, mouse: enabled },
     });
   }
 
@@ -815,20 +893,26 @@ export class TvChartComponent implements OnDestroy {
   }
 
   private toPixel(event: PointerEvent): { x: number; y: number } {
-    const rect = this.overlay()!.nativeElement.getBoundingClientRect();
+    const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect()
+      ?? this.overlay()!.nativeElement.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
   private toChartPoint(event: PointerEvent): DrawingPoint | null {
     if (!this.chart || !this.series) return null;
     const { x, y } = this.toPixel(event);
-    const logicalRaw = this.chart.timeScale().coordinateToLogical(x);
-    const priceRaw = this.series.coordinateToPrice(y);
-    if (logicalRaw == null || priceRaw == null) return null;
+    let logicalRaw = this.chart.timeScale().coordinateToLogical(x);
+    const mappedPrice = this.series.coordinateToPrice(y);
+    let price = mappedPrice == null ? (this.view().at(-1)?.close ?? 0) : Number(mappedPrice);
+    const visible = this.chart.timeScale().getVisibleLogicalRange();
+    if (logicalRaw == null && visible) {
+      logicalRaw = x < 0 ? visible.from : visible.to;
+    }
+    if (logicalRaw == null) return null;
     const logical = Math.round(logicalRaw);
     const candles = this.view();
     const candle = candles[logical];
-    const price = this.magnet() && candle ? snapPriceToCandle(candle, priceRaw) : priceRaw;
+    if (this.magnet() && candle) price = snapPriceToCandle(candle, price);
     return { logical, price };
   }
 
@@ -849,8 +933,9 @@ export class TvChartComponent implements OnDestroy {
     const drawings = this.hidden() ? [] : this.drawings();
     renderDrawings(ctx, drawings, this.hidden() ? null : this.previewShape(), map, (v) => this.formatLegend(v));
 
-    if (this.tool() === 'zoom' && this.zoomStart && this.zoomPixel && this.anchorPixel(this.zoomStart)) {
-      const a = this.anchorPixel(this.zoomStart)!;
+    const zoomAnchor = this.anchor();
+    if (this.tool() === 'zoom' && zoomAnchor && this.zoomPixel && this.anchorPixel(zoomAnchor)) {
+      const a = this.anchorPixel(zoomAnchor)!;
       const b = this.zoomPixel;
       const x = Math.min(a.x, b.x);
       const y = Math.min(a.y, b.y);

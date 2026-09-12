@@ -173,16 +173,16 @@
 
       <div class="tv-canvas-wrap">
         <div #container class="tv-canvas"></div>
-        <canvas
-          #overlay
-          class="tv-overlay"
-          [class.tv-overlay-armed]="overlayArmed()"
+        <canvas #overlay class="tv-draw-layer"></canvas>
+        <div
+          class="tv-hit-layer"
+          [class.tv-hit-layer-armed]="overlayArmed()"
           [style.cursor]="overlayCursor()"
           (pointerdown)="onPointerDown($event)"
           (pointermove)="onPointerMove($event)"
           (pointerup)="onPointerUp($event)"
-          (pointerleave)="onPointerLeave()"
-        ></canvas>
+          (pointercancel)="onPointerUp($event)"
+        ></div>
 
         @if (textDraft(); as draft) {
           <input
@@ -205,6 +205,19 @@
             <p>{{ emptyMessage() }}</p>
           </div>
         }
+      </div>
+
+      <div
+        class="tv-scroller"
+        title="Drag to pan the visible range"
+        (pointerdown)="onScrollerDown($event)"
+        (pointermove)="onScrollerMove($event)"
+        (pointerup)="onScrollerUp($event)"
+        (pointercancel)="onScrollerUp($event)"
+      >
+        <div class="tv-scroller-track">
+          <div class="tv-scroller-thumb" [style.left]="scrollerThumb().left" [style.width]="scrollerThumb().width"></div>
+        </div>
       </div>
 
       <div class="tv-bottom">

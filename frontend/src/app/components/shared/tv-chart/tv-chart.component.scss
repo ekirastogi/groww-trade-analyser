@@ -195,20 +195,25 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
-  width: 2.35rem;
-  padding: 0.35rem 0.2rem;
+  gap: 0.05rem;
+  width: 2.25rem;
+  padding: 0.25rem 0.15rem;
   border-right: 1px solid #eef2f6;
   background: #fafbfc;
-  overflow-y: auto;
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+.tv-rail::-webkit-scrollbar {
+  display: none;
 }
 
 .tv-tool {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 1.7rem;
+  height: 1.7rem;
   border-radius: 0.3rem;
   color: #64748b;
   flex-shrink: 0;
@@ -236,12 +241,11 @@
 }
 
 .tv-rail-colors {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.28rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.22rem;
   margin-top: auto;
-  padding: 0.4rem 0 0.2rem;
+  padding: 0.3rem 0 0.15rem;
 }
 
 .tv-swatch {
@@ -309,19 +313,29 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 .tv-canvas,
-.tv-overlay {
+.tv-draw-layer,
+.tv-hit-layer {
   position: absolute;
   inset: 0;
 }
 
-.tv-overlay {
+.tv-draw-layer {
   pointer-events: none;
+  z-index: 1;
 }
 
-.tv-overlay-armed {
+.tv-hit-layer {
+  z-index: 2;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.tv-hit-layer-armed {
   pointer-events: auto;
 }
 
@@ -349,6 +363,39 @@
   font-size: 0.875rem;
   text-align: center;
   padding: 1rem;
+}
+
+.tv-scroller {
+  flex-shrink: 0;
+  height: 1.15rem;
+  padding: 0.2rem 0.7rem;
+  background: #f8fafc;
+  border-top: 1px solid #eef2f6;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.tv-scroller:active {
+  cursor: grabbing;
+}
+
+.tv-scroller-track {
+  position: relative;
+  height: 100%;
+  background: #e2e8f0;
+  border-radius: 99px;
+}
+
+.tv-scroller-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 1.5rem;
+  background: #0d9488;
+  border-radius: 99px;
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .tv-bottom {
@@ -410,6 +457,11 @@
     border-bottom: 1px solid #eef2f6;
     overflow-x: auto;
     overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .tv-rail::-webkit-scrollbar {
+    display: none;
   }
 
   .tv-rail-gap {
@@ -419,6 +471,7 @@
   }
 
   .tv-rail-colors {
+    display: flex;
     flex-direction: row;
     margin-top: 0;
     margin-left: auto;
