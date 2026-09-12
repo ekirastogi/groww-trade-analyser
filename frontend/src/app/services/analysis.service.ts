@@ -20,23 +20,26 @@ import { normalizeSymbol } from '../utils/upload-merge.utils';
 @Injectable({ providedIn: 'root' })
 export class AnalysisService {
   analyze(report: Report, opts: AnalysisOptions = {}): AnalysisResult {
+    const allTrades = report.trades ?? [];
+    const stockSummary = report.stockSummary ?? [];
+    const charges = report.charges ?? { items: [], total: 0 };
     const reportTotalSell =
-      report.trades.length > 0
-        ? report.trades.reduce((s, t) => s + t.sellValue, 0)
-        : report.stockSummary.reduce((s, stock) => s + stock.sellValue, 0);
-    const chargeRatio = reportTotalSell > 0 && report.charges.total > 0
-      ? report.charges.total / reportTotalSell
+      allTrades.length > 0
+        ? allTrades.reduce((s, t) => s + t.sellValue, 0)
+        : stockSummary.reduce((s, stock) => s + stock.sellValue, 0);
+    const chargeRatio = reportTotalSell > 0 && charges.total > 0
+      ? charges.total / reportTotalSell
       : 0;
 
-    const hasTrades = report.trades.length > 0;
+    const hasTrades = allTrades.length > 0;
     const dailyRows = filterDailyAnalytics(report.dailyAnalytics ?? [], opts);
     const hasDaily = dailyRows.length > 0;
 
-    const trades = hasTrades ? this.filterTrades(report.trades, opts) : [];
+    const trades = hasTrades ? this.filterTrades(allTrades, opts) : [];
     const stocks =
       hasTrades
         ? this.aggregateByStock(trades, chargeRatio)
-        : this.filterStockSummary(report.stockSummary, opts);
+        : this.filterStockSummary(stockSummary, opts);
 
     const summaryFromDaily = hasDaily ? buildSummaryFromDaily(dailyRows) : null;
     const summary = hasTrades
@@ -77,7 +80,7 @@ export class AnalysisService {
         return periodBuckets('monthly');
       },
       stocks,
-      charges: report.charges,
+      charges,
       filteredTrades: trades,
       filters: {
         startDate: opts.startDate ?? '',

@@ -120,21 +120,48 @@ const SALES_HINTS = ['Sales', 'Revenue'];
 const PROFIT_HINTS = ['Net Profit', 'Profit after tax'];
 const OPM_HINTS = ['OPM %', 'OPM'];
 
-export function buildStockAnalysis(stock: RegistryStock): StockFundamentalAnalysis {
+function emptyAnalysis(): StockFundamentalAnalysis {
+  return {
+    hasQuarterly: false,
+    hasShareholding: false,
+    sales: null,
+    netProfit: null,
+    opm: null,
+    holdings: [],
+    compoundGrowth: [],
+    growthTable: [],
+    quarterlyCharts: [],
+    quarterMonths: [],
+    latestQuarterMonth: null,
+    pricePosition: null,
+    divergenceNote: '',
+    verdicts: [],
+  };
+}
+
+function hasFinancialRows(table?: RegistryFinancialTable | null): table is RegistryFinancialTable {
+  return !!table?.rows?.length;
+}
+
+export function buildStockAnalysis(stock: RegistryStock | null | undefined): StockFundamentalAnalysis {
+  if (!stock) return emptyAnalysis();
+
   const quarterly = stock.quarterlyResults;
   const annual = stock.profitLoss;
   const shareholding = stock.shareholding;
 
-  const sales = quarterly ? analyzeMetric(quarterly, SALES_HINTS, 'currency', stock.salesGrowth3y, stock.salesGrowth5y, stock.salesGrowth10y) : null;
-  const netProfit = quarterly
+  const sales = hasFinancialRows(quarterly)
+    ? analyzeMetric(quarterly, SALES_HINTS, 'currency', stock.salesGrowth3y, stock.salesGrowth5y, stock.salesGrowth10y)
+    : null;
+  const netProfit = hasFinancialRows(quarterly)
     ? analyzeMetric(quarterly, PROFIT_HINTS, 'currency', stock.profitGrowth3y, stock.profitGrowth5y, stock.profitGrowth10y)
     : null;
-  const opm = quarterly ? analyzeMetric(quarterly, OPM_HINTS, 'percent') : null;
+  const opm = hasFinancialRows(quarterly) ? analyzeMetric(quarterly, OPM_HINTS, 'percent') : null;
 
   // Annual P&L drives the yearly (YoY) charts.
-  const salesAnnual = annual ? analyzeMetric(annual, SALES_HINTS, 'currency') : null;
-  const profitAnnual = annual ? analyzeMetric(annual, PROFIT_HINTS, 'currency') : null;
-  const opmAnnual = annual ? analyzeMetric(annual, OPM_HINTS, 'percent') : null;
+  const salesAnnual = hasFinancialRows(annual) ? analyzeMetric(annual, SALES_HINTS, 'currency') : null;
+  const profitAnnual = hasFinancialRows(annual) ? analyzeMetric(annual, PROFIT_HINTS, 'currency') : null;
+  const opmAnnual = hasFinancialRows(annual) ? analyzeMetric(annual, OPM_HINTS, 'percent') : null;
 
   const holdings: HoldingAnalysis[] = [];
   if (shareholding?.rows?.length) {
@@ -700,8 +727,10 @@ function analyzeHolding(headers: string[], row: { label: string; values: string[
 }
 
 function findRow(table: RegistryFinancialTable, hints: string[]) {
+  const rows = table?.rows;
+  if (!rows?.length) return null;
   for (const hint of hints) {
-    const row = table.rows.find((r) => r.label.toLowerCase().includes(hint.toLowerCase()));
+    const row = rows.find((r) => (r.label ?? '').toLowerCase().includes(hint.toLowerCase()));
     if (row) return row;
   }
   return null;

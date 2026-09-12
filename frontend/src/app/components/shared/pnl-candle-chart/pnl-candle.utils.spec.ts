@@ -59,4 +59,10 @@ describe('aggregateCandles', () => {
       }
     }
   });
+
+  it('sums volume when rolling up a week', () => {
+    const withVolume: PnlCandle[] = daily.map((c, i) => ({ ...c, volume: (i + 1) * 10 }));
+    const [week] = aggregateCandles(withVolume, 'week');
+    expect(week.volume).toBe(100);
+  });
 });

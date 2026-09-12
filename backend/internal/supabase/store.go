@@ -120,16 +120,29 @@ func (s *Store) PublishSlimStock(ctx context.Context, payload datapub.SlimStockP
 		}
 	}
 
+	isin := strings.ToUpper(strings.TrimSpace(payload.ISIN))
 	_, err := s.pool.Exec(ctx, `
 		insert into stocks (
-			symbol, name, exchange, ltp, change_amt, change_pct, market_cap, pe,
+			symbol, name, isin, exchange, ltp, change_amt, change_pct, market_cap, pe,
 			week52_high, week52_low, support_levels, resistance_levels,
 			quarterly_perf, yearly_perf, indicators, pe_series,
 			vs_nifty_pct, vs_cap_index_pct, vs_sector_pct, cap_bucket, sector,
 			volume_ratio, last_updated, data_source
-		) values ($1,$2,'NSE',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+		) values (
+			$1,$2,
+			coalesce(
+				nullif($24, ''),
+				(select r.isin from registry_stocks r
+				 where r.symbol = $1 and coalesce(trim(r.isin), '') <> ''
+				 limit 1),
+				''
+			),
+			'NSE',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
+		)
 		on conflict (symbol) do update set
-			name=excluded.name, ltp=excluded.ltp, change_amt=excluded.change_amt,
+			name=excluded.name,
+			isin=case when excluded.isin <> '' then excluded.isin else stocks.isin end,
+			ltp=excluded.ltp, change_amt=excluded.change_amt,
 			change_pct=excluded.change_pct, market_cap=excluded.market_cap, pe=excluded.pe,
 			week52_high=excluded.week52_high, week52_low=excluded.week52_low,
 			support_levels=excluded.support_levels, resistance_levels=excluded.resistance_levels,
@@ -142,7 +155,7 @@ func (s *Store) PublishSlimStock(ctx context.Context, payload datapub.SlimStockP
 	`, sym, name, ltp, chg, chgPct, mcap, pe, payload.Week52High, payload.Week52Low,
 		supports, resistances, qp, yp, indicators, peSeries,
 		payload.VsNiftyPct, payload.VsCapPct, payload.VsSectorPct, payload.CapBucket, payload.Sector,
-		payload.VolumeRatio, time.Now().Format(time.RFC3339), payload.DataSource)
+		payload.VolumeRatio, time.Now().Format(time.RFC3339), payload.DataSource, isin)
 	return err
 }
 

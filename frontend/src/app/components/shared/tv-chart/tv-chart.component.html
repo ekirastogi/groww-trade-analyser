@@ -1,0 +1,248 @@
+<div
+  #shell
+  class="tv-chart"
+  [class.tv-chart-fullscreen]="fullscreen()"
+  [class.tv-chart-empty]="!view().length"
+>
+  <div class="tv-topbar">
+    <div class="tv-topbar-left">
+      <div class="tv-symbol">
+        <span class="tv-symbol-name">{{ symbol() }}</span>
+        @if (exchange()) {
+          <span class="tv-symbol-ex">{{ exchange() }}</span>
+        }
+      </div>
+
+      <div class="tv-intervals" role="group" aria-label="Chart interval">
+        @for (tf of timeframes; track tf.value) {
+          <button
+            type="button"
+            class="tv-interval"
+            [class.tv-interval-active]="timeframe() === tf.value"
+            [attr.aria-pressed]="timeframe() === tf.value"
+            [title]="'Group candles by ' + tf.label"
+            (click)="setTimeframe(tf.value)"
+          >
+            {{ tf.label }}
+          </button>
+        }
+      </div>
+
+      <span class="tv-top-rule" aria-hidden="true"></span>
+
+      <div class="tv-menu-wrap">
+        <button
+          type="button"
+          class="tv-top-btn"
+          [class.tv-top-btn-active]="indicatorsOpen()"
+          title="Indicators"
+          (click)="toggleIndicators($event)"
+        >
+          <svg viewBox="0 0 24 24" class="tv-icon" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path stroke-linecap="round" d="M4 19V9M10 19V5M16 19v-7M22 19V3" />
+          </svg>
+          <span class="tv-top-btn-label">Indicators</span>
+        </button>
+        @if (indicatorsOpen()) {
+          <div class="tv-popover" (click)="$event.stopPropagation()">
+            <p class="tv-popover-title">Overlays</p>
+            <label class="tv-check">
+              <input type="checkbox" [checked]="showSma20()" (change)="toggleSma20()" />
+              Moving average (20)
+            </label>
+            <label class="tv-check">
+              <input type="checkbox" [checked]="showSma50()" (change)="toggleSma50()" />
+              Moving average (50)
+            </label>
+            <label class="tv-check">
+              <input type="checkbox" [checked]="showVolume()" (change)="toggleVolume()" />
+              {{ volumeLabel() }}
+            </label>
+            @if (breakEvenPrice() != null) {
+              <label class="tv-check">
+                <input type="checkbox" [checked]="showBreakEven()" (change)="toggleBreakEven()" />
+                Break-even
+              </label>
+            }
+          </div>
+        }
+      </div>
+
+      <button type="button" class="tv-top-btn" title="Undo (⌘Z)" [disabled]="!canUndo()" (click)="undo()">
+        <svg viewBox="0 0 24 24" class="tv-icon" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 14l-4-4 4-4M5 10h9a6 6 0 110 12h-1" />
+        </svg>
+      </button>
+      <button type="button" class="tv-top-btn" title="Redo (⇧⌘Z)" [disabled]="!canRedo()" (click)="redo()">
+        <svg viewBox="0 0 24 24" class="tv-icon" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 14l4-4-4-4M19 10H10a6 6 0 100 12h1" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="tv-topbar-right">
+      <button type="button" class="tv-top-btn" title="Download screenshot" (click)="downloadScreenshot()">
+        <svg viewBox="0 0 24 24" class="tv-icon" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2M8 12l2.5 2.5L16 9" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="tv-top-btn"
+        [title]="fullscreen() ? 'Exit fullscreen' : 'Fullscreen'"
+        (click)="toggleFullscreen()"
+      >
+        @if (fullscreen()) {
+          <svg viewBox="0 0 24 24" class="tv-icon" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 4H5v4M15 4h4v4M15 20h4v-4M9 20H5v-4" />
+          </svg>
+        } @else {
+          <svg viewBox="0 0 24 24" class="tv-icon" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 9V5h4M20 9V5h-4M20 15v4h-4M4 15v4h4" />
+          </svg>
+        }
+      </button>
+    </div>
+  </div>
+
+  <div class="tv-body">
+    <div class="tv-rail" role="toolbar" aria-label="Drawing tools">
+      @for (item of railItems; track item.id) {
+        @if (item.kind === 'gap') {
+          <div class="tv-rail-gap" aria-hidden="true"></div>
+        } @else {
+          <button
+            type="button"
+            class="tv-tool"
+            [class.tv-tool-active]="isRailActive(item)"
+            [disabled]="locked() && item.kind === 'tool'"
+            [title]="item.hint"
+            [attr.aria-pressed]="isRailActive(item)"
+            (click)="onRailClick(item)"
+          >
+            <svg viewBox="0 0 24 24" class="tv-icon" fill="none" stroke="currentColor" stroke-width="1.7">
+              @for (d of railPaths(item); track d) {
+                <path [attr.d]="d" stroke-linecap="round" stroke-linejoin="round" />
+              }
+            </svg>
+          </button>
+        }
+      }
+
+      <div class="tv-rail-colors">
+        @for (c of colors; track c) {
+          <button
+            type="button"
+            class="tv-swatch"
+            [class.tv-swatch-active]="color() === c"
+            [style.background-color]="c"
+            [attr.aria-label]="'Use colour ' + c"
+            [attr.aria-pressed]="color() === c"
+            (click)="color.set(c)"
+          ></button>
+        }
+      </div>
+    </div>
+
+    <div class="tv-plot">
+      @if (legend(); as row) {
+        <div class="tv-legend">
+          <div class="tv-legend-ohlc">
+            <span class="tv-legend-symbol">{{ symbol() }}</span>
+            <span class="tv-legend-tf">{{ timeframeLabel() }}</span>
+            @if (exchange()) {
+              <span class="tv-legend-ex">{{ exchange() }}</span>
+            }
+            <span>O<span class="tv-num">{{ formatLegend(row.open) }}</span></span>
+            <span>H<span class="tv-num">{{ formatLegend(row.high) }}</span></span>
+            <span>L<span class="tv-num">{{ formatLegend(row.low) }}</span></span>
+            <span>C<span class="tv-num">{{ formatLegend(row.close) }}</span></span>
+            <span [class]="changeClass(row)">{{ changeText(row) }}</span>
+          </div>
+          @if (showVolume() && row.volume != null) {
+            <div class="tv-legend-vol">
+              {{ volumeLabel() }}
+              <span class="tv-num">{{ formatVolume(row.volume) }}</span>
+            </div>
+          }
+          @if (activeHint(); as hint) {
+            <p class="tv-hint">{{ hint }}</p>
+          }
+        </div>
+      }
+
+      <div class="tv-canvas-wrap">
+        <div #container class="tv-canvas"></div>
+        <canvas
+          #overlay
+          class="tv-overlay"
+          [class.tv-overlay-armed]="overlayArmed()"
+          [style.cursor]="overlayCursor()"
+          (pointerdown)="onPointerDown($event)"
+          (pointermove)="onPointerMove($event)"
+          (pointerup)="onPointerUp($event)"
+          (pointerleave)="onPointerLeave()"
+        ></canvas>
+
+        @if (textDraft(); as draft) {
+          <input
+            #textInput
+            class="tv-text-input"
+            [style.left.px]="draft.x"
+            [style.top.px]="draft.y"
+            [style.color]="color()"
+            [value]="draft.value"
+            placeholder="Note"
+            (input)="onTextInput($event)"
+            (keydown.enter)="commitText(); $event.preventDefault()"
+            (keydown.escape)="cancelText(); $event.preventDefault()"
+            (blur)="commitText()"
+          />
+        }
+
+        @if (!view().length) {
+          <div class="tv-empty">
+            <p>{{ emptyMessage() }}</p>
+          </div>
+        }
+      </div>
+
+      <div class="tv-bottom">
+        <div class="tv-ranges" role="group" aria-label="Visible range">
+          @for (r of ranges; track r.value) {
+            <button
+              type="button"
+              class="tv-range"
+              [class.tv-range-active]="range() === r.value"
+              (click)="setRange(r.value)"
+            >
+              {{ r.label }}
+            </button>
+          }
+        </div>
+        <div class="tv-scale-btns">
+          <button
+            type="button"
+            class="tv-range"
+            [class.tv-range-active]="scaleMode() === 'percent'"
+            title="Percentage scale"
+            (click)="togglePercentScale()"
+          >
+            %
+          </button>
+          <button
+            type="button"
+            class="tv-range"
+            [class.tv-range-active]="scaleMode() === 'log'"
+            [disabled]="logDisabled()"
+            [title]="logDisabled() ? 'Log scale needs strictly positive prices' : 'Logarithmic scale'"
+            (click)="toggleLogScale()"
+          >
+            log
+          </button>
+          <button type="button" class="tv-range" title="Fit all data" (click)="fitContent()">auto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

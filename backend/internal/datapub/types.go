@@ -13,6 +13,7 @@ type ApprovalHandler func(ctx context.Context, recommendationID string, data map
 type SlimStockPayload struct {
 	Symbol           string
 	Name             string
+	ISIN             string
 	Quote            *market.Quote
 	Fundamentals     *store.FundamentalSnapshot
 	Indicators       map[string]float64

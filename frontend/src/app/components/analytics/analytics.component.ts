@@ -549,6 +549,7 @@ export class AnalyticsComponent implements OnInit {
         close,
         high: Math.max(open, close, open + gains),
         low: Math.min(open, close, open + losses),
+        volume: day.tradeCount || day.trades.length,
       };
       open = close;
       return candle;

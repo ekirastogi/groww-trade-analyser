@@ -4,6 +4,15 @@ import { ChartView, MarketCatalogSummary, StockSnapshot } from '../models/market
 import { normalizeIsin } from '../utils/stock-identity.utils';
 import { rowToCamel, SupabaseService } from './supabase.service';
 
+function isMissingColumnError(error: { message?: string; code?: string }, column: string): boolean {
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    error.code === 'PGRST204' ||
+    error.code === '42703' ||
+    (message.includes(column) && (message.includes('does not exist') || message.includes('schema cache')))
+  );
+}
+
 function mapStockRow(row: Record<string, unknown>): StockSnapshot {
   const camel = rowToCamel<Record<string, unknown>>(row);
   return {
@@ -38,6 +47,7 @@ function mapStockRow(row: Record<string, unknown>): StockSnapshot {
 @Injectable({ providedIn: 'root' })
 export class StockFirestoreService {
   private supabase = inject(SupabaseService);
+  private stocksIsinColumn = true;
 
   watchMarketCatalog(): Observable<StockSnapshot[]> {
     return this.supabase.watchTable('market_catalog', () => this.fetchMarketCatalog()).pipe(
@@ -94,13 +104,16 @@ export class StockFirestoreService {
 
   async fetchStockByIsin(isin: string): Promise<StockSnapshot | null> {
     const normalized = normalizeIsin(isin);
-    if (!normalized) return null;
+    if (!normalized || !this.stocksIsinColumn) return null;
     const { data, error } = await this.supabase.client
       .from('stocks')
       .select('*')
       .eq('isin', normalized)
       .limit(1);
-    if (error) return null;
+    if (error) {
+      if (isMissingColumnError(error, 'isin')) this.stocksIsinColumn = false;
+      return null;
+    }
     const row = data?.[0];
     return row ? mapStockRow(row) : null;
   }

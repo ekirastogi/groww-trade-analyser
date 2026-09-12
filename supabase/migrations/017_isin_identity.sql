@@ -38,3 +38,15 @@ alter table public.stocks
 create index if not exists idx_stocks_isin
   on public.stocks (isin)
   where isin is not null and isin <> '';
+
+-- Copy known ISINs onto the market table so live lookups by ISIN resolve.
+update public.stocks s
+set isin = upper(trim(src.isin))
+from (
+  select distinct on (symbol) symbol, isin
+  from public.registry_stocks
+  where coalesce(trim(isin), '') <> ''
+  order by symbol, (exchange = 'NSE') desc, length(symbol) asc, symbol asc
+) src
+where s.symbol = src.symbol
+  and coalesce(trim(s.isin), '') = '';
