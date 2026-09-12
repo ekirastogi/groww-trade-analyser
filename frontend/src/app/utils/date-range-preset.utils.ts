@@ -1,4 +1,4 @@
-export type DateRangePresetId = 'inception' | 'year' | 'month' | 'week' | '30d';
+export type DateRangePresetId = 'inception' | 'year' | 'fytd' | 'month' | 'week' | 'day';
 
 export interface DateRangeBounds {
   min: string;
@@ -17,9 +17,10 @@ export const DATE_RANGE_PRESETS: {
 }[] = [
   { id: 'inception', shortLabel: 'All', label: 'From inception' },
   { id: 'year', shortLabel: 'YTD', label: 'This year' },
+  { id: 'fytd', shortLabel: 'FYTD', label: 'Financial year to date' },
   { id: 'month', shortLabel: 'MTD', label: 'This month' },
   { id: 'week', shortLabel: 'WTD', label: 'This week' },
-  { id: '30d', shortLabel: '30D', label: 'Last 30 days' },
+  { id: 'day', shortLabel: 'Last', label: 'Last day' },
 ];
 
 export function toIsoDate(date: Date): string {
@@ -38,6 +39,13 @@ export function addDays(iso: string, days: number): string {
   const date = parseIsoDate(iso);
   date.setDate(date.getDate() + days);
   return toIsoDate(date);
+}
+
+/** Indian FY starts 1 April. Jan–Mar belong to the year that began the previous April. */
+function financialYearStart(iso: string): string {
+  const date = parseIsoDate(iso);
+  const year = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
+  return `${year}-04-01`;
 }
 
 function mondayOfWeek(iso: string): string {
@@ -79,6 +87,10 @@ export function rangeForPreset(
       start = `${parseIsoDate(asOf).getFullYear()}-01-01`;
       end = asOf;
       break;
+    case 'fytd':
+      start = financialYearStart(asOf);
+      end = asOf;
+      break;
     case 'month': {
       const d = parseIsoDate(asOf);
       start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
@@ -89,8 +101,8 @@ export function rangeForPreset(
       start = mondayOfWeek(asOf);
       end = asOf;
       break;
-    case '30d':
-      start = addDays(asOf, -29);
+    case 'day':
+      start = asOf;
       end = asOf;
       break;
   }
@@ -108,7 +120,7 @@ export function detectDateRangePreset(
   today = new Date()
 ): DateRangePresetId | 'custom' {
   if (!start || !end) return 'custom';
-  const order: DateRangePresetId[] = ['week', '30d', 'month', 'year', 'inception'];
+  const order: DateRangePresetId[] = ['day', 'week', 'month', 'fytd', 'year', 'inception'];
   for (const id of order) {
     const range = rangeForPreset(id, bounds, today);
     if (range.start === start && range.end === end) return id;
