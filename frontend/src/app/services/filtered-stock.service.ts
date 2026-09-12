@@ -5,6 +5,7 @@ import { StockSummary } from '../models/trade.models';
 import {
   filterProfilesToSummaries,
   isFullReportDateRange,
+  mergeStockSummaries,
   profilesHaveTypeBreakdown,
 } from '../utils/filter-stock-profiles.utils';
 
@@ -31,7 +32,7 @@ export class FilteredStockService {
 
     // When individual trades are in memory, use the same filtered aggregates as dashboard/analytics.
     if (report.trades.length > 0) {
-      return this.state.analysis()?.stocks ?? [];
+      return mergeStockSummaries(this.state.analysis()?.stocks ?? []);
     }
 
     const profiles = report.stockProfiles ?? [];
@@ -46,10 +47,10 @@ export class FilteredStockService {
     }
 
     if (report.dateRange && !isFullReportDateRange(report.dateRange, opts)) {
-      return this.dateFiltered();
+      return mergeStockSummaries(this.dateFiltered());
     }
 
-    return report.stockSummary ?? [];
+    return mergeStockSummaries(report.stockSummary ?? []);
   });
 
   constructor() {

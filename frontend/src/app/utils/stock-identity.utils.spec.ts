@@ -1,5 +1,7 @@
 import { normalizeSymbol } from './upload-merge.utils';
 import {
+  applyKnownIsins,
+  collectIsinsByName,
   fillMissingIsins,
   normalizeIsin,
   StockIdentityResolver,
@@ -42,6 +44,22 @@ describe('stock identity', () => {
     ]);
     expect(resolver.resolve('INE200M01013', 'VARUN BEVERAGES LIMITED').symbol).toBe('VBL');
     expect(resolver.resolve(' ine200m01013 ', 'VARUN BEVERAGES LTD').symbol).toBe('VBL');
+  });
+
+  it('strips junk so the same ISIN still matches', () => {
+    expect(normalizeIsin('INE200M01013\u200b')).toBe('INE200M01013');
+    expect(normalizeIsin('INE-200M-01013')).toBe('INE200M01013');
+  });
+
+  it('copies an ISIN from a scrip-sheet name onto trades of that scrip', () => {
+    const known = collectIsinsByName([
+      { isin: 'INE200M01013', stockName: 'VARUN BEVERAGES LIMITED' },
+    ]);
+    const trades = applyKnownIsins(
+      [{ isin: '', stockName: 'VARUN BEVERAGES LTD' }],
+      known
+    );
+    expect(trades[0].isin).toBe('INE200M01013');
   });
 
   it('keeps a distinct symbol when two ISINs would share a name-derived ticker', () => {

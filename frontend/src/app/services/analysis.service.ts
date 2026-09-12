@@ -14,6 +14,7 @@ import {
   rollupDailyToPeriodBuckets,
 } from '../utils/analytics-aggregation.utils';
 import { buildTradeTypeFilter, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
+import { mergeStockSummaries } from '../utils/filter-stock-profiles.utils';
 import { normalizeIsin, stockIdentityKey } from '../utils/stock-identity.utils';
 import { normalizeSymbol } from '../utils/upload-merge.utils';
 
@@ -132,7 +133,7 @@ export class AnalysisService {
   }
 
   private filterStockSummary(stocks: StockSummary[], _opts: AnalysisOptions): StockSummary[] {
-    return stocks;
+    return mergeStockSummaries(stocks);
   }
 
   private buildSummary(trades: Trade[], chargeRatio: number) {
@@ -303,7 +304,7 @@ export class AnalysisService {
       s.allocatedCharges += this.tradeCharge(t, chargeRatio);
     }
 
-    return [...map.values()]
+    return mergeStockSummaries([...map.values()]
       .map((s) => {
         if (s.quantity > 0) {
           s.avgBuyPrice = s.buyValue / s.quantity;
@@ -313,6 +314,6 @@ export class AnalysisService {
         s.netPnL = s.realisedPnL - s.allocatedCharges;
         return s;
       })
-      .sort((a, b) => b.realisedPnL - a.realisedPnL);
+      .sort((a, b) => b.realisedPnL - a.realisedPnL));
   }
 }

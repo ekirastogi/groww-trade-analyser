@@ -20,7 +20,8 @@ import {
   mergeHoldingsWithLots,
   parseHoldingsAsOf,
 } from '../utils/holdings.utils';
-import { fillMissingIsins, normalizeIsin } from '../utils/stock-identity.utils';
+import { collectIsinsByName, applyKnownIsins, normalizeIsin } from '../utils/stock-identity.utils';
+import { mergeStockSummaries } from '../utils/filter-stock-profiles.utils';
 import { normalizeSymbol } from '../utils/upload-merge.utils';
 
 const CHARGE_LABELS = [
@@ -299,18 +300,24 @@ export class ParserService {
   }
 
   private finalizeReport(report: Report): void {
-    report.trades = fillMissingIsins(report.trades);
+    const knownIsins = collectIsinsByName([
+      ...report.trades,
+      ...report.stockSummary,
+      ...(report.unrealisedHoldings ?? []),
+      ...(report.unrealisedLots ?? []),
+    ]);
+    report.trades = applyKnownIsins(report.trades, knownIsins);
     if (report.unrealisedLots?.length) {
-      report.unrealisedLots = fillMissingIsins(report.unrealisedLots);
+      report.unrealisedLots = applyKnownIsins(report.unrealisedLots, knownIsins);
     }
     if (report.unrealisedHoldings?.length) {
-      report.unrealisedHoldings = fillMissingIsins(report.unrealisedHoldings).map((holding) => ({
+      report.unrealisedHoldings = applyKnownIsins(report.unrealisedHoldings, knownIsins).map((holding) => ({
         ...holding,
-        lots: fillMissingIsins(holding.lots ?? []),
+        lots: applyKnownIsins(holding.lots ?? [], knownIsins),
       }));
     }
     if (report.stockSummary.length) {
-      report.stockSummary = fillMissingIsins(report.stockSummary);
+      report.stockSummary = mergeStockSummaries(applyKnownIsins(report.stockSummary, knownIsins));
     }
 
     if (!report.charges.total) {

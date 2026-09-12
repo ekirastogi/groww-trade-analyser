@@ -31,13 +31,16 @@ import {
   tradeOccurrenceKey,
 } from '../utils/upload-merge.utils';
 import { expandTradeTypes, effectiveTradeType, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
-import { profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
+import { mergeStockProfiles, mergeStockSummaries, profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
 import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
 import { buyLotKey } from '../utils/holdings.utils';
 import {
+  applyKnownIsins,
+  collectIsinsByName,
   fillMissingIsins,
   IdentityHint,
   normalizeIsin,
+  preferStockSymbol,
   StockIdentityResolver,
   stockIdentityKey,
 } from '../utils/stock-identity.utils';
@@ -893,7 +896,7 @@ export class TradeLedgerService {
       all.push(...data.map((row) => profileFromRow(row, clientCode, clientName)));
       if (data.length < pageSize) break;
     }
-    return all;
+    return mergeStockProfiles(all);
   }
 
   private async syncDerivedData(
@@ -975,10 +978,11 @@ export class TradeLedgerService {
       holdings?: UnrealisedHolding[];
     }
   ): Report {
-    const profiles =
+    const profiles = mergeStockProfiles(
       stockProfiles ??
-      (trades.length ? this.buildStockProfilesFromTrades(trades, clientCode, clientName) : []);
-    const stockSummary = profiles.map((profile) => profileToStockSummary(profile));
+      (trades.length ? this.buildStockProfilesFromTrades(trades, clientCode, clientName) : [])
+    );
+    const stockSummary = mergeStockSummaries(profiles.map((profile) => profileToStockSummary(profile)));
     const holdings = meta?.holdings ?? [];
     const holdingsPnL = holdings.reduce((sum, holding) => sum + holding.unrealisedPnL, 0);
     const plainTrades: Trade[] = trades.map(
@@ -1112,22 +1116,25 @@ export class TradeLedgerService {
     clientCode: string,
     clientName: string
   ): StockProfile[] {
+    const identified = fillMissingIsins(trades);
     const byKey = new Map<string, StoredTrade[]>();
-    for (const trade of trades) {
+    for (const trade of identified) {
       const key = stockIdentityKey(trade);
       const list = byKey.get(key) ?? [];
       list.push(trade);
       byKey.set(key, list);
     }
 
-    return [...byKey.values()]
-      .map((symbolTrades) => {
+    return mergeStockProfiles(
+      [...byKey.values()].map((symbolTrades) => {
         const symbol =
-          symbolTrades.find((trade) => trade.symbol)?.symbol ||
-          normalizeSymbol(symbolTrades[0].stockName);
+          preferStockSymbol(
+            symbolTrades.find((trade) => trade.symbol)?.symbol,
+            normalizeSymbol(symbolTrades[0].stockName)
+          ) || normalizeSymbol(symbolTrades[0].stockName);
         return this.buildStockProfile(symbol, symbolTrades, clientCode, clientName);
       })
-      .sort((a, b) => b.netPnL - a.netPnL);
+    );
   }
 
   private buildStockProfile(
@@ -1288,24 +1295,30 @@ export class TradeLedgerService {
   }
 
   private applyIdentity(report: Report, resolver: StockIdentityResolver): void {
-    report.trades = fillMissingIsins(report.trades).map((trade) => {
+    const knownIsins = collectIsinsByName([
+      ...report.trades,
+      ...report.stockSummary,
+      ...(report.unrealisedHoldings ?? []),
+      ...(report.unrealisedLots ?? []),
+    ]);
+    report.trades = applyKnownIsins(report.trades, knownIsins).map((trade) => {
       const identity = resolver.resolve(trade.isin, trade.stockName);
       return { ...trade, isin: identity.isin };
     });
     if (report.unrealisedLots?.length) {
-      report.unrealisedLots = fillMissingIsins(report.unrealisedLots).map((lot) => {
+      report.unrealisedLots = applyKnownIsins(report.unrealisedLots, knownIsins).map((lot) => {
         const identity = resolver.resolve(lot.isin, lot.stockName);
         return { ...lot, isin: identity.isin };
       });
     }
     if (report.unrealisedHoldings?.length) {
-      report.unrealisedHoldings = fillMissingIsins(report.unrealisedHoldings).map((holding) => {
+      report.unrealisedHoldings = applyKnownIsins(report.unrealisedHoldings, knownIsins).map((holding) => {
         const identity = resolver.resolve(holding.isin, holding.stockName, holding.symbol);
         return {
           ...holding,
           isin: identity.isin,
           symbol: identity.symbol,
-          lots: fillMissingIsins(holding.lots ?? []).map((lot) => ({
+          lots: applyKnownIsins(holding.lots ?? [], knownIsins).map((lot) => ({
             ...lot,
             isin: resolver.resolve(lot.isin, lot.stockName).isin,
           })),
@@ -1313,10 +1326,12 @@ export class TradeLedgerService {
       });
     }
     if (report.stockSummary.length) {
-      report.stockSummary = fillMissingIsins(report.stockSummary).map((stock) => {
-        const identity = resolver.resolve(stock.isin, stock.stockName, stock.symbol);
-        return { ...stock, isin: identity.isin, symbol: identity.symbol };
-      });
+      report.stockSummary = mergeStockSummaries(
+        applyKnownIsins(report.stockSummary, knownIsins).map((stock) => {
+          const identity = resolver.resolve(stock.isin, stock.stockName, stock.symbol);
+          return { ...stock, isin: identity.isin, symbol: identity.symbol };
+        })
+      );
     }
   }
 

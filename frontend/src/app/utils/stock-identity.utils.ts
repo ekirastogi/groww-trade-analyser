@@ -14,9 +14,9 @@ export type IdentityHint = {
   exchange?: string;
 };
 
-/** Canonical ISIN: trim + uppercase. Empty when the source had no ISIN. */
+/** Canonical ISIN: letters and digits only. Empty when the source had no ISIN. */
 export function normalizeIsin(isin?: string | null): string {
-  return (isin ?? '').trim().toUpperCase();
+  return (isin ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 /** Display/routing ticker derived from a company name when no exchange symbol is known yet. */
@@ -46,23 +46,55 @@ export function stocksMatch(a: StockIdentityFields, b: StockIdentityFields): boo
   return stockIdentityKey(a) === stockIdentityKey(b);
 }
 
+export function collectIsinsByName(rows: Iterable<StockIdentityFields>): Map<string, string> {
+  const isinByName = new Map<string, string>();
+  for (const row of rows) {
+    const isin = normalizeIsin(row.isin);
+    const nameKey = normalizeSymbol((row.stockName ?? row.name ?? '').trim());
+    if (isin && nameKey && !isinByName.has(nameKey)) isinByName.set(nameKey, isin);
+  }
+  return isinByName;
+}
+
+export function applyKnownIsins<T extends { isin: string; stockName: string }>(
+  rows: T[],
+  isinByName: Map<string, string>
+): T[] {
+  return rows.map((row) => {
+    const isin = normalizeIsin(row.isin) || isinByName.get(normalizeSymbol(row.stockName)) || '';
+    return isin === row.isin ? row : { ...row, isin };
+  });
+}
+
 /**
  * Copy a known ISIN onto rows of the same scrip that arrived without one
  * (e.g. a trade line missing column 1 while the scrip sheet had it).
  */
 export function fillMissingIsins<T extends { isin: string; stockName: string }>(rows: T[]): T[] {
-  const isinByName = new Map<string, string>();
-  for (const row of rows) {
-    const isin = normalizeIsin(row.isin);
-    if (!isin) continue;
-    const nameKey = normalizeSymbol(row.stockName);
-    if (nameKey && !isinByName.has(nameKey)) isinByName.set(nameKey, isin);
-  }
+  return applyKnownIsins(rows, collectIsinsByName(rows));
+}
 
-  return rows.map((row) => {
-    const isin = normalizeIsin(row.isin) || isinByName.get(normalizeSymbol(row.stockName)) || '';
-    return isin === row.isin ? row : { ...row, isin };
-  });
+/** Collapse rows that are the same stock (same ISIN, else same symbol/name). */
+export function mergeByStockIdentity<T extends StockIdentityFields>(
+  rows: T[],
+  merge: (a: T, b: T) => T
+): T[] {
+  const map = new Map<string, T>();
+  for (const row of rows) {
+    const key = stockIdentityKey(row);
+    const existing = map.get(key);
+    map.set(key, existing ? merge(existing, row) : row);
+  }
+  return [...map.values()];
+}
+
+export function preferStockSymbol(existing?: string | null, candidate?: string | null): string {
+  const left = (existing ?? '').trim().toUpperCase();
+  const right = (candidate ?? '').trim().toUpperCase();
+  if (!left) return right;
+  if (!right) return left;
+  if (right.length < left.length) return right;
+  return left;
 }
 
 /**
