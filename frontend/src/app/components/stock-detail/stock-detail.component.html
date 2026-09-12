@@ -323,8 +323,7 @@
       <div class="stock-detail-empty">
         <p class="stock-detail-empty-text">Loading trades…</p>
       </div>
-    } @else {
-      @if (myStockSummary(); as summary) {
+    } @else if (myStockSummary(); as summary) {
       <div class="stock-detail-metrics">
         <div class="stock-detail-metric">
           <span class="stock-detail-metric-label">Trades</span>
@@ -432,7 +431,6 @@
         <h2 class="stock-detail-empty-title">No trades recorded</h2>
         <p class="stock-detail-empty-text">This stock has no trades in your loaded P&amp;L report.</p>
       </div>
-    }
     }
   } @else if (activeTab() === 'trade-plan') {
     <div class="space-y-3">
