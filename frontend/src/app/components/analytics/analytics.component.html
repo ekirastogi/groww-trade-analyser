@@ -364,6 +364,11 @@
         </div>
       }
 
+      <!-- HEATMAP -->
+      @if (activeTab() === 'heatmap') {
+        <app-heatmap [embedded]="true" />
+      }
+
       @if (activeTab() === 'holdings') {
         <div class="space-y-4">
           <div class="card overflow-hidden">

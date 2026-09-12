@@ -38,6 +38,7 @@ import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
 import { PnlCandle, PnlCandleChartComponent } from '../shared/pnl-candle-chart/pnl-candle-chart.component';
+import { HeatmapComponent } from '../heatmap/heatmap.component';
 import { StockBreakdownTableComponent } from '../shared/stock-breakdown-table/stock-breakdown-table.component';
 import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
 import {
@@ -54,7 +55,15 @@ import {
   filterDailyAnalytics,
 } from '../../utils/analytics-aggregation.utils';
 
-type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'holdings' | 'costs';
+type AnalyticsTab =
+  | 'overview'
+  | 'daily'
+  | 'weekly'
+  | 'monthly'
+  | 'stocks'
+  | 'heatmap'
+  | 'holdings'
+  | 'costs';
 
 @Component({
   selector: 'app-analytics',
@@ -70,6 +79,7 @@ type AnalyticsTab = 'overview' | 'daily' | 'weekly' | 'monthly' | 'stocks' | 'ho
     StockBreakdownTableComponent,
     HoldingsTableComponent,
     PnlCandleChartComponent,
+    HeatmapComponent,
   ],
   templateUrl: './analytics.component.html',
   styles: `
@@ -143,6 +153,7 @@ export class AnalyticsComponent implements OnInit {
     { id: 'weekly', label: 'Weekly' },
     { id: 'monthly', label: 'Monthly' },
     { id: 'stocks', label: 'Stocks' },
+    { id: 'heatmap', label: 'Heatmap' },
     { id: 'holdings', label: 'Holdings' },
     { id: 'costs', label: 'Costs' },
   ];
@@ -165,7 +176,7 @@ export class AnalyticsComponent implements OnInit {
     this.activeTab.set(tab);
     this.chartVersion.update((v) => v + 1);
     // The daily drilldown needs per-trade data to break a day down by stock.
-    if (tab === 'overview' || tab === 'stocks' || tab === 'daily') {
+    if (tab === 'overview' || tab === 'stocks' || tab === 'daily' || tab === 'heatmap') {
       void this.state.ensureTradesLoaded();
     }
   }

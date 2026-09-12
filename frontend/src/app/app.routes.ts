@@ -5,7 +5,6 @@ import { ChargesComponent } from './components/charges/charges.component';
 import { WatchlistsComponent } from './components/watchlists/watchlists.component';
 import { StockDetailComponent } from './components/stock-detail/stock-detail.component';
 import { SignalsComponent } from './components/signals/signals.component';
-import { HeatmapComponent } from './components/heatmap/heatmap.component';
 import { SettingsComponent } from './components/settings/settings.component';
 import { StocksComponent } from './components/stocks/stocks.component';
 import { LoginComponent } from './components/login/login.component';
@@ -119,14 +118,11 @@ export const routes: Routes = [
       {
         path: 'stock/:symbol',
         component: StockDetailComponent,
-        data: { title: 'Stock', subtitle: 'Market data and your trades' },
+        data: { title: 'Stock', subtitle: '' },
       },
       { path: 'signals', redirectTo: '', pathMatch: 'full' },
-      {
-        path: 'heatmap',
-        component: HeatmapComponent,
-        data: { title: 'P&L Heatmap', subtitle: 'Profitable vs loss-making stocks' },
-      },
+      // The heatmap now lives as a tab on the analytics page.
+      { path: 'heatmap', redirectTo: 'analytics', pathMatch: 'full' },
       {
         path: 'settings',
         component: SettingsComponent,

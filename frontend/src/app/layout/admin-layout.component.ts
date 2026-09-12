@@ -73,11 +73,6 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
           route: '/charges',
           icon: 'M9 14l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z',
         },
-        {
-          label: 'Heatmap',
-          route: '/heatmap',
-          icon: 'M4 6h16M4 10h16M4 14h16M4 18h16',
-        },
       ],
     },
     {

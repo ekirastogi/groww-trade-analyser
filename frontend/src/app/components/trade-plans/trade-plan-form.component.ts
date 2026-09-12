@@ -1,4 +1,4 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, EventEmitter, inject, input, OnInit, Output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -48,6 +48,11 @@ export class TradePlanFormComponent implements OnInit {
   private planSvc = inject(TradePlanService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+
+  embedded = input(false);
+  lockedSymbol = input<string | null>(null);
+  @Output() saved = new EventEmitter<void>();
+  @Output() cancelled = new EventEmitter<void>();
 
   registry = signal<RegistryStock[]>([]);
   entryLegRows = signal<EntryLegRow[]>([{ price: '', quantity: '' }]);
@@ -210,7 +215,8 @@ export class TradePlanFormComponent implements OnInit {
       hashDate || this.route.snapshot.queryParamMap.get('date')
     );
     this.tradeDate.set(date);
-    const symbol = this.route.snapshot.queryParamMap.get('symbol');
+    const locked = this.lockedSymbol()?.trim();
+    const symbol = locked || this.route.snapshot.queryParamMap.get('symbol');
     if (symbol) await this.pickSymbol(symbol);
   }
 
@@ -354,6 +360,14 @@ export class TradePlanFormComponent implements OnInit {
     }
   }
 
+  cancel(): void {
+    if (this.embedded()) {
+      this.cancelled.emit();
+      return;
+    }
+    void this.router.navigate(['/trade-plans'], { fragment: `date=${this.tradeDate()}` });
+  }
+
   async save(): Promise<void> {
     this.error.set(null);
     const cmp = parseFloat(this.form.cmp);
@@ -402,7 +416,11 @@ export class TradePlanFormComponent implements OnInit {
       } else {
         await this.planSvc.create({ ...payload, source: 'manual' });
       }
-      await this.router.navigate(['/trade-plans'], { fragment: `date=${this.tradeDate()}` });
+      if (this.embedded()) {
+        this.saved.emit();
+      } else {
+        await this.router.navigate(['/trade-plans'], { fragment: `date=${this.tradeDate()}` });
+      }
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : editId ? 'Failed to update trade' : 'Failed to add trade');
     } finally {

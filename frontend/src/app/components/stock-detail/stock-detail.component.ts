@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal, effect, OnInit } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { switchMap, of } from 'rxjs';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
@@ -13,21 +13,32 @@ import { PageShellService } from '../../services/page-shell.service';
 import { RegistryStockService } from '../../services/registry-stock.service';
 import { StockLabelsStore } from '../../services/stock-labels.store';
 import { ScreenerService } from '../../services/screener.service';
+import { OPEN_TRADE_POOL_DATE, TradePlanService } from '../../services/trade-plan.service';
 import { TradingChartComponent } from '../trading-chart/trading-chart.component';
 import { ScreenerFundamentalsComponent } from '../screener-fundamentals/screener-fundamentals.component';
 import { StockLabelsManagerComponent } from '../stock-labels/stock-labels-manager.component';
 import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
-import { RegistryStock } from '../../models/trading-journal.models';
-import { formatCurrency, formatPct } from '../../utils/format.utils';
+import { TradePlanFormComponent } from '../trade-plans/trade-plan-form.component';
+import { PlannedTrade, RegistryStock } from '../../models/trading-journal.models';
+import { formatCurrency, formatDate, formatPct, pnlClass } from '../../utils/format.utils';
 import { formatDataAge, formatFetchedAt } from '../../utils/data-age.utils';
-import { TableSortState } from '../../utils/table-sort.utils';
-import { Trade } from '../../models/trade.models';
+import { TRADE_TYPE_LABELS, Trade, TradeType } from '../../models/trade.models';
+import { summariseTradesByDay, TradeDaySummary } from '../../utils/trade-day-summary.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 
 @Component({
   selector: 'app-stock-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, TradingChartComponent, ScreenerFundamentalsComponent, StockLabelsManagerComponent, HoldingsTableComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    TradingChartComponent,
+    ScreenerFundamentalsComponent,
+    StockLabelsManagerComponent,
+    HoldingsTableComponent,
+    TradePlanFormComponent,
+  ],
   templateUrl: './stock-detail.component.html',
 })
 export class StockDetailComponent implements OnInit {
@@ -42,8 +53,8 @@ export class StockDetailComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
   readonly labelStore = inject(StockLabelsStore);
   private screenerSvc = inject(ScreenerService);
+  private planSvc = inject(TradePlanService);
 
-  readonly tableSort = new TableSortState('sellDate', 'desc');
   newLevelPrice = '';
   newLevelLabel = '';
   newLevelType: 'support' | 'resistance' = 'support';
@@ -75,14 +86,9 @@ export class StockDetailComponent implements OnInit {
 
   formatFetchedAt = formatFetchedAt;
   formatDataAge = formatDataAge;
-
-  readonly tradeColumns = [
-    { key: 'buyDate', label: 'Buy', align: 'left' as const },
-    { key: 'sellDate', label: 'Sell', align: 'left' as const },
-    { key: 'quantity', label: 'Qty', align: 'right' as const },
-    { key: 'tradeType', label: 'Type', align: 'left' as const },
-    { key: 'realisedPnL', label: 'P&L', align: 'right' as const },
-  ];
+  formatDate = formatDate;
+  pnlClass = pnlClass;
+  readonly tradeTypeLabels = TRADE_TYPE_LABELS;
 
   symbol = toSignal(this.route.paramMap.pipe(switchMap((p) => of(p.get('symbol')?.toUpperCase() ?? ''))), { initialValue: '' });
 
@@ -116,7 +122,7 @@ export class StockDetailComponent implements OnInit {
     { initialValue: undefined }
   );
 
-  activeTab = signal<'market' | 'fundamentals' | 'holdings' | 'my-trades'>('fundamentals');
+  activeTab = signal<'market' | 'fundamentals' | 'holdings' | 'my-trades' | 'trade-plan'>('fundamentals');
   fmt = formatCurrency;
   fmtPct = formatPct;
 
@@ -150,6 +156,15 @@ export class StockDetailComponent implements OnInit {
   headerPe = computed(() => this.stock()?.pe ?? this.registryStock()?.pe);
   headerMarketCap = computed(() => this.stock()?.marketCap ?? this.registryStock()?.marketCap);
 
+  displayIsin = computed(() => {
+    const fromRegistry = this.registryStock()?.isin?.trim();
+    if (fromRegistry) return fromRegistry;
+    const fromHolding = this.myHolding()?.isin?.trim();
+    if (fromHolding) return fromHolding;
+    const fromTrade = this.myTrades().find((trade) => trade.isin?.trim())?.isin?.trim();
+    return fromTrade || '';
+  });
+
   private lastSymbol = '';
 
   week52Position = computed(() => {
@@ -161,12 +176,10 @@ export class StockDetailComponent implements OnInit {
   });
 
   private readonly _syncPageHeader = effect((onCleanup) => {
-    const sym = this.symbol();
     const name = this.displayName();
-    const subtitle = this.hasMarketData()
-      ? `${name} · ${this.displayExchange()}`
-      : `${name} · Fundamentals`;
-    this.pageShell.setHeader(sym || 'Stock', subtitle);
+    const isin = this.displayIsin();
+    const title = isin ? `${name} · ${isin}` : name || 'Stock';
+    this.pageShell.setHeader(title, '');
     onCleanup(() => this.pageShell.clearOverride());
   }, { allowSignalWrites: true });
 
@@ -177,15 +190,23 @@ export class StockDetailComponent implements OnInit {
     this.activeTab.set('fundamentals');
     this.screenerError.set(null);
     this.screenerSuccess.set(null);
+    this.expandedDayKey.set(null);
+    this.showPlanForm.set(false);
   }, { allowSignalWrites: true });
+
+  private registryLoadGen = 0;
 
   private readonly _loadRegistryStock = effect(() => {
     const sym = this.symbol();
+    const gen = ++this.registryLoadGen;
     if (!sym) {
       this.registryStock.set(null);
       return;
     }
-    void this.registrySvc.getBySymbol(sym).then((row) => this.registryStock.set(row));
+    void this.registrySvc.getBySymbol(sym).then((row) => {
+      if (gen !== this.registryLoadGen) return;
+      this.registryStock.set(row);
+    });
     void this.labelStore.ensureLoaded();
   }, { allowSignalWrites: true });
 
@@ -237,24 +258,7 @@ export class StockDetailComponent implements OnInit {
           netPnL,
         })
       );
-      this.myTrades.set(
-        this.tableSort.sort(trades, (trade, col) => {
-          switch (col) {
-            case 'buyDate':
-              return trade.buyDate;
-            case 'sellDate':
-              return trade.sellDate;
-            case 'quantity':
-              return trade.quantity;
-            case 'tradeType':
-              return trade.tradeType;
-            case 'realisedPnL':
-              return trade.realisedPnL;
-            default:
-              return 0;
-          }
-        })
-      );
+      this.myTrades.set(trades);
     }).finally(() => this.tradesLoading.set(false));
   }, { allowSignalWrites: true });
 
@@ -284,6 +288,77 @@ export class StockDetailComponent implements OnInit {
     return holding ? [holding] : [];
   });
 
+  daySummaries = computed((): TradeDaySummary[] =>
+    summariseTradesByDay(
+      this.myTrades(),
+      (trade) => this.tradeAllocatedCharge(trade),
+      (trade) => this.tradeNetPnL(trade)
+    )
+  );
+
+  expandedDayKey = signal<string | null>(null);
+
+  stockPlans = signal<PlannedTrade[]>([]);
+  plansLoading = signal(false);
+  showPlanForm = signal(false);
+
+  private readonly _loadStockPlans = effect(() => {
+    const sym = this.symbol();
+    if (!sym) {
+      this.stockPlans.set([]);
+      return;
+    }
+    this.plansLoading.set(true);
+    void this.planSvc
+      .fetchForSymbol(sym)
+      .then((rows) => this.stockPlans.set(rows))
+      .finally(() => this.plansLoading.set(false));
+  }, { allowSignalWrites: true });
+
+  chargeRatio = computed(() => this.reportState.analysis()?.summary.chargeRatio ?? 0);
+
+  tradeAllocatedCharge(trade: Trade): number {
+    return trade.allocatedCharges ?? trade.sellValue * this.chargeRatio();
+  }
+
+  tradeNetPnL(trade: Trade): number {
+    return trade.netPnL ?? trade.realisedPnL - this.tradeAllocatedCharge(trade);
+  }
+
+  tradeTypeLabel(type: TradeType): string {
+    return this.tradeTypeLabels[type] || type;
+  }
+
+  isDayExpanded(date: string): boolean {
+    return this.expandedDayKey() === date;
+  }
+
+  toggleDayExpand(date: string, event?: Event): void {
+    event?.stopPropagation();
+    this.expandedDayKey.set(this.expandedDayKey() === date ? null : date);
+  }
+
+  planDateLabel(plan: PlannedTrade): string {
+    if (plan.status === 'open' || plan.tradeDate === OPEN_TRADE_POOL_DATE) return 'Open book';
+    return this.formatDate(plan.tradeDate);
+  }
+
+  async reloadStockPlans(): Promise<void> {
+    const sym = this.symbol();
+    if (!sym) return;
+    this.plansLoading.set(true);
+    try {
+      this.stockPlans.set(await this.planSvc.fetchForSymbol(sym));
+    } finally {
+      this.plansLoading.set(false);
+    }
+  }
+
+  onPlanSaved(): void {
+    this.showPlanForm.set(false);
+    void this.reloadStockPlans();
+  }
+
   goBack(): void {
     this.location.back();
   }
@@ -312,6 +387,7 @@ export class StockDetailComponent implements OnInit {
       };
       const updated: RegistryStock = {
         ...existing,
+        isin: existing.isin,
         name: data.name || existing.name,
         currentPrice: data.currentPrice ?? existing.currentPrice,
         marketCap: data.marketCap ?? existing.marketCap,
@@ -348,8 +424,11 @@ export class StockDetailComponent implements OnInit {
         screenerUrl: data.url,
         screenerFetchedAt: data.fetchedAt,
       };
+      this.registryLoadGen++;
       await this.registrySvc.save(updated);
-      this.registryStock.set(updated);
+      this.registryStock.set({ ...updated });
+      const fresh = await this.registrySvc.getBySymbol(sym);
+      if (fresh) this.registryStock.set({ ...fresh });
       this.screenerSuccess.set(`Fetched Screener data for ${sym}.`);
       this.activeTab.set('fundamentals');
     } catch (e) {

@@ -229,6 +229,19 @@ export class TradePlanService {
     return (data ?? []).map((row) => rowToPlannedTrade(row));
   }
 
+  async fetchForSymbol(symbol: string): Promise<PlannedTrade[]> {
+    const uid = await this.auth.getDataUserId();
+    if (!uid) return [];
+    const { data, error } = await this.supabase.client
+      .from('planned_trades')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('symbol', symbol.trim().toUpperCase())
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => rowToPlannedTrade(row));
+  }
+
   daySummariesForMonth$(year: number, month: number): Observable<DayTradeSummary[]> {
     return this.watchInMonth(year, month).pipe(map((trades) => this.summarizeByDay(trades)));
   }

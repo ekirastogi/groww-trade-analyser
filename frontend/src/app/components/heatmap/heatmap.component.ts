@@ -3,6 +3,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   OnInit,
   signal,
   viewChild,
@@ -65,6 +66,12 @@ interface HeatmapSection {
   templateUrl: './heatmap.component.html',
 })
 export class HeatmapComponent implements OnInit {
+  /**
+   * Set when hosted inside another page (the analytics tab) that already provides the
+   * trade-type and date filters, so this component doesn't render a second filter row.
+   */
+  embedded = input(false);
+
   readonly reportState = inject(ReportStateService);
   readonly filteredStocks = inject(FilteredStockService);
   readonly fmt = formatCurrency;

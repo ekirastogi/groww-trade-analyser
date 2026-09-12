@@ -1,8 +1,10 @@
 <div class="space-y-6">
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <a routerLink="/trade-plans" [fragment]="'date=' + tradeDate()" class="text-sm text-kairo-600 hover:underline">← Back to plan</a>
-    <h2 class="text-lg font-semibold text-slate-900">{{ isEditing() ? 'Edit trade plan' : 'Add trade plan' }}</h2>
-  </div>
+  @if (!embedded()) {
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <a routerLink="/trade-plans" [fragment]="'date=' + tradeDate()" class="text-sm text-kairo-600 hover:underline">← Back to plan</a>
+      <h2 class="text-lg font-semibold text-slate-900">{{ isEditing() ? 'Edit trade plan' : 'Add trade plan' }}</h2>
+    </div>
+  }
 
   @if (loading()) {
     <p class="text-sm text-slate-500">Loading trade plan…</p>
@@ -36,6 +38,7 @@
             (blur)="onSymbolBlur()"
             placeholder="Search symbol or name…"
             list="universe-symbols"
+            [disabled]="!!lockedSymbol()"
           />
           <datalist id="universe-symbols">
             @for (s of symbolOptions(); track s.symbol) {
@@ -206,7 +209,7 @@
         <button type="button" class="btn-primary" [disabled]="busy()" (click)="save()">
           {{ isEditing() ? (busy() ? 'Saving…' : 'Save changes') : 'Add to plan' }}
         </button>
-        <a routerLink="/trade-plans" [fragment]="'date=' + tradeDate()" class="btn-secondary">Cancel</a>
+        <button type="button" class="btn-secondary" (click)="cancel()">Cancel</button>
       </div>
     </div>
   }

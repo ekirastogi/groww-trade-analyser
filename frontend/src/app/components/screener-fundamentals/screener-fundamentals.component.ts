@@ -1,4 +1,4 @@
-import { Component, HostListener, Input, computed, signal } from '@angular/core';
+import { Component, HostListener, computed, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChartConfiguration, Plugin } from 'chart.js';
 import { RegistryFinancialTable, RegistryStock } from '../../models/trading-journal.models';
@@ -83,13 +83,14 @@ const growthLabelPlugin: Plugin<'bar'> = {
   templateUrl: './screener-fundamentals.component.html',
 })
 export class ScreenerFundamentalsComponent {
-  @Input({ required: true }) stock!: RegistryStock;
+  stock = input.required<RegistryStock>();
+  hideIdentity = input(false);
 
   activeTab = signal<FinancialTab>('analysis');
 
   readonly tabs: FinancialTab[] = ['analysis', 'quarterly', 'annual', 'balance', 'cashflow', 'shareholding', 'growth'];
 
-  analysis = computed(() => buildStockAnalysis(this.stock));
+  analysis = computed(() => buildStockAnalysis(this.stock()));
 
   /** Bumped on resize so chart sizing/font choices recompute for the new breakpoint. */
   private viewportVersion = signal(0);
@@ -281,15 +282,15 @@ export class ScreenerFundamentalsComponent {
   activeTable(): RegistryFinancialTable | null {
     switch (this.activeTab()) {
       case 'quarterly':
-        return this.stock.quarterlyResults?.rows?.length ? this.stock.quarterlyResults : null;
+        return this.stock().quarterlyResults?.rows?.length ? this.stock().quarterlyResults : null;
       case 'annual':
-        return this.stock.profitLoss?.rows?.length ? this.stock.profitLoss : null;
+        return this.stock().profitLoss?.rows?.length ? this.stock().profitLoss : null;
       case 'balance':
-        return this.stock.balanceSheet?.rows?.length ? this.stock.balanceSheet : null;
+        return this.stock().balanceSheet?.rows?.length ? this.stock().balanceSheet : null;
       case 'cashflow':
-        return this.stock.cashFlow?.rows?.length ? this.stock.cashFlow : null;
+        return this.stock().cashFlow?.rows?.length ? this.stock().cashFlow : null;
       case 'shareholding':
-        return this.stock.shareholding?.rows?.length ? this.stock.shareholding : null;
+        return this.stock().shareholding?.rows?.length ? this.stock().shareholding : null;
       default:
         return null;
     }
@@ -318,15 +319,15 @@ export class ScreenerFundamentalsComponent {
     if (tab === 'analysis' || tab === 'growth') return true;
     switch (tab) {
       case 'quarterly':
-        return !!this.stock.quarterlyResults?.rows?.length;
+        return !!this.stock().quarterlyResults?.rows?.length;
       case 'annual':
-        return !!this.stock.profitLoss?.rows?.length;
+        return !!this.stock().profitLoss?.rows?.length;
       case 'balance':
-        return !!this.stock.balanceSheet?.rows?.length;
+        return !!this.stock().balanceSheet?.rows?.length;
       case 'cashflow':
-        return !!this.stock.cashFlow?.rows?.length;
+        return !!this.stock().cashFlow?.rows?.length;
       case 'shareholding':
-        return !!this.stock.shareholding?.rows?.length;
+        return !!this.stock().shareholding?.rows?.length;
     }
   }
 

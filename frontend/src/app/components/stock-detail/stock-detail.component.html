@@ -19,7 +19,7 @@
             <svg class="stock-fetch-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466A5.5 5.5 0 1112.28 6.28a.75.75 0 011.06 1.06 4 4 0 00-5.78 5.47 4 4 0 008.16-1.53.75.75 0 011.44.61z" clip-rule="evenodd" />
             </svg>
-            <span>Refresh from Screener</span>
+            <span>Refresh</span>
           }
         </button>
         <button
@@ -39,7 +39,13 @@
       <div class="stock-detail-identity">
         <p class="stock-detail-symbol">{{ symbol() }}</p>
         <h1 class="stock-detail-name">{{ displayName() }}</h1>
-        <p class="stock-detail-exchange">{{ displayExchange() }}</p>
+        <p class="stock-detail-exchange">
+          {{ displayExchange() }}
+          @if (displayIsin()) {
+            <span class="text-slate-300">·</span>
+            <span class="font-mono tracking-normal text-slate-500">{{ displayIsin() }}</span>
+          }
+        </p>
         @if (assignedLabels().length) {
           <div class="mt-3 flex flex-wrap gap-1">
             @for (label of assignedLabels(); track label.id) {
@@ -161,11 +167,19 @@
     >
       My Trades
     </button>
+    <button
+      type="button"
+      class="stock-detail-tab"
+      [class.stock-detail-tab-active]="activeTab() === 'trade-plan'"
+      (click)="activeTab.set('trade-plan')"
+    >
+      Trade plan
+    </button>
   </nav>
 
   @if (activeTab() === 'fundamentals') {
     @if (registryStock(); as reg) {
-      <app-screener-fundamentals [stock]="reg" />
+      <app-screener-fundamentals [stock]="reg" [hideIdentity]="true" />
     } @else {
       <div class="stock-detail-empty">
         <div class="stock-detail-empty-icon" aria-hidden="true"></div>
@@ -304,12 +318,20 @@
         <p class="stock-detail-empty-text">This stock is not in your latest unrealised holdings snapshot.</p>
       </div>
     }
-  } @else {
-    @if (myStockSummary(); as summary) {
+  } @else if (activeTab() === 'my-trades') {
+    @if (tradesLoading()) {
+      <div class="stock-detail-empty">
+        <p class="stock-detail-empty-text">Loading trades…</p>
+      </div>
+    } @else if (myStockSummary(); as summary) {
       <div class="stock-detail-metrics">
         <div class="stock-detail-metric">
           <span class="stock-detail-metric-label">Trades</span>
           <span class="stock-detail-metric-value">{{ summary.tradeCount }}</span>
+        </div>
+        <div class="stock-detail-metric">
+          <span class="stock-detail-metric-label">Days</span>
+          <span class="stock-detail-metric-value">{{ daySummaries().length }}</span>
         </div>
         <div class="stock-detail-metric">
           <span class="stock-detail-metric-label">Win Rate</span>
@@ -322,33 +344,86 @@
           </span>
         </div>
       </div>
-      <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table class="stock-table min-w-[560px]">
-          <thead>
-            <tr>
-              <th class="w-10 text-center">#</th>
-              @for (col of tradeColumns; track col.key) {
-                <th [class]="col.align === 'left' ? 'text-left' : 'text-right'">
-                  <button type="button" class="sort-btn" [class.sort-btn-active]="tableSort.isActive(col.key)" (click)="tableSort.toggle(col.key, $event)">
-                    {{ col.label }} <span>{{ tableSort.indicator(col.key) }}</span>
-                  </button>
-                </th>
-              }
-            </tr>
-          </thead>
-          <tbody>
-            @for (t of myTrades(); track t.isin + t.sellDate + t.buyDate + t.quantity; let i = $index) {
-              <tr>
-                <td class="text-center text-slate-400">{{ i + 1 }}</td>
-                <td class="px-4 py-2">{{ t.buyDate }} at {{ fmt(t.buyPrice) }}</td>
-                <td class="px-4 py-2">{{ t.sellDate }} at {{ fmt(t.sellPrice) }}</td>
-                <td class="px-4 py-2 text-right tabular-nums">{{ t.quantity }}</td>
-                <td class="px-4 py-2">{{ t.tradeType }}</td>
-                <td class="px-4 py-2 text-right tabular-nums" [class.text-emerald-600]="t.realisedPnL >= 0" [class.text-red-600]="t.realisedPnL < 0">{{ fmt(t.realisedPnL) }}</td>
-              </tr>
+      <div class="space-y-2">
+        @for (day of daySummaries(); track day.date) {
+          <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-50 sm:px-4"
+              (click)="toggleDayExpand(day.date, $event)"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold text-slate-900">{{ day.label }}</div>
+                <div class="text-xs text-slate-400">
+                  {{ day.tradeCount }} {{ day.tradeCount === 1 ? 'trade' : 'trades' }} · Qty {{ day.quantity | number }}
+                </div>
+              </div>
+              <div class="hidden shrink-0 text-right sm:block">
+                <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">P&amp;L</div>
+                <div class="text-sm font-bold tabular-nums" [class]="pnlClass(day.realisedPnL)">{{ fmt(day.realisedPnL) }}</div>
+              </div>
+              <div class="hidden shrink-0 text-right md:block">
+                <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Charges</div>
+                <div class="text-sm font-bold tabular-nums text-red-600">{{ fmt(day.allocatedCharges) }}</div>
+              </div>
+              <div class="shrink-0 text-right">
+                <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Net P&amp;L</div>
+                <div class="text-sm font-bold tabular-nums" [class]="pnlClass(day.netPnL)">{{ fmt(day.netPnL) }}</div>
+              </div>
+              <svg
+                class="h-4 w-4 shrink-0 text-slate-400 transition"
+                [class.rotate-180]="isDayExpanded(day.date)"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            @if (isDayExpanded(day.date)) {
+              <div class="border-t border-slate-100 bg-slate-50/50">
+                <div class="overflow-x-auto">
+                  <table class="data-table min-w-[560px]">
+                    <thead>
+                      <tr>
+                        <th class="w-8 text-center">#</th>
+                        <th class="text-left">Type</th>
+                        <th class="text-right">Qty</th>
+                        <th class="text-right">Buy</th>
+                        <th class="text-right">Sell</th>
+                        <th class="text-right hidden sm:table-cell">P&amp;L</th>
+                        <th class="text-right hidden md:table-cell">Charges</th>
+                        <th class="text-right">Net P&amp;L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (trade of day.trades; track trade.isin + trade.sellDate + trade.buyDate + trade.quantity; let ti = $index) {
+                        <tr>
+                          <td class="text-center text-slate-400">{{ ti + 1 }}</td>
+                          <td>
+                            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ tradeTypeLabel(trade.tradeType) }}</span>
+                          </td>
+                          <td class="text-right">{{ trade.quantity | number }}</td>
+                          <td class="text-right">
+                            <div class="text-xs text-slate-500">{{ formatDate(trade.buyDate) }}</div>
+                            <div>{{ fmt(trade.buyPrice) }}</div>
+                          </td>
+                          <td class="text-right">
+                            <div class="text-xs text-slate-500">{{ formatDate(trade.sellDate) }}</div>
+                            <div>{{ fmt(trade.sellPrice) }}</div>
+                          </td>
+                          <td class="text-right hidden sm:table-cell" [class]="pnlClass(trade.realisedPnL)">{{ fmt(trade.realisedPnL) }}</td>
+                          <td class="text-right hidden text-red-600 md:table-cell">{{ fmt(tradeAllocatedCharge(trade)) }}</td>
+                          <td class="text-right font-medium" [class]="pnlClass(tradeNetPnL(trade))">{{ fmt(tradeNetPnL(trade)) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             }
-          </tbody>
-        </table>
+          </div>
+        }
       </div>
     } @else {
       <div class="stock-detail-empty">
@@ -357,5 +432,67 @@
         <p class="stock-detail-empty-text">This stock has no trades in your loaded P&amp;L report.</p>
       </div>
     }
+  } @else if (activeTab() === 'trade-plan') {
+    <div class="space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-sm text-slate-500">Plans for {{ symbol() }} from this page or Trade plans.</p>
+        @if (!showPlanForm()) {
+          <button type="button" class="btn-primary text-sm" (click)="showPlanForm.set(true)">+ Add trade plan</button>
+        }
+      </div>
+      @if (showPlanForm()) {
+        <app-trade-plan-form
+          [embedded]="true"
+          [lockedSymbol]="symbol()"
+          (saved)="onPlanSaved()"
+          (cancelled)="showPlanForm.set(false)"
+        />
+      } @else if (plansLoading()) {
+        <p class="text-sm text-slate-500">Loading trade plans…</p>
+      } @else if (stockPlans().length) {
+        <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <table class="stock-table min-w-[640px]">
+            <thead>
+              <tr>
+                <th class="text-left">Date</th>
+                <th class="text-left">Segment</th>
+                <th class="text-right">Qty</th>
+                <th class="text-right">Entry</th>
+                <th class="text-right">Target</th>
+                <th class="text-right">Est. P&amp;L</th>
+                <th class="text-left">Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (plan of stockPlans(); track plan.id) {
+                <tr>
+                  <td>{{ planDateLabel(plan) }}</td>
+                  <td class="capitalize">{{ plan.segment }} {{ plan.direction }}</td>
+                  <td class="text-right tabular-nums">{{ plan.quantity | number }}</td>
+                  <td class="text-right tabular-nums">{{ fmt(plan.entryPrice) }}</td>
+                  <td class="text-right tabular-nums">{{ fmt(plan.targetPrice) }}</td>
+                  <td class="text-right tabular-nums" [class]="pnlClass(plan.realizedPnL ?? plan.estimatedPnL)">
+                    {{ fmt(plan.realizedPnL ?? plan.estimatedPnL) }}
+                  </td>
+                  <td class="capitalize">{{ plan.status }}</td>
+                  <td class="text-right">
+                    <a class="text-sm font-semibold text-kairo-700 hover:underline" [routerLink]="['/trade-plans', plan.id, 'edit']">Edit</a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="stock-detail-empty">
+          <div class="stock-detail-empty-icon" aria-hidden="true"></div>
+          <h2 class="stock-detail-empty-title">No trade plan yet</h2>
+          <p class="stock-detail-empty-text">Create a plan for {{ symbol() }}, or it will show here if you add one from Trade plans.</p>
+          <button type="button" class="btn-primary mt-3" (click)="showPlanForm.set(true)">+ Add trade plan</button>
+        </div>
+      }
+    </div>
   }
 </div>
+

@@ -1,17 +1,19 @@
 <div class="screener-view">
   <div class="screener-header">
-    <div>
-      <h2 class="screener-title">{{ stock.name }}</h2>
-      <p class="screener-subtitle">{{ stock.symbol }}</p>
-    </div>
-    @if (stock.screenerFetchedAt) {
+    @if (!hideIdentity()) {
+      <div>
+        <h2 class="screener-title">{{ stock().name }}</h2>
+        <p class="screener-subtitle">{{ stock().symbol }}</p>
+      </div>
+    }
+    @if (stock().screenerFetchedAt) {
       <div class="screener-meta">
-        <span>Screener data fetched {{ formatFetchedAt(stock.screenerFetchedAt) }}</span>
+        <span>Screener data fetched {{ formatFetchedAt(stock().screenerFetchedAt) }}</span>
         <span class="screener-meta-sep">·</span>
-        <span>{{ formatDataAge(stock.screenerFetchedAt) }}</span>
-        @if (stock.screenerUrl) {
+        <span>{{ formatDataAge(stock().screenerFetchedAt) }}</span>
+        @if (stock().screenerUrl) {
           <span class="screener-meta-sep">·</span>
-          <a class="screener-link" [href]="stock.screenerUrl" target="_blank" rel="noopener">Open on Screener</a>
+          <a class="screener-link" [href]="stock().screenerUrl" target="_blank" rel="noopener">Open on Screener</a>
         }
       </div>
     } @else {
@@ -22,35 +24,35 @@
   <div class="screener-ratios">
     <div class="screener-ratio-card">
       <span class="screener-ratio-label">Current price</span>
-      <span class="screener-ratio-value">{{ formatPrice(stock.currentPrice) }}</span>
+      <span class="screener-ratio-value">{{ formatPrice(stock().currentPrice) }}</span>
     </div>
     <div class="screener-ratio-card">
       <span class="screener-ratio-label">Market cap</span>
-      <span class="screener-ratio-value">{{ formatMarketCap(stock.marketCap) }}</span>
+      <span class="screener-ratio-value">{{ formatMarketCap(stock().marketCap) }}</span>
     </div>
     <div class="screener-ratio-card">
       <span class="screener-ratio-label">Stock P/E</span>
-      <span class="screener-ratio-value">{{ stock.pe ?? '—' }}</span>
+      <span class="screener-ratio-value">{{ stock().pe ?? '—' }}</span>
     </div>
     <div class="screener-ratio-card">
       <span class="screener-ratio-label">Book value</span>
-      <span class="screener-ratio-value">{{ stock.bookValue ?? '—' }}</span>
+      <span class="screener-ratio-value">{{ stock().bookValue ?? '—' }}</span>
     </div>
     <div class="screener-ratio-card">
       <span class="screener-ratio-label">Dividend yield</span>
-      <span class="screener-ratio-value">{{ formatPct(stock.dividendYield) }}</span>
+      <span class="screener-ratio-value">{{ formatPct(stock().dividendYield) }}</span>
     </div>
     <div class="screener-ratio-card">
       <span class="screener-ratio-label">ROCE</span>
-      <span class="screener-ratio-value">{{ formatPct(stock.roce) }}</span>
+      <span class="screener-ratio-value">{{ formatPct(stock().roce) }}</span>
     </div>
     <div class="screener-ratio-card">
       <span class="screener-ratio-label">ROE</span>
-      <span class="screener-ratio-value">{{ formatPct(stock.roe) }}</span>
+      <span class="screener-ratio-value">{{ formatPct(stock().roe) }}</span>
     </div>
     <div class="screener-ratio-card">
       <span class="screener-ratio-label">52W high / low</span>
-      <span class="screener-ratio-value screener-ratio-value-sm">{{ stock.highLow || '—' }}</span>
+      <span class="screener-ratio-value screener-ratio-value-sm">{{ stock().highLow || '—' }}</span>
     </div>
   </div>
 
@@ -259,12 +261,12 @@
             </tr>
           </thead>
           <tbody>
-            <tr><td>Promoters</td><td>{{ formatPct(stock.promoterHolding) }}</td></tr>
-            <tr><td>FIIs</td><td>{{ formatPct(stock.fiiHolding) }}</td></tr>
-            <tr><td>DIIs</td><td>{{ formatPct(stock.diiHolding) }}</td></tr>
-            <tr><td>Public</td><td>{{ formatPct(stock.publicHolding) }}</td></tr>
-            <tr><td>Government</td><td>{{ formatPct(stock.governmentHolding) }}</td></tr>
-            <tr><td>Others</td><td>{{ formatPct(stock.otherHolding) }}</td></tr>
+            <tr><td>Promoters</td><td>{{ formatPct(stock().promoterHolding) }}</td></tr>
+            <tr><td>FIIs</td><td>{{ formatPct(stock().fiiHolding) }}</td></tr>
+            <tr><td>DIIs</td><td>{{ formatPct(stock().diiHolding) }}</td></tr>
+            <tr><td>Public</td><td>{{ formatPct(stock().publicHolding) }}</td></tr>
+            <tr><td>Government</td><td>{{ formatPct(stock().governmentHolding) }}</td></tr>
+            <tr><td>Others</td><td>{{ formatPct(stock().otherHolding) }}</td></tr>
           </tbody>
         </table>
       </div>

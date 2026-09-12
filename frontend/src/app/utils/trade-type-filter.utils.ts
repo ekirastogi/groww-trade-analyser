@@ -6,7 +6,6 @@ export const INTRADAY_TRADE_TYPES: TradeType[] = ['intraday', 'same_day'];
 const ROUTES_WITH_INTRADAY_DEFAULT = [
   '/dashboard',
   '/watchlists',
-  '/heatmap',
   '/charges',
   '/analytics',
 ];

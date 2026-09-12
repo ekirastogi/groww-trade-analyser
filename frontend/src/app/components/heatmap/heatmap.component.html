@@ -20,7 +20,7 @@
             </button>
           }
         </div>
-        @if (book() !== 'holdings') {
+        @if (book() !== 'holdings' && !embedded()) {
           <div class="flex items-center gap-2">
             <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Trade</span>
             <app-trade-type-filter [compact]="true" />
