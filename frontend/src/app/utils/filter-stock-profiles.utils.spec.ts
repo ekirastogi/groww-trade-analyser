@@ -40,4 +40,14 @@ describe('mergeStockSummaries', () => {
     expect(merged.length).toBe(1);
     expect(merged[0].tradeCount).toBe(15);
   });
+
+  it('collapses two identity groups that resolved to the same ticker', () => {
+    const merged = mergeStockSummaries([
+      summary({ isin: 'INE200M01013', symbol: 'VBL', tradeCount: 10, netPnL: 50 }),
+      summary({ isin: '', symbol: 'VBL', stockName: 'VARUN BEV', tradeCount: 5, netPnL: 20 }),
+    ]);
+    expect(merged.length).toBe(1);
+    expect(merged[0].symbol).toBe('VBL');
+    expect(merged[0].tradeCount).toBe(15);
+  });
 });

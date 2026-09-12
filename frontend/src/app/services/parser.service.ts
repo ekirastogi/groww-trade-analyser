@@ -18,6 +18,7 @@ import {
   isJunkScripRow,
   isUnrealisedSectionLabel,
   mergeHoldingsWithLots,
+  mergeUnrealisedHoldings,
   parseHoldingsAsOf,
 } from '../utils/holdings.utils';
 import { collectIsinsByName, applyKnownIsins, normalizeIsin } from '../utils/stock-identity.utils';
@@ -311,10 +312,12 @@ export class ParserService {
       report.unrealisedLots = applyKnownIsins(report.unrealisedLots, knownIsins);
     }
     if (report.unrealisedHoldings?.length) {
-      report.unrealisedHoldings = applyKnownIsins(report.unrealisedHoldings, knownIsins).map((holding) => ({
-        ...holding,
-        lots: applyKnownIsins(holding.lots ?? [], knownIsins),
-      }));
+      report.unrealisedHoldings = mergeUnrealisedHoldings(
+        applyKnownIsins(report.unrealisedHoldings, knownIsins).map((holding) => ({
+          ...holding,
+          lots: applyKnownIsins(holding.lots ?? [], knownIsins),
+        }))
+      );
     }
     if (report.stockSummary.length) {
       report.stockSummary = mergeStockSummaries(applyKnownIsins(report.stockSummary, knownIsins));

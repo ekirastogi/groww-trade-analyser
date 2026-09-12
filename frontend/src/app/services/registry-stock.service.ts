@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, of, shareReplay, switchMap } from 'rxjs';
 import { RegistryStock } from '../models/trading-journal.models';
-import { normalizeIsin } from '../utils/stock-identity.utils';
+import { normalizeIsin, uniqueByKey } from '../utils/stock-identity.utils';
 import { AuthService } from './auth.service';
 import { objectToSnake, rowToCamel, rowsToCamel, SupabaseService } from './supabase.service';
 
@@ -183,8 +183,20 @@ export class RegistryStockService {
     }
 
     if (!rows.length) return 0;
-    for (let i = 0; i < rows.length; i += UPSERT_BATCH_LIMIT) {
-      const chunk = rows.slice(i, i + UPSERT_BATCH_LIMIT);
+    const uniqueRows = uniqueByKey(
+      rows.filter((row) => String(row['symbol'] ?? '').trim()),
+      (row) => String(row['symbol'] ?? '').toUpperCase()
+    );
+    const seenIsin = new Set<string>();
+    const insertRows = uniqueRows.filter((row) => {
+      const isin = normalizeIsin(String(row['isin'] ?? ''));
+      if (!isin) return true;
+      if (seenIsin.has(isin)) return false;
+      seenIsin.add(isin);
+      return true;
+    });
+    for (let i = 0; i < insertRows.length; i += UPSERT_BATCH_LIMIT) {
+      const chunk = insertRows.slice(i, i + UPSERT_BATCH_LIMIT);
       const { error } = await this.supabase.client
         .from('registry_stocks')
         .upsert(chunk, { onConflict: 'user_id,symbol', ignoreDuplicates: true });

@@ -3,9 +3,11 @@ import {
   applyKnownIsins,
   collectIsinsByName,
   fillMissingIsins,
+  mergeByDisplaySymbol,
   normalizeIsin,
   StockIdentityResolver,
   stockIdentityKey,
+  uniqueByKey,
 } from './stock-identity.utils';
 
 describe('stock identity', () => {
@@ -69,5 +71,23 @@ describe('stock identity', () => {
     expect(first.symbol).toBe(normalizeSymbol('ACME LIMITED'));
     expect(second.symbol).not.toBe(first.symbol);
     expect(second.isin).toBe('INE000000002');
+  });
+
+  it('merges rows that share a display ticker', () => {
+    const merged = mergeByDisplaySymbol(
+      [
+        { symbol: 'VBL', qty: 2 },
+        { symbol: 'vbl', qty: 3 },
+      ],
+      (a, b) => ({ symbol: 'VBL', qty: a.qty + b.qty })
+    );
+    expect(merged).toEqual([{ symbol: 'VBL', qty: 5 }]);
+  });
+
+  it('drops later upsert rows that share a conflict key', () => {
+    expect(uniqueByKey([{ id: 'a' }, { id: 'a' }, { id: 'b' }], (row) => row.id)).toEqual([
+      { id: 'a' },
+      { id: 'b' },
+    ]);
   });
 });

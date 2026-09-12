@@ -33,7 +33,7 @@ import {
 import { expandTradeTypes, effectiveTradeType, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
 import { mergeStockProfiles, mergeStockSummaries, profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
 import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
-import { buyLotKey } from '../utils/holdings.utils';
+import { buyLotKey, mergeUnrealisedHoldings } from '../utils/holdings.utils';
 import {
   applyKnownIsins,
   collectIsinsByName,
@@ -43,6 +43,7 @@ import {
   preferStockSymbol,
   StockIdentityResolver,
   stockIdentityKey,
+  uniqueByKey,
 } from '../utils/stock-identity.utils';
 
 export interface UploadResult {
@@ -1102,8 +1103,9 @@ export class TradeLedgerService {
       .eq('client_code', clientCode);
     if (deleteError) throw deleteError;
 
-    for (let i = 0; i < rows.length; i += UPSERT_BATCH_LIMIT) {
-      const chunk = rows
+    const uniqueRows = uniqueByKey(rows, (row) => `${row.sellDate}::${row.tradeType}`);
+    for (let i = 0; i < uniqueRows.length; i += UPSERT_BATCH_LIMIT) {
+      const chunk = uniqueRows
         .slice(i, i + UPSERT_BATCH_LIMIT)
         .map((row) => dailyAnalyticsToRow(row, uid, clientCode));
       const { error } = await this.supabase.client.from('analytics_daily').upsert(chunk);
@@ -1312,18 +1314,20 @@ export class TradeLedgerService {
       });
     }
     if (report.unrealisedHoldings?.length) {
-      report.unrealisedHoldings = applyKnownIsins(report.unrealisedHoldings, knownIsins).map((holding) => {
-        const identity = resolver.resolve(holding.isin, holding.stockName, holding.symbol);
-        return {
-          ...holding,
-          isin: identity.isin,
-          symbol: identity.symbol,
-          lots: applyKnownIsins(holding.lots ?? [], knownIsins).map((lot) => ({
-            ...lot,
-            isin: resolver.resolve(lot.isin, lot.stockName).isin,
-          })),
-        };
-      });
+      report.unrealisedHoldings = mergeUnrealisedHoldings(
+        applyKnownIsins(report.unrealisedHoldings, knownIsins).map((holding) => {
+          const identity = resolver.resolve(holding.isin, holding.stockName, holding.symbol);
+          return {
+            ...holding,
+            isin: identity.isin,
+            symbol: identity.symbol,
+            lots: applyKnownIsins(holding.lots ?? [], knownIsins).map((lot) => ({
+              ...lot,
+              isin: resolver.resolve(lot.isin, lot.stockName).isin,
+            })),
+          };
+        })
+      );
     }
     if (report.stockSummary.length) {
       report.stockSummary = mergeStockSummaries(
@@ -1391,7 +1395,10 @@ export class TradeLedgerService {
 
   private async commitTradesInChunks(trades: StoredTrade[], userId: string): Promise<void> {
     for (let i = 0; i < trades.length; i += UPSERT_BATCH_LIMIT) {
-      const chunk = trades.slice(i, i + UPSERT_BATCH_LIMIT).map((t) => tradeToRow(t, userId));
+      const chunk = uniqueByKey(
+        trades.slice(i, i + UPSERT_BATCH_LIMIT).map((t) => tradeToRow(t, userId)),
+        (row) => String(row['id'] ?? '')
+      );
       const { error } = await this.supabase.client.from('trades').upsert(chunk);
       if (error) throw error;
     }
@@ -1409,9 +1416,12 @@ export class TradeLedgerService {
     if (deleteError) throw deleteError;
     if (!profiles.length) return;
 
+    const uniqueProfiles = uniqueByKey(mergeStockProfiles(profiles), (profile) =>
+      (profile.symbol ?? '').trim().toUpperCase()
+    );
     const includeByTradeType = this.stockProfilesSupportByTradeType !== false;
-    for (let i = 0; i < profiles.length; i += UPSERT_BATCH_LIMIT) {
-      const slice = profiles.slice(i, i + UPSERT_BATCH_LIMIT);
+    for (let i = 0; i < uniqueProfiles.length; i += UPSERT_BATCH_LIMIT) {
+      const slice = uniqueProfiles.slice(i, i + UPSERT_BATCH_LIMIT);
       let chunk = slice.map((profile) =>
         profileToRow(profile, uid, { includeByTradeType })
       );
@@ -1447,7 +1457,7 @@ export class TradeLedgerService {
       throw error;
     }
     this.holdingsTableAvailable = true;
-    return (data ?? []).map((row) => holdingFromRow(row as Record<string, unknown>));
+    return mergeUnrealisedHoldings((data ?? []).map((row) => holdingFromRow(row as Record<string, unknown>)));
   }
 
   private async replaceHoldings(clientCode: string, holdings: UnrealisedHolding[]): Promise<void> {
@@ -1473,7 +1483,10 @@ export class TradeLedgerService {
       return;
     }
 
-    const rows = holdings.map((holding) => holdingToRow(holding, uid, clientCode));
+    const rows = uniqueByKey(
+      mergeUnrealisedHoldings(holdings).map((holding) => holdingToRow(holding, uid, clientCode)),
+      (row) => String(row['symbol'] ?? '').toUpperCase()
+    );
     const { error } = await this.supabase.client.from('unrealised_holdings').upsert(rows);
     if (error) {
       if (isMissingRelationError(error)) {

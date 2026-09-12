@@ -1,5 +1,13 @@
 import { StockSummary, UnrealisedHolding, UnrealisedLot } from '../models/trade.models';
-import { normalizeIsin, stockIdentityKey } from './stock-identity.utils';
+import {
+  applyKnownIsins,
+  collectIsinsByName,
+  mergeByDisplaySymbol,
+  mergeByStockIdentity,
+  normalizeIsin,
+  preferStockSymbol,
+  stockIdentityKey,
+} from './stock-identity.utils';
 import { normalizeSymbol } from './upload-merge.utils';
 
 export type PnLBook = 'realised' | 'holdings';
@@ -70,23 +78,59 @@ export function mergeHoldingsWithLots(
   }
 
   if (scripHoldings.length) {
-    return scripHoldings
-      .map((holding) => {
-        const key = stockIdentityKey(holding);
-        return {
-          ...holding,
-          isin: normalizeIsin(holding.isin),
-          symbol: holding.symbol || normalizeSymbol(holding.stockName),
-          asOfDate: holding.asOfDate || asOfDate,
-          lots: lotsByKey.get(key) ?? holding.lots ?? [],
-        };
-      })
-      .sort((a, b) => b.unrealisedPnL - a.unrealisedPnL);
+    return mergeUnrealisedHoldings(
+      scripHoldings.map((holding) => ({
+        ...holding,
+        isin: normalizeIsin(holding.isin),
+        symbol: holding.symbol || normalizeSymbol(holding.stockName),
+        asOfDate: holding.asOfDate || asOfDate,
+        lots: holding.lots ?? [],
+      }))
+    ).map((holding) => ({
+      ...holding,
+      lots: lotsByKey.get(stockIdentityKey(holding)) ?? holding.lots ?? [],
+    }));
   }
 
-  return [...lotsByKey.values()]
-    .map((group) => aggregateLotsToHolding(group, asOfDate))
-    .sort((a, b) => b.unrealisedPnL - a.unrealisedPnL);
+  return mergeUnrealisedHoldings(
+    [...lotsByKey.values()].map((group) => aggregateLotsToHolding(group, asOfDate))
+  );
+}
+
+function combineUnrealisedHoldings(a: UnrealisedHolding, b: UnrealisedHolding): UnrealisedHolding {
+  const quantity = a.quantity + b.quantity;
+  const buyValue = a.buyValue + b.buyValue;
+  const closingValue = a.closingValue + b.closingValue;
+  const unrealisedPnL = a.unrealisedPnL + b.unrealisedPnL;
+  return {
+    ...a,
+    stockName: a.quantity >= b.quantity ? a.stockName : b.stockName,
+    isin: normalizeIsin(a.isin) || normalizeIsin(b.isin),
+    symbol: preferStockSymbol(a.symbol, b.symbol),
+    quantity,
+    avgBuyPrice: quantity ? buyValue / quantity : 0,
+    buyValue,
+    closingPrice: quantity ? closingValue / quantity : a.closingPrice,
+    closingValue,
+    unrealisedPnL,
+    unrealisedPnLPct: buyValue ? unrealisedPnL / buyValue : 0,
+    asOfDate: a.asOfDate || b.asOfDate,
+    lots: [...(a.lots ?? []), ...(b.lots ?? [])],
+  };
+}
+
+/** One holding per ISIN (then per ticker) so cloud upserts cannot hit the same PK twice. */
+export function mergeUnrealisedHoldings(holdings: UnrealisedHolding[]): UnrealisedHolding[] {
+  const filled = applyKnownIsins(holdings, collectIsinsByName(holdings)).map((holding) => ({
+    ...holding,
+    isin: normalizeIsin(holding.isin),
+    symbol: (holding.symbol || normalizeSymbol(holding.stockName)).toUpperCase(),
+    lots: applyKnownIsins(holding.lots ?? [], collectIsinsByName(holdings)),
+  }));
+  return mergeByDisplaySymbol(
+    mergeByStockIdentity(filled, combineUnrealisedHoldings),
+    combineUnrealisedHoldings
+  ).sort((a, b) => b.unrealisedPnL - a.unrealisedPnL);
 }
 
 /** Shape open holdings like stock summaries so watchlists/heatmap can reuse realised P&L views. */

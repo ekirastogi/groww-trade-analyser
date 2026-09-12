@@ -88,6 +88,41 @@ export function mergeByStockIdentity<T extends StockIdentityFields>(
   return [...map.values()];
 }
 
+/**
+ * Collapse rows that share a ticker. Needed because several tables still key on
+ * `(user_id, symbol)` — two ISIN groups that resolved to VBL would 21000 on upsert.
+ */
+export function mergeByDisplaySymbol<T extends { symbol?: string | null }>(
+  rows: T[],
+  merge: (a: T, b: T) => T
+): T[] {
+  const map = new Map<string, T>();
+  const blanks: T[] = [];
+  for (const row of rows) {
+    const key = (row.symbol ?? '').trim().toUpperCase();
+    if (!key) {
+      blanks.push(row);
+      continue;
+    }
+    const existing = map.get(key);
+    map.set(key, existing ? merge(existing, row) : row);
+  }
+  return [...map.values(), ...blanks];
+}
+
+/** Keep the first row for each key so a batch upsert cannot hit the same conflict twice. */
+export function uniqueByKey<T>(rows: T[], keyOf: (row: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
 export function preferStockSymbol(existing?: string | null, candidate?: string | null): string {
   const left = (existing ?? '').trim().toUpperCase();
   const right = (candidate ?? '').trim().toUpperCase();

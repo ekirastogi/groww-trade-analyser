@@ -10,6 +10,7 @@ import { expandTradeTypes } from './trade-type-filter.utils';
 import {
   applyKnownIsins,
   collectIsinsByName,
+  mergeByDisplaySymbol,
   mergeByStockIdentity,
   normalizeIsin,
   preferStockSymbol,
@@ -121,12 +122,18 @@ export function profileToStockSummary(profile: StockProfile, types: TradeType[] 
 
 export function mergeStockSummaries(stocks: StockSummary[]): StockSummary[] {
   const filled = applyKnownIsins(stocks, collectIsinsByName(stocks));
-  return mergeByStockIdentity(filled, combineStockSummaries).sort((a, b) => b.netPnL - a.netPnL);
+  return mergeByDisplaySymbol(
+    mergeByStockIdentity(filled, combineStockSummaries),
+    combineStockSummaries
+  ).sort((a, b) => b.netPnL - a.netPnL);
 }
 
 export function mergeStockProfiles(profiles: StockProfile[]): StockProfile[] {
   const filled = applyKnownIsins(profiles, collectIsinsByName(profiles));
-  return mergeByStockIdentity(filled, combineStockProfiles).sort((a, b) => b.netPnL - a.netPnL);
+  return mergeByDisplaySymbol(
+    mergeByStockIdentity(filled, combineStockProfiles),
+    combineStockProfiles
+  ).sort((a, b) => b.netPnL - a.netPnL);
 }
 
 export function filterProfilesToSummaries(
