@@ -1,4 +1,4 @@
-import { Injectable, inject, effect } from '@angular/core';
+import { Injectable, inject, effect, untracked } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { ReportStateService } from './report-state.service';
@@ -23,17 +23,13 @@ export class FilterUrlService {
   private writingUrl = false;
 
   constructor() {
-    effect(
-      () => {
-        // Read the signal before any guard so the effect always tracks report loads.
-        const report = this.state.report();
-        if (this.started && report) {
-          this.syncFromUrl();
-        }
-      },
-      // syncFromUrl pushes the URL's filters back into report state.
-      { allowSignalWrites: true }
-    );
+    effect(() => {
+      // Read the signal before any guard so the effect always tracks report loads.
+      const report = this.state.report();
+      if (this.started && report) {
+        untracked(() => this.syncFromUrl());
+      }
+    });
   }
 
   start(): void {
@@ -67,7 +63,10 @@ export class FilterUrlService {
         paramMap.has(FILTER_QUERY_KEYS.to)
       );
 
-    const bounds = report ? { min: report.dateRange.min, max: report.dateRange.max } : null;
+    const bounds =
+      report?.dateRange?.min && report.dateRange.max
+        ? { min: report.dateRange.min, max: report.dateRange.max }
+        : null;
     const dateDefaults = needsDefaultDateRange && bounds
       ? defaultDateRangeForRoute(path, bounds)
       : null;
@@ -130,7 +129,7 @@ export class FilterUrlService {
 
   resetFilters(): void {
     const report = this.state.report();
-    if (!report) return;
+    if (!report?.dateRange?.min || !report.dateRange.max) return;
     const path = this.router.url.split('?')[0];
     const defaults = defaultTradeTypesForRoute(path);
     const bounds = { min: report.dateRange.min, max: report.dateRange.max };

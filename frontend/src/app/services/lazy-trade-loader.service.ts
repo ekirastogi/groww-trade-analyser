@@ -1,4 +1,4 @@
-import { effect, inject, Injectable, signal } from '@angular/core';
+import { effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { AnalysisOptions, Report, StockSummary, StoredTrade, Trade } from '../models/trade.models';
 import { TradeLedgerService } from './trade-ledger.service';
 import { ReportStateService } from './report-state.service';
@@ -17,29 +17,27 @@ export class LazyTradeLoaderService {
 
   constructor() {
     let prevFilterKey = '';
-    effect(
-      () => {
-        const key = this.filterKey();
+    effect(() => {
+      const key = this.filterKey();
+      untracked(() => {
         if (prevFilterKey && prevFilterKey !== key) {
           this.clear();
         }
         prevFilterKey = key;
-      },
-      { allowSignalWrites: true }
-    );
+      });
+    });
 
     let prevTradesLoaded = false;
-    effect(
-      () => {
-        const report = this.reportState.report();
-        const tradesLoaded = !!(report?.tradesLoaded && (report?.trades?.length ?? 0) > 0);
+    effect(() => {
+      const report = this.reportState.report();
+      const tradesLoaded = !!(report?.tradesLoaded && (report?.trades?.length ?? 0) > 0);
+      untracked(() => {
         if (tradesLoaded && !prevTradesLoaded) {
           this.clear();
         }
         prevTradesLoaded = tradesLoaded;
-      },
-      { allowSignalWrites: true }
-    );
+      });
+    });
   }
 
   tradesForKey(key: string): Trade[] {

@@ -1,4 +1,4 @@
-import { ErrorHandler, Injectable, signal } from '@angular/core';
+import { ErrorHandler, Injectable, signal, untracked } from '@angular/core';
 
 export interface AppErrorEntry {
   message: string;
@@ -40,11 +40,17 @@ export class AppErrorHandler implements ErrorHandler {
       stack: actual.stack,
     };
 
-    this.entries.update((list) => [entry, ...list].slice(0, MAX_RETAINED));
-    this.latest.set(entry);
     this.report(entry, actual);
-
     console.error('[unhandled]', actual);
+
+    // Angular calls handleError from inside runEffect. Writing signals there throws NG0600
+    // and replaces the original error in the banner. Defer the write out of that context.
+    queueMicrotask(() => {
+      untracked(() => {
+        this.entries.update((list) => [entry, ...list].slice(0, MAX_RETAINED));
+        this.latest.set(entry);
+      });
+    });
   }
 
   dismiss(): void {

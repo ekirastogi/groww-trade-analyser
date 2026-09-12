@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ReportStateService } from './report-state.service';
 import { TradeLedgerService } from './trade-ledger.service';
 import { StockSummary } from '../models/trade.models';
@@ -36,6 +36,7 @@ export class FilteredStockService {
 
     const profiles = report.stockProfiles ?? [];
     const canUseProfiles =
+      !!report.dateRange &&
       profiles.length > 0 &&
       profilesHaveTypeBreakdown(profiles) &&
       isFullReportDateRange(report.dateRange, opts);
@@ -44,7 +45,7 @@ export class FilteredStockService {
       return filterProfilesToSummaries(profiles, opts);
     }
 
-    if (!isFullReportDateRange(report.dateRange, opts)) {
+    if (report.dateRange && !isFullReportDateRange(report.dateRange, opts)) {
       return this.dateFiltered();
     }
 
@@ -52,11 +53,11 @@ export class FilteredStockService {
   });
 
   constructor() {
-    effect(
-      () => {
-        const report = this.state.report();
-        const opts = this.state.analysisOptions();
-        if (!report) {
+    effect(() => {
+      const report = this.state.report();
+      const opts = this.state.analysisOptions();
+      untracked(() => {
+        if (!report?.dateRange) {
           this.dateFiltered.set([]);
           return;
         }
@@ -73,9 +74,8 @@ export class FilteredStockService {
         }
 
         void this.reloadFromTrades(report.summary.clientCode, report.dateRange, opts);
-      },
-      { allowSignalWrites: true }
-    );
+      });
+    });
   }
 
   private async reloadFromTrades(
