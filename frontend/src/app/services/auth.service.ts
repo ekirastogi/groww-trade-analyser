@@ -64,6 +64,9 @@ export class AuthService {
     try {
       await this.whenReady();
       const provider = new GoogleAuthProvider();
+      // Always show the account chooser. Without this, Google reuses the last
+      // signed-in Google session and never offers a second allowed account.
+      provider.setCustomParameters({ prompt: 'select_account' });
 
       if (this.useRedirectSignIn()) {
         await signInWithRedirect(this.auth, provider);
