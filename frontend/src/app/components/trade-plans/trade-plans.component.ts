@@ -1,4 +1,4 @@
-import { Component, computed, effect, HostListener, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, HostListener, inject, OnDestroy, OnInit, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -312,12 +312,14 @@ export class TradePlansComponent implements OnInit, OnDestroy {
     effect(() => {
       const date = this.tradeDate();
       this.trades();
-      this.carryForwardMessage.set(null);
-      if (!isUpcomingPlanDate(date)) {
-        this.carryForwardPreview.set(null);
-        return;
-      }
-      void this.refreshCarryForwardPreview(date);
+      untracked(() => {
+        this.carryForwardMessage.set(null);
+        if (!isUpcomingPlanDate(date)) {
+          this.carryForwardPreview.set(null);
+          return;
+        }
+        void this.refreshCarryForwardPreview(date);
+      });
     });
   }
 
