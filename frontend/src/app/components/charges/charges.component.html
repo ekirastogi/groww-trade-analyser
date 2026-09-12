@@ -1,3 +1,5 @@
+<app-error-banner [message]="state.error()" />
+
 <div class="pill-tabs mb-4 sm:mb-5">
   @for (t of tabs; track t.id) {
     <button type="button" class="pill-tab" [class.pill-tab-active]="tab() === t.id" (click)="setTab(t.id)">

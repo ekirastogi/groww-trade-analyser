@@ -215,11 +215,12 @@
                                 <!-- Trade details -->
                                 @if (isStockExpanded(row.period, group.key)) {
                                   <div class="border-t border-slate-100 bg-slate-50/50 px-3 py-3 sm:px-4">
+                                    @if (daySummariesForTrades(group.trades); as groupDays) {
                                     <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                      {{ daySummariesForTrades(group.trades).length }} trading {{ daySummariesForTrades(group.trades).length === 1 ? 'day' : 'days' }}
+                                      {{ groupDays.length }} trading {{ groupDays.length === 1 ? 'day' : 'days' }}
                                     </div>
                                     <div class="space-y-2">
-                                      @for (day of daySummariesForTrades(group.trades); track day.date) {
+                                      @for (day of groupDays; track day.date) {
                                         <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                                           <button
                                             type="button"
@@ -289,6 +290,7 @@
                                         </div>
                                       }
                                     </div>
+                                    }
                                   </div>
                                 }
                               </div>
@@ -604,12 +606,12 @@
                             @if (isStockTradesLoading(stock)) {
                               Loading trades…
                             } @else {
-                              {{ daySummariesForTrades(tradesForStock(stock)).length }} trading {{ daySummariesForTrades(tradesForStock(stock)).length === 1 ? 'day' : 'days' }} · {{ tradesForStock(stock).length }} trades
+                              {{ expandedStockDays().length }} trading {{ expandedStockDays().length === 1 ? 'day' : 'days' }} · {{ expandedStockTrades().length }} trades
                             }
                           </div>
                           @if (!isStockTradesLoading(stock)) {
                             <div class="space-y-2">
-                              @for (day of daySummariesForTrades(tradesForStock(stock)); track day.date) {
+                              @for (day of expandedStockDays(); track day.date) {
                                 <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                                   <button
                                     type="button"

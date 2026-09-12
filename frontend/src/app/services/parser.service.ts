@@ -1,5 +1,11 @@
 import { Injectable } from '@angular/core';
-import * as XLSX from 'xlsx';
+import { effectiveTradeType } from '../utils/trade-type-filter.utils';
+
+/**
+ * Upper bound on an uploaded workbook. A real Groww P&L statement is a few hundred KB;
+ * this stops a malformed or hostile file from hanging the tab inside the parser.
+ */
+const MAX_WORKBOOK_BYTES = 25 * 1024 * 1024;
 import {
   Report,
   StockSummary,
@@ -32,8 +38,17 @@ export class ParserService {
       return this.parseRows(this.csvToRows(text));
     }
     if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      if (file.size > MAX_WORKBOOK_BYTES) {
+        throw new Error(
+          `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB. P&L statements are far smaller — please check you picked the right file.`
+        );
+      }
+      // Loaded on demand: the spreadsheet parser is the single largest dependency in the app,
+      // and only this upload path needs it. A static import puts it in the initial bundle.
+      const XLSX = await import('xlsx');
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array' });
+      if (!wb.SheetNames.length) throw new Error('That workbook has no sheets to read.');
       const sheet = wb.SheetNames.includes('Trade Level') ? 'Trade Level' : wb.SheetNames[0];
       const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[sheet], {
         header: 1,
@@ -230,10 +245,18 @@ export class ParserService {
     if (!buyDate || !sellDate) return null;
 
     const remark = String(row[10]).trim();
-    const tradeType = this.classifyTradeType(buyDate, sellDate, remark);
     const buyMs = new Date(buyDate).getTime();
     const sellMs = new Date(sellDate).getTime();
     const holdingDays = Math.floor((sellMs - buyMs) / 86400000);
+    // Shared with the filter layer so a trade can't be classified one way on upload and
+    // another way when filtered. `all` means "nothing stored yet" and falls through to delivery.
+    const tradeType = effectiveTradeType({
+      tradeType: 'all',
+      buyDate,
+      sellDate,
+      remark,
+      holdingDays,
+    });
 
     return {
       stockName: String(row[0]).trim(),
@@ -272,15 +295,6 @@ export class ParserService {
       remark: String(row[10]).trim(),
       holdingDays: Math.floor((closeMs - buyMs) / 86400000),
     };
-  }
-
-  private classifyTradeType(buyDate: string, sellDate: string, remark: string): TradeType {
-    const lower = remark.toLowerCase();
-    if (lower.includes('intraday')) return 'intraday';
-    if (lower.includes('mtf')) return 'mtf';
-    if (lower.includes('fno') || lower.includes('future') || lower.includes('option')) return 'fno';
-    if (buyDate === sellDate) return 'same_day';
-    return 'delivery';
   }
 
   private finalizeReport(report: Report): void {

@@ -51,3 +51,6 @@ src/environments/supabase.config.ts
 # Logs
 firepit-log.txt
 firebase-debug.log
+
+# Firebase deploy cache — regenerated on every deploy.
+.firebase/

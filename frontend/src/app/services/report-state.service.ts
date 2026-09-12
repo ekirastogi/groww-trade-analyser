@@ -40,6 +40,7 @@ export class ReportStateService {
   private clientSvc = inject(ClientAccountService);
   private auth = inject(AuthService);
   private periodicRefreshStarted = false;
+  private periodicRefreshTimer?: number;
   private tradesLoadPromise: Promise<void> | null = null;
 
   report = signal<Report | null>(null);
@@ -90,7 +91,19 @@ export class ReportStateService {
   startPeriodicRefresh(): void {
     if (this.periodicRefreshStarted || typeof window === 'undefined') return;
     this.periodicRefreshStarted = true;
-    setInterval(() => void this.refreshFirebaseReportSilently(), UI_CACHE_TTL_MS);
+    this.periodicRefreshTimer = window.setInterval(
+      () => void this.refreshFirebaseReportSilently(),
+      UI_CACHE_TTL_MS
+    );
+  }
+
+  /** Stop the background refresh — called on sign-out so it does not outlive the session. */
+  stopPeriodicRefresh(): void {
+    if (this.periodicRefreshTimer != null) {
+      clearInterval(this.periodicRefreshTimer);
+      this.periodicRefreshTimer = undefined;
+    }
+    this.periodicRefreshStarted = false;
   }
 
   private async refreshFirebaseReportSilently(): Promise<void> {

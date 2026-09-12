@@ -1,3 +1,5 @@
+<app-error-banner [message]="state.error() ?? filteredStocks.error()" />
+
 @if (!state.hasReport()) {
   <div class="card p-8 text-center sm:p-12">
     <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">📊</div>

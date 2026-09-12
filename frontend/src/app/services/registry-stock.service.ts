@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, of, switchMap } from 'rxjs';
+import { Observable, of, shareReplay, switchMap } from 'rxjs';
 import { RegistryStock } from '../models/trading-journal.models';
 import { AuthService } from './auth.service';
 import { objectToSnake, rowToCamel, rowsToCamel, SupabaseService } from './supabase.service';
@@ -13,14 +13,24 @@ export class RegistryStockService {
   private supabase = inject(SupabaseService);
   private auth = inject(AuthService);
 
+  /**
+   * One shared registry stream for the whole app. `listAll()` is a fully paginated scan, and
+   * this is subscribed from both the trade-plans page and the registry page — without
+   * memoizing, each caller got its own scan on mount, on every poll tick and on every
+   * realtime event.
+   */
   watchAll(): Observable<RegistryStock[]> {
-    return this.auth.user$.pipe(
+    this.allStream ??= this.auth.user$.pipe(
       switchMap((user) => {
         if (!user) return of([]);
         return this.supabase.watchTable('registry_stocks', () => this.listAll());
-      })
+      }),
+      shareReplay({ bufferSize: 1, refCount: false })
     );
+    return this.allStream;
   }
+
+  private allStream?: Observable<RegistryStock[]>;
 
   async getBySymbol(symbol: string): Promise<RegistryStock | null> {
     await this.auth.whenReady();

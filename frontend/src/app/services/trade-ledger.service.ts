@@ -79,6 +79,8 @@ export interface BackfillUniverseResult {
 }
 
 const UPSERT_BATCH_LIMIT = 400;
+/** Supabase caps a single response at 1000 rows, so paged reads step in that size. */
+const SELECT_PAGE_SIZE = 1000;
 const DEFAULT_REPORT_TRADE_TYPES: TradeType[] = ['all', 'intraday', 'delivery', 'mtf'];
 const ALL_REPORT_TRADE_TYPES: TradeType[] = ['all', 'intraday', 'delivery', 'same_day', 'mtf', 'fno'];
 
@@ -371,7 +373,12 @@ export class TradeLedgerService {
       }
     }
 
-    const fingerprintCounts = await this.loadFingerprintCounts(uid, clientCode);
+    // Hash every row up front: the digests are independent, so awaiting them one per
+    // iteration below serialized thousands of WebCrypto round trips.
+    const fingerprints = await Promise.all(
+      report.trades.map((trade) => computeTradeFingerprint(trade, clientCode))
+    );
+    const fingerprintCounts = await this.loadFingerprintCounts(uid, clientCode, fingerprints);
 
     const uploadId = crypto.randomUUID();
     const rateCardCharges = computeTradeCharges(
@@ -388,7 +395,7 @@ export class TradeLedgerService {
     const occurrenceInFile = new Map<string, number>();
 
     for (const [index, trade] of report.trades.entries()) {
-      const fingerprint = await computeTradeFingerprint(trade, clientCode);
+      const fingerprint = fingerprints[index];
       const occurrence = occurrenceInFile.get(fingerprint) ?? 0;
       occurrenceInFile.set(fingerprint, occurrence + 1);
       const alreadyStored = fingerprintCounts.get(fingerprint) ?? 0;
@@ -805,17 +812,10 @@ export class TradeLedgerService {
       .maybeSingle();
     const lastUpload = lastUploadRow ? rowToCamel<UploadRecord>(lastUploadRow) : undefined;
 
-    if (stockProfiles.length) {
-      await this.registry.syncSymbols(
-        stockProfiles.map((profile) => ({
-          symbol: profile.symbol,
-          name: profile.stockName,
-          isin: profile.isin,
-        })),
-        'pnl_upload'
-      );
-      await this.tagTradedSymbols(stockProfiles.map((profile) => profile.symbol));
-    }
+    // Registry sync deliberately does NOT happen here. This is a read path, hit on every
+    // navigation and by the periodic refresh, and syncing upserted the whole symbol universe
+    // each time — which then fired the registry realtime channel and made every subscriber
+    // refetch in response to our own write. `syncDerivedData` owns it on the upload path.
 
     const loadTrades = options.loadTrades !== false;
     const trades = loadTrades ? await this.getAllTrades(clientCode) : [];
@@ -1180,24 +1180,41 @@ export class TradeLedgerService {
     };
   }
 
-  private async loadFingerprintCounts(userId: string, clientCode: string): Promise<Map<string, number>> {
+  /**
+   * How many rows are already stored per fingerprint. Scoped to the fingerprints in the file
+   * being uploaded — the previous full-table scan paged the entire history (400 sequential
+   * round trips at 100k trades) to answer a question about a few thousand rows.
+   */
+  private async loadFingerprintCounts(
+    userId: string,
+    clientCode: string,
+    fingerprints: string[]
+  ): Promise<Map<string, number>> {
     const counts = new Map<string, number>();
-    const pageSize = 1000;
-    for (let from = 0; ; from += pageSize) {
-      const { data, error } = await this.supabase.client
-        .from('trades')
-        .select('fingerprint')
-        .eq('user_id', userId)
-        .eq('client_code', clientCode)
-        .range(from, from + pageSize - 1);
-      if (error) throw error;
-      if (!data?.length) break;
-      for (const row of data) {
-        const fingerprint = String((row as { fingerprint?: string }).fingerprint ?? '');
-        if (!fingerprint) continue;
-        counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + 1);
+    const wanted = [...new Set(fingerprints.filter(Boolean))];
+    if (!wanted.length) return counts;
+
+    // Chunked to keep the `in` list (and the resulting URL) within Postgres/PostgREST limits.
+    const chunkSize = 200;
+    for (let i = 0; i < wanted.length; i += chunkSize) {
+      const chunk = wanted.slice(i, i + chunkSize);
+      for (let from = 0; ; from += SELECT_PAGE_SIZE) {
+        const { data, error } = await this.supabase.client
+          .from('trades')
+          .select('fingerprint')
+          .eq('user_id', userId)
+          .eq('client_code', clientCode)
+          .in('fingerprint', chunk)
+          .range(from, from + SELECT_PAGE_SIZE - 1);
+        if (error) throw error;
+        if (!data?.length) break;
+        for (const row of data) {
+          const fingerprint = String((row as { fingerprint?: string }).fingerprint ?? '');
+          if (!fingerprint) continue;
+          counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + 1);
+        }
+        if (data.length < SELECT_PAGE_SIZE) break;
       }
-      if (data.length < pageSize) break;
     }
     return counts;
   }
@@ -1368,11 +1385,15 @@ export class TradeLedgerService {
     const openKeys = new Set(
       lots.map((lot) => buyLotKey(lot.isin, lot.buyDate, lot.quantity, lot.buyPrice))
     );
-    const realisedKeys = new Set(
-      report.trades.map((trade) =>
-        buyLotKey(trade.isin, trade.buyDate, trade.quantity, trade.buyPrice)
-      )
-    );
+    // Sell dates per buy lot, so the scan below is a lookup instead of a nested search over
+    // every uploaded trade. Without this the filter is O(stored x uploaded).
+    const realisedSellDates = new Map<string, Set<string>>();
+    for (const trade of report.trades) {
+      const key = buyLotKey(trade.isin, trade.buyDate, trade.quantity, trade.buyPrice);
+      const dates = realisedSellDates.get(key);
+      if (dates) dates.add(trade.sellDate);
+      else realisedSellDates.set(key, new Set([trade.sellDate]));
+    }
     const periodEnds = await this.loadUploadPeriodEnds(clientCode);
     for (const lot of lots) {
       if (lot.closingDate) periodEnds.add(lot.closingDate);
@@ -1383,12 +1404,9 @@ export class TradeLedgerService {
       .filter((trade) => {
         const key = buyLotKey(trade.isin, trade.buyDate, trade.quantity, trade.buyPrice);
         if (openKeys.has(key)) return true;
-        if (!realisedKeys.has(key) || !periodEnds.has(trade.sellDate)) return false;
-        return !report.trades.some(
-          (candidate) =>
-            buyLotKey(candidate.isin, candidate.buyDate, candidate.quantity, candidate.buyPrice) ===
-              key && candidate.sellDate === trade.sellDate
-        );
+        const sellDates = realisedSellDates.get(key);
+        if (!sellDates || !periodEnds.has(trade.sellDate)) return false;
+        return !sellDates.has(trade.sellDate);
       })
       .map((trade) => trade.dedupeKey)
       .filter(Boolean);

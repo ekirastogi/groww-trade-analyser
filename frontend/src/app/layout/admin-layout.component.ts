@@ -2,6 +2,7 @@ import { Component, inject, signal, HostListener, OnInit, OnDestroy } from '@ang
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
+import { AppErrorHandler } from '../services/app-error-handler.service';
 import { ReportStateService } from '../services/report-state.service';
 import { PageShellService } from '../services/page-shell.service';
 import { AuthService } from '../services/auth.service';
@@ -37,6 +38,8 @@ interface MobileNavItem {
 })
 export class AdminLayoutComponent implements OnInit, OnDestroy {
   readonly state = inject(ReportStateService);
+  /** Surfaces uncaught errors as a dismissible banner instead of console-only. */
+  readonly errors = inject(AppErrorHandler);
   readonly pageShell = inject(PageShellService);
   readonly auth = inject(AuthService);
   readonly brand = BRAND;
@@ -268,6 +271,11 @@ export class AdminLayoutComponent implements OnInit, OnDestroy {
   }
 
   async logout(): Promise<void> {
+    // Drop cached trade data before signing out: the report history lives under a fixed,
+    // uid-independent storage key, so leaving it behind exposes one account's P&L to the
+    // next person to sign in on this browser.
+    this.state.stopPeriodicRefresh();
+    this.state.clear();
     await this.auth.logout();
     await this.router.navigate(['/login']);
   }

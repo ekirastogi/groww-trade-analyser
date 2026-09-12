@@ -54,6 +54,7 @@ import {
   aggregateWeekdayFromDaily,
   filterDailyAnalytics,
 } from '../../utils/analytics-aggregation.utils';
+import { ErrorBannerComponent } from '../shared/error-banner/error-banner.component';
 
 type AnalyticsTab =
   | 'overview'
@@ -80,6 +81,7 @@ type AnalyticsTab =
     HoldingsTableComponent,
     PnlCandleChartComponent,
     HeatmapComponent,
+    ErrorBannerComponent,
   ],
   templateUrl: './analytics.component.html',
   styles: `

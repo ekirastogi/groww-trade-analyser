@@ -1,4 +1,5 @@
 <div class="heatmap-page">
+  <app-error-banner [message]="reportState.error() ?? filteredStocks.error()" />
   @if (!reportState.hasReport()) {
     <div class="card overflow-hidden p-8 text-center">
       <h3 class="text-lg font-bold text-slate-900">No trade data loaded</h3>

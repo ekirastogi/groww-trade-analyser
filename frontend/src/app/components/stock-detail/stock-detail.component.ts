@@ -24,6 +24,10 @@ import { formatCurrency, formatDate, formatPct, pnlClass } from '../../utils/for
 import { formatDataAge, formatFetchedAt } from '../../utils/data-age.utils';
 import { TRADE_TYPE_LABELS, Trade, TradeType } from '../../models/trade.models';
 import { summariseTradesByDay, TradeDaySummary } from '../../utils/trade-day-summary.utils';
+import {
+  tradeAllocatedCharge as allocatedChargeForTrade,
+  tradeNetPnL as netPnLForTrade,
+} from '../../utils/trade-charges.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 
 @Component({
@@ -318,11 +322,11 @@ export class StockDetailComponent implements OnInit {
   chargeRatio = computed(() => this.reportState.analysis()?.summary.chargeRatio ?? 0);
 
   tradeAllocatedCharge(trade: Trade): number {
-    return trade.allocatedCharges ?? trade.sellValue * this.chargeRatio();
+    return allocatedChargeForTrade(trade, this.chargeRatio());
   }
 
   tradeNetPnL(trade: Trade): number {
-    return trade.netPnL ?? trade.realisedPnL - this.tradeAllocatedCharge(trade);
+    return netPnLForTrade(trade, this.chargeRatio());
   }
 
   tradeTypeLabel(type: TradeType): string {

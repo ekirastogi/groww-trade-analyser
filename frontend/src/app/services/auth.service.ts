@@ -41,11 +41,21 @@ export class AuthService {
       this.error.set(e instanceof Error ? e.message : 'Sign in failed');
     }
     await this.auth.authStateReady();
-    if (this.auth.currentUser) {
-      await this.refreshFirebaseToken(true);
+    // Everything below is best-effort. A forced token refresh is a network call that rejects
+    // when offline or when the refresh token was revoked, and this runs inside an
+    // APP_INITIALIZER — letting it throw aborts Angular bootstrap and leaves a blank page
+    // with nothing to click. Degrade to signed-out instead.
+    try {
+      if (this.auth.currentUser) {
+        await this.refreshFirebaseToken(true);
+      }
+      await this.supabase.whenReady();
+      await this.rejectIfNotAllowed();
+    } catch (e) {
+      this.error.set(
+        e instanceof Error ? e.message : 'Could not verify your session. Please sign in again.'
+      );
     }
-    await this.supabase.whenReady();
-    await this.rejectIfNotAllowed();
   }
 
   async signInWithGoogle(): Promise<void> {

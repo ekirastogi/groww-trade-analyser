@@ -43,7 +43,10 @@ export function typesParamIsStaleIntradayDefault(url: string, typesParam: string
 
 /**
  * Resolve the effective trade type from stored data.
- * Matches parser.classifyTradeType so filters work even when trade_type in DB is stale/null.
+ *
+ * The single classifier for the whole app: `ParserService` calls this at parse time too, so a
+ * trade cannot be filed under one type on upload and filtered as another. Handles a stale or
+ * null `trade_type` in the database by re-deriving from the remark and dates.
  */
 export function effectiveTradeType(trade: TradeTypeSource): TradeType {
   const remark = (trade.remark ?? '').toLowerCase();

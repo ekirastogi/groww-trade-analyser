@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Auth } from '@angular/fire/auth';
 import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
-import { Observable } from 'rxjs';
+import { Observable, shareReplay } from 'rxjs';
 import { UI_CACHE_TTL_MS } from '../constants/cache.constants';
 import { supabaseConfig } from '../../environments/supabase.config';
 
@@ -21,7 +21,15 @@ export class SupabaseService {
     await this.firebaseAuth.authStateReady();
   }
 
-  /** Live query: initial fetch + postgres_changes + periodic refresh. */
+  /**
+   * Live query: initial fetch + postgres_changes + periodic refresh.
+   *
+   * The returned observable is shared with `refCount`, so any number of subscribers to *this
+   * observable* share a single fetch, realtime channel and poll timer. Callers that want
+   * sharing across components must hold onto one observable rather than calling this per
+   * subscriber — deliberately not cached by table name here, since different call sites watch
+   * the same table with different `fetch` closures and would otherwise receive each other's data.
+   */
   watchTable<T>(
     table: string,
     fetch: () => Promise<T>,
@@ -35,8 +43,11 @@ export class SupabaseService {
       const load = async () => {
         try {
           subscriber.next(await fetch());
-        } catch (err) {
-          subscriber.error(err);
+        } catch {
+          // Deliberately not subscriber.error(): that completes the stream and runs the
+          // teardown below, permanently killing the poll timer and realtime channel. A
+          // transient failure would silently freeze the view forever. Keep the last good
+          // value and let the next tick retry.
         }
       };
 
@@ -55,7 +66,7 @@ export class SupabaseService {
         if (pollTimer) clearInterval(pollTimer);
         if (channel) void this.client.removeChannel(channel);
       };
-    });
+    }).pipe(shareReplay({ bufferSize: 1, refCount: true }));
   }
 }
 

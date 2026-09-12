@@ -25,6 +25,10 @@ import {
 import { groupTradesByStock, StockTradeGroup } from '../../utils/trade.utils';
 import { summariseTradesByDay, TradeDaySummary } from '../../utils/trade-day-summary.utils';
 import {
+  tradeAllocatedCharge as allocatedChargeForTrade,
+  tradeNetPnL as netPnLForTrade,
+} from '../../utils/trade-charges.utils';
+import {
   StockFilterColumn,
   StockFilterRule,
   StockScenario,
@@ -439,6 +443,25 @@ export class DashboardComponent implements OnInit {
     return this.expandedPerStock() === this.stockRowKey(stock);
   }
 
+  /**
+   * Trades and day summaries for the one expanded stock row.
+   *
+   * The drilldown template used to call `daySummariesForTrades(tradesForStock(stock))` five
+   * times in the same block, and each call re-filtered and re-sorted the whole filtered trade
+   * list. Under zone.js that ran on every keystroke and focus change. Only one row can be
+   * expanded at a time, so the work is derived once here instead.
+   */
+  expandedStockTrades = computed<Trade[]>(() => {
+    const key = this.expandedPerStock();
+    if (!key) return [];
+    const stock = this.sortedStockData().find((row) => this.stockRowKey(row) === key);
+    return stock ? this.tradesForStock(stock) : [];
+  });
+
+  expandedStockDays = computed<TradeDaySummary[]>(() =>
+    this.daySummariesForTrades(this.expandedStockTrades())
+  );
+
   tradesForStock(stock: StockSummary): Trade[] {
     const cached = this.lazyTrades.tradesForKey(this.lazyTrades.cacheKeyForStock(stock));
     if (cached.length) return cached;
@@ -467,6 +490,19 @@ export class DashboardComponent implements OnInit {
   }
 
   periodStockGroups(period: string) {
+    // Only the expanded period is ever rendered, so serve it from the memoized computed
+    // instead of regrouping trades on every change-detection pass.
+    if (period === this.expandedPeriod()) return this.expandedPeriodGroups();
+    return this.buildPeriodStockGroups(period);
+  }
+
+  /** Stock groups for the one expanded period row. See `expandedStockDrilldown`. */
+  expandedPeriodGroups = computed(() => {
+    const period = this.expandedPeriod();
+    return period ? this.buildPeriodStockGroups(period) : [];
+  });
+
+  private buildPeriodStockGroups(period: string) {
     const loaded = this.periodTrades(period);
     if (loaded.length) return this.groupTradesByStock(loaded);
     const row = this.activePeriodData().find((item) => item.period === period);
@@ -491,11 +527,11 @@ export class DashboardComponent implements OnInit {
   }
 
   tradeAllocatedCharge(trade: Trade): number {
-    return trade.allocatedCharges ?? trade.sellValue * this.chargeRatio();
+    return allocatedChargeForTrade(trade, this.chargeRatio());
   }
 
   tradeNetPnL(trade: Trade): number {
-    return trade.netPnL ?? trade.realisedPnL - this.tradeAllocatedCharge(trade);
+    return netPnLForTrade(trade, this.chargeRatio());
   }
 
   groupNetPnL(group: StockTradeGroup): number {

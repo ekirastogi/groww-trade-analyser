@@ -44,23 +44,37 @@ export class AnalysisService {
         ? { ...summaryFromDaily, chargeRatio }
         : this.buildSummaryFromStocks(stocks, chargeRatio);
 
+    /**
+     * Period buckets are built on first access and cached, rather than all three up front.
+     * Each pass walks every trade, copies it into a bucket and sorts the bucket, so eagerly
+     * computing daily + weekly + monthly tripled the work and the peak memory on every filter
+     * change — while the UI only ever displays one granularity at a time.
+     */
+    type Granularity = 'daily' | 'weekly' | 'monthly';
+    const periodCache = new Map<Granularity, PeriodBucket[]>();
+    const periodBuckets = (period: Granularity): PeriodBucket[] => {
+      const cached = periodCache.get(period);
+      if (cached) return cached;
+      const built = hasTrades
+        ? this.aggregateByPeriod(trades, chargeRatio, period)
+        : hasDaily
+          ? rollupDailyToPeriodBuckets(dailyRows, period)
+          : [];
+      periodCache.set(period, built);
+      return built;
+    };
+
     return {
       summary,
-      daily: hasTrades
-        ? this.aggregateByPeriod(trades, chargeRatio, 'daily')
-        : hasDaily
-          ? rollupDailyToPeriodBuckets(dailyRows, 'daily')
-          : [],
-      weekly: hasTrades
-        ? this.aggregateByPeriod(trades, chargeRatio, 'weekly')
-        : hasDaily
-          ? rollupDailyToPeriodBuckets(dailyRows, 'weekly')
-          : [],
-      monthly: hasTrades
-        ? this.aggregateByPeriod(trades, chargeRatio, 'monthly')
-        : hasDaily
-          ? rollupDailyToPeriodBuckets(dailyRows, 'monthly')
-          : [],
+      get daily() {
+        return periodBuckets('daily');
+      },
+      get weekly() {
+        return periodBuckets('weekly');
+      },
+      get monthly() {
+        return periodBuckets('monthly');
+      },
       stocks,
       charges: report.charges,
       filteredTrades: trades,

@@ -15,6 +15,8 @@ export class FilteredStockService {
 
   private dateFiltered = signal<StockSummary[]>([]);
   loading = signal(false);
+  /** Set when the last filtered load failed, so pages can distinguish an outage from no data. */
+  error = signal<string | null>(null);
   private loadSeq = 0;
 
   /**
@@ -91,10 +93,15 @@ export class FilteredStockService {
       });
       if (seq === this.loadSeq) {
         this.dateFiltered.set(stocks);
+        this.error.set(null);
       }
-    } catch {
+    } catch (e) {
+      // Record the failure rather than only clearing the list: an empty array is
+      // indistinguishable from "this user has no trades", and the pages that render it were
+      // telling people to re-upload their statement during a transient outage.
       if (seq === this.loadSeq) {
         this.dateFiltered.set([]);
+        this.error.set(e instanceof Error ? e.message : 'Could not load trades for this filter');
       }
     } finally {
       if (seq === this.loadSeq) {

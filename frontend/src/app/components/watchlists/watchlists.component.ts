@@ -27,7 +27,12 @@ import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 import { summariseTradesByDay, TradeDaySummary } from '../../utils/trade-day-summary.utils';
+import {
+  tradeAllocatedCharge as allocatedChargeForTrade,
+  tradeNetPnL as netPnLForTrade,
+} from '../../utils/trade-charges.utils';
 import { FILTER_QUERY_KEYS, readWatchlistFilters } from '../../utils/filter-url.utils';
+import { ErrorBannerComponent } from '../shared/error-banner/error-banner.component';
 
 const ALL_SUBTAB_ID = '__all__';
 
@@ -56,7 +61,7 @@ interface AutoTierTab {
 @Component({
   selector: 'app-watchlists',
   standalone: true,
-  imports: [CommonModule, RouterLink, TradeTypeFilterComponent, DateRangeFilterComponent],
+  imports: [CommonModule, RouterLink, TradeTypeFilterComponent, DateRangeFilterComponent, ErrorBannerComponent],
   templateUrl: './watchlists.component.html',
 })
 export class WatchlistsComponent implements OnInit, OnDestroy {
@@ -364,12 +369,15 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
     this.expandedDayKey.set(this.expandedDayKey() === key ? null : key);
   }
 
+  /** Blended fallback for trades hydrated without their own allocated charges. */
+  chargeRatio = computed(() => this.state.analysis()?.summary.chargeRatio ?? 0);
+
   tradeNetPnL(trade: Trade): number {
-    return trade.netPnL ?? trade.realisedPnL - (trade.allocatedCharges ?? 0);
+    return netPnLForTrade(trade, this.chargeRatio());
   }
 
   tradeAllocatedCharge(trade: Trade): number {
-    return trade.allocatedCharges ?? 0;
+    return allocatedChargeForTrade(trade, this.chargeRatio());
   }
 
   tradesForStock(stock: StockSummary): Trade[] {

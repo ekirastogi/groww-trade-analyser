@@ -1,18 +1,7 @@
 import { Routes } from '@angular/router';
-import { DashboardComponent } from './components/dashboard/dashboard.component';
-import { AnalyticsComponent } from './components/analytics/analytics.component';
-import { ChargesComponent } from './components/charges/charges.component';
-import { WatchlistsComponent } from './components/watchlists/watchlists.component';
-import { StockDetailComponent } from './components/stock-detail/stock-detail.component';
 import { SignalsComponent } from './components/signals/signals.component';
-import { SettingsComponent } from './components/settings/settings.component';
-import { StocksComponent } from './components/stocks/stocks.component';
 import { LoginComponent } from './components/login/login.component';
 import { AdminLayoutComponent } from './layout/admin-layout.component';
-import { StockRegistryComponent } from './components/stock-registry/stock-registry.component';
-import { TradePlansComponent } from './components/trade-plans/trade-plans.component';
-import { TradePlanFormComponent } from './components/trade-plans/trade-plan-form.component';
-import { TradeCalendarComponent } from './components/trade-calendar/trade-calendar.component';
 import { authGuard, loginGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
@@ -45,7 +34,8 @@ export const routes: Routes = [
       },
       {
         path: 'dashboard',
-        component: DashboardComponent,
+        loadComponent: () =>
+          import('./components/dashboard/dashboard.component').then((m) => m.DashboardComponent),
         data: { title: 'Dashboard', subtitle: 'Portfolio overview from your P&L' },
       },
       {
@@ -55,7 +45,8 @@ export const routes: Routes = [
       },
       {
         path: 'analytics',
-        component: AnalyticsComponent,
+        loadComponent: () =>
+          import('./components/analytics/analytics.component').then((m) => m.AnalyticsComponent),
         data: { title: 'Analytics', subtitle: 'Charts and performance breakdowns' },
       },
       {
@@ -66,32 +57,38 @@ export const routes: Routes = [
       },
       {
         path: 'charges',
-        component: ChargesComponent,
+        loadComponent: () =>
+          import('./components/charges/charges.component').then((m) => m.ChargesComponent),
         data: { title: 'Charges', subtitle: 'Trading fees from your report' },
       },
       {
         path: 'registry',
-        component: StockRegistryComponent,
+        loadComponent: () =>
+          import('./components/stock-registry/stock-registry.component').then((m) => m.StockRegistryComponent),
         data: { title: 'Stock registry', subtitle: 'Your tracked stocks with levels and indicators' },
       },
       {
         path: 'trade-plans/new',
-        component: TradePlanFormComponent,
+        loadComponent: () =>
+          import('./components/trade-plans/trade-plan-form.component').then((m) => m.TradePlanFormComponent),
         data: { title: 'Add trade plan', subtitle: 'Plan a new trade for the selected date' },
       },
       {
         path: 'trade-plans/:id/edit',
-        component: TradePlanFormComponent,
+        loadComponent: () =>
+          import('./components/trade-plans/trade-plan-form.component').then((m) => m.TradePlanFormComponent),
         data: { title: 'Edit trade plan', subtitle: 'Update an existing trade plan' },
       },
       {
         path: 'trade-plans',
-        component: TradePlansComponent,
+        loadComponent: () =>
+          import('./components/trade-plans/trade-plans.component').then((m) => m.TradePlansComponent),
         data: { title: 'Trade plans', subtitle: 'Daily trade recommendations and execution tracking' },
       },
       {
         path: 'calendar',
-        component: TradeCalendarComponent,
+        loadComponent: () =>
+          import('./components/trade-calendar/trade-calendar.component').then((m) => m.TradeCalendarComponent),
         data: { title: 'Trade calendar', subtitle: 'Estimated vs realized P&L by day' },
       },
       {
@@ -107,17 +104,20 @@ export const routes: Routes = [
       },
       {
         path: 'watchlists',
-        component: WatchlistsComponent,
+        loadComponent: () =>
+          import('./components/watchlists/watchlists.component').then((m) => m.WatchlistsComponent),
         data: { title: 'Watchlists', subtitle: 'Profitable and loss-making stocks from your P&L' },
       },
       {
         path: 'stocks',
-        component: StocksComponent,
+        loadComponent: () =>
+          import('./components/stocks/stocks.component').then((m) => m.StocksComponent),
         data: { title: 'Market data', subtitle: 'Stocks hydrated by the local worker' },
       },
       {
         path: 'stock/:symbol',
-        component: StockDetailComponent,
+        loadComponent: () =>
+          import('./components/stock-detail/stock-detail.component').then((m) => m.StockDetailComponent),
         data: { title: 'Stock', subtitle: '' },
       },
       { path: 'signals', redirectTo: '', pathMatch: 'full' },
@@ -125,7 +125,8 @@ export const routes: Routes = [
       { path: 'heatmap', redirectTo: 'analytics', pathMatch: 'full' },
       {
         path: 'settings',
-        component: SettingsComponent,
+        loadComponent: () =>
+          import('./components/settings/settings.component').then((m) => m.SettingsComponent),
         data: { title: 'Settings', subtitle: 'Upload P&L, backfill, and data management' },
       },
     ],

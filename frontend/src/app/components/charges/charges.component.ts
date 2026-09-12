@@ -8,6 +8,7 @@ import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
 import { ChargesCalculatorComponent } from '../utils/charges-calculator.component';
 import { readJson, writeJson } from '../../utils/local-store.utils';
+import { ErrorBannerComponent } from '../shared/error-banner/error-banner.component';
 
 type SortDir = 'asc' | 'desc';
 type ChargesTab = 'statement' | 'calculator';
@@ -24,6 +25,7 @@ const TAB_STORAGE_KEY = 'kairo-charges-tab';
     DateRangeFilterComponent,
     ReportHistoryComponent,
     ChargesCalculatorComponent,
+    ErrorBannerComponent,
   ],
   templateUrl: './charges.component.html',
 })

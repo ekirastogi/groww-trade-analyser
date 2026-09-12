@@ -1,4 +1,5 @@
 <div class="watchlist-page space-y-4">
+  <app-error-banner [message]="state.error() ?? filteredStocks.error()" />
   @if (!auth.user()) {
     <div class="flex justify-end">
       <button type="button" class="btn-primary" (click)="auth.signInWithGoogle()">

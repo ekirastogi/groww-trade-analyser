@@ -19,6 +19,7 @@ import { holdingsToStockSummaries, PnLBook } from '../../utils/holdings.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 import { layoutTreemap, minRectDimension, rectToPercentStyle } from '../../utils/treemap.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
+import { ErrorBannerComponent } from '../shared/error-banner/error-banner.component';
 
 const HEATMAP_HEIGHT_PX = 500;
 const PANE_HEADER_PX = 32;
@@ -62,7 +63,7 @@ interface HeatmapSection {
 @Component({
   selector: 'app-heatmap',
   standalone: true,
-  imports: [CommonModule, RouterLink, TradeTypeFilterComponent],
+  imports: [CommonModule, RouterLink, TradeTypeFilterComponent, ErrorBannerComponent],
   templateUrl: './heatmap.component.html',
 })
 export class HeatmapComponent implements OnInit {
