@@ -11,24 +11,24 @@ import (
 type ApprovalHandler func(ctx context.Context, recommendationID string, data map[string]interface{}) error
 
 type SlimStockPayload struct {
-	Symbol           string
-	Name             string
-	ISIN             string
-	Quote            *market.Quote
-	Fundamentals     *store.FundamentalSnapshot
-	Indicators       map[string]float64
-	Supports         []float64
-	Resistances      []float64
-	Week52High       float64
-	Week52Low        float64
-	PESeries         []float64
-	VsNiftyPct       float64
-	VsCapPct         float64
-	VsSectorPct      float64
-	CapBucket        string
-	Sector           string
-	VolumeRatio      float64
-	DataSource       string
+	Symbol       string
+	Name         string
+	ISIN         string
+	Quote        *market.Quote
+	Fundamentals *store.FundamentalSnapshot
+	Indicators   map[string]float64
+	Supports     []float64
+	Resistances  []float64
+	Week52High   float64
+	Week52Low    float64
+	PESeries     []float64
+	VsNiftyPct   float64
+	VsCapPct     float64
+	VsSectorPct  float64
+	CapBucket    string
+	Sector       string
+	VolumeRatio  float64
+	DataSource   string
 }
 
 type ChartPayload struct {

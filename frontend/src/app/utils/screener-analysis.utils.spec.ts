@@ -1,4 +1,4 @@
-import { RegistryStock } from '../models/trading-journal.models';
+import { RegistryFinancialTable, RegistryStock } from '../models/trading-journal.models';
 import { buildStockAnalysis } from './screener-analysis.utils';
 
 function stock(partial: Partial<RegistryStock> = {}): RegistryStock {
@@ -8,6 +8,7 @@ function stock(partial: Partial<RegistryStock> = {}): RegistryStock {
     currentPrice: 0,
     supports: [],
     resistances: [],
+    updatedAt: 0,
     ...partial,
   };
 }
@@ -16,8 +17,8 @@ describe('buildStockAnalysis', () => {
   it('does not throw when quarterly results exist without rows', () => {
     const analysis = buildStockAnalysis(
       stock({
-        quarterlyResults: { headers: ['Mar 2024'] } as RegistryStock['quarterlyResults'],
-        profitLoss: { headers: ['Mar 2024'] } as RegistryStock['profitLoss'],
+        quarterlyResults: { headers: ['Mar 2024'] } as RegistryFinancialTable,
+        profitLoss: { headers: ['Mar 2024'] } as RegistryFinancialTable,
       })
     );
     expect(analysis.hasQuarterly).toBe(false);
