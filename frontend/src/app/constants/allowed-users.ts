@@ -2,9 +2,14 @@ import type { User } from 'firebase/auth';
 
 /**
  * Google accounts allowed to use this app.
- * Keep in sync with `isOwner()` in firestore.rules (frontend/ and repo root).
+ * Keep in sync with:
+ * - `isOwner()` in firestore.rules (frontend/ and repo root)
+ * - `public.is_allowed_user()` in supabase/migrations (latest 015_*)
  */
-export const ALLOWED_GOOGLE_EMAILS: readonly string[] = ['ekirastogi@gmail.com'];
+export const ALLOWED_GOOGLE_EMAILS: readonly string[] = [
+  'ekirastogi@gmail.com',
+  'shivisingh2996@gmail.com',
+];
 
 const allowed = new Set(ALLOWED_GOOGLE_EMAILS.map((email) => email.toLowerCase()));
 

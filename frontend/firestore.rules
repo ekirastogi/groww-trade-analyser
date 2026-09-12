@@ -5,7 +5,7 @@ service cloud.firestore {
     function isOwner() {
       return request.auth != null
         && request.auth.token.email_verified == true
-        && request.auth.token.email in ['ekirastogi@gmail.com'];
+        && request.auth.token.email in ['ekirastogi@gmail.com', 'shivisingh2996@gmail.com'];
     }
 
     // Firestore is worker-eventing only — all app data lives in Supabase Postgres.
