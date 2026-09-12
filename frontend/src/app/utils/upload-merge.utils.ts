@@ -1,16 +1,10 @@
 import { Trade, TradeType, TradeTypeStats } from '../models/trade.models';
 import { ChargesService } from '../services/charges.service';
 import { RealizedTradeRow } from './charges.utils';
+import { normalizeIsin } from './stock-identity.utils';
 import { effectiveTradeType } from './trade-type-filter.utils';
 
-export function normalizeSymbol(stockName: string): string {
-  return stockName
-    .trim()
-    .toUpperCase()
-    .replace(/\s+(LTD|LIMITED|INC|CORP|CO)\.?$/i, '')
-    .replace(/[^A-Z0-9&-]/g, '')
-    .slice(0, 32) || stockName.trim().toUpperCase();
-}
+export { normalizeSymbol } from './stock-identity.utils';
 
 export async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -24,7 +18,7 @@ export async function sha256Hex(input: string): Promise<string> {
 export async function computeTradeFingerprint(trade: Trade, clientCode: string): Promise<string> {
   const raw = [
     clientCode,
-    trade.isin,
+    normalizeIsin(trade.isin),
     trade.stockName,
     trade.buyDate,
     trade.sellDate,
@@ -95,7 +89,7 @@ export function computeTradeCharges(
 ): number[] {
   const rows: RealizedTradeRow[] = trades.map((trade, index) => ({
     key: String(index),
-    isin: trade.isin || trade.stockName,
+    isin: normalizeIsin(trade.isin) || trade.stockName,
     tradeType: effectiveTradeType(trade),
     quantity: trade.quantity,
     buyDate: trade.buyDate,

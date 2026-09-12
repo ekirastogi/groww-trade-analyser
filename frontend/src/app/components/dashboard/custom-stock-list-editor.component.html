@@ -76,7 +76,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (stock of visibleStocks(); track stock.isin || stock.stockName) {
+          @for (stock of visibleStocks(); track stockRowKey(stock)) {
             <tr class="cursor-pointer transition hover:bg-slate-50" (click)="toggleStock(stock)">
               <td class="text-center">
                 <input

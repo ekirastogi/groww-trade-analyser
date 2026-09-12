@@ -1,4 +1,5 @@
 import { Trade, StoredTrade } from '../models/trade.models';
+import { normalizeIsin, stockIdentityKey } from './stock-identity.utils';
 
 export interface StockTradeGroup {
   key: string;
@@ -17,13 +18,13 @@ export function groupTradesByStock(trades: Trade[]): StockTradeGroup[] {
   const map = new Map<string, StockTradeGroup>();
 
   for (const t of trades) {
-    const key = t.isin || t.stockName;
+    const key = stockIdentityKey(t);
     let group = map.get(key);
     if (!group) {
       group = {
         key,
         stockName: t.stockName,
-        isin: t.isin,
+        isin: normalizeIsin(t.isin),
         tradeCount: 0,
         totalQuantity: 0,
         totalBuyValue: 0,

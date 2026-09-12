@@ -15,6 +15,7 @@ import { AnalysisService } from '../../services/analysis.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
 import { formatCompactCurrency, formatCurrency, formatDate, pnlClass } from '../../utils/format.utils';
 import { holdingsTotals } from '../../utils/holdings.utils';
+import { stockIdentityKey } from '../../utils/stock-identity.utils';
 import {
   CHART_COLORS,
   abbreviateLabel,
@@ -317,7 +318,7 @@ export class AnalyticsComponent implements OnInit {
     const trades = this.analysis()?.filteredTrades ?? [];
     const buckets = new Map<string, { date: string; stock: string; netPnL: number }>();
     for (const trade of trades) {
-      const stockKey = trade.isin || trade.stockName;
+      const stockKey = stockIdentityKey(trade);
       const key = `${trade.sellDate}::${stockKey}`;
       const bucket = buckets.get(key);
       if (bucket) {

@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { StockSummary } from '../../../models/trade.models';
 import { formatCurrency, formatPct, pnlClass } from '../../../utils/format.utils';
 import { normalizeSymbol } from '../../../utils/upload-merge.utils';
+import { stockIdentityKey } from '../../../utils/stock-identity.utils';
 
 export type StockBreakdownColumn =
   | 'stockName'
@@ -127,7 +128,11 @@ export class StockBreakdownTableComponent {
   }
 
   stockSymbol(stock: StockSummary): string {
-    return normalizeSymbol(stock.stockName);
+    return (stock.symbol || normalizeSymbol(stock.stockName)).toUpperCase();
+  }
+
+  stockRowKey(stock: StockSummary): string {
+    return stockIdentityKey(stock);
   }
 
   /** Keeps the widest columns off small screens, matching the dashboard table. */

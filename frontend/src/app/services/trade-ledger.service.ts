@@ -34,6 +34,13 @@ import { expandTradeTypes, effectiveTradeType, tradeMatchesTypeFilter } from '..
 import { profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
 import { buildDailyAnalyticsFromTrades } from '../utils/analytics-aggregation.utils';
 import { buyLotKey } from '../utils/holdings.utils';
+import {
+  fillMissingIsins,
+  IdentityHint,
+  normalizeIsin,
+  StockIdentityResolver,
+  stockIdentityKey,
+} from '../utils/stock-identity.utils';
 
 export interface UploadResult {
   uploadId: string;
@@ -96,7 +103,7 @@ function profileFromRow(row: Record<string, unknown>, clientCode: string, client
   return {
     symbol: String(camel['symbol'] ?? ''),
     stockName: String(camel['stockName'] ?? ''),
-    isin: String(camel['isin'] ?? ''),
+    isin: normalizeIsin(String(camel['isin'] ?? '')),
     clientCode,
     clientName,
     tradeCount: Number(camel['tradeCount'] ?? 0),
@@ -130,7 +137,7 @@ function tradeFromRow(row: Record<string, unknown>): StoredTrade {
     clientName: String(camel['clientName'] ?? ''),
     symbol: String(camel['symbol'] ?? ''),
     stockName: String(camel['stockName'] ?? ''),
-    isin: String(camel['isin'] ?? ''),
+    isin: normalizeIsin(String(camel['isin'] ?? '')),
     quantity: Number(camel['quantity'] ?? 0),
     buyDate: String(camel['buyDate'] ?? ''),
     buyPrice: numField(camel, 'buyPrice'),
@@ -202,7 +209,7 @@ function holdingFromRow(row: Record<string, unknown>): UnrealisedHolding {
   const lots = Array.isArray(lotsRaw) ? (lotsRaw as UnrealisedLot[]) : [];
   return {
     stockName: String(camel['stockName'] ?? ''),
-    isin: String(camel['isin'] ?? ''),
+    isin: normalizeIsin(String(camel['isin'] ?? '')),
     symbol: String(camel['symbol'] ?? ''),
     quantity: Number(camel['quantity'] ?? 0),
     avgBuyPrice: numField(camel, 'avgBuyPrice'),
@@ -226,7 +233,7 @@ function holdingToRow(
     clientCode,
     symbol: holding.symbol,
     stockName: holding.stockName,
-    isin: holding.isin,
+    isin: normalizeIsin(holding.isin),
     quantity: holding.quantity,
     avgBuyPrice: holding.avgBuyPrice,
     buyValue: holding.buyValue,
@@ -250,7 +257,7 @@ function tradeToRow(trade: StoredTrade, userId: string): Record<string, unknown>
     uploadId: trade.uploadId,
     symbol: trade.symbol,
     stockName: trade.stockName,
-    isin: trade.isin,
+    isin: normalizeIsin(trade.isin),
     quantity: trade.quantity,
     buyDate: trade.buyDate,
     buyPrice: trade.buyPrice,
@@ -333,6 +340,8 @@ export class TradeLedgerService {
     const buffer = await file.arrayBuffer();
     const contentHash = await computeFileContentHash(buffer);
     const report = await this.parser.parseFile(file);
+    const resolver = await this.buildIdentityResolver(report);
+    this.applyIdentity(report, resolver);
 
     if (!report.trades.length && !(report.unrealisedHoldings?.length)) {
       throw new Error('No trades found in this file. Check that it is a Groww P&L export.');
@@ -405,22 +414,23 @@ export class TradeLedgerService {
       }
 
       const dedupeKey = await tradeOccurrenceKey(fingerprint, occurrence);
-      const symbol = normalizeSymbol(trade.stockName);
+      const identity = resolver.resolve(trade.isin, trade.stockName);
       const enriched = enrichTradeWithCharges(trade, rateCardCharges[index] ?? 0);
       pendingWrites.push({
         ...trade,
+        isin: identity.isin,
         dedupeKey,
         fingerprint,
         uploadId,
         clientCode,
         clientName,
-        symbol,
+        symbol: identity.symbol,
         allocatedCharges: enriched.allocatedCharges,
         netPnL: enriched.netPnL,
         createdAt: now,
       });
       newTradesAdded++;
-      affectedSymbols.add(symbol);
+      affectedSymbols.add(identity.symbol);
     }
 
     if (pendingWrites.length) {
@@ -651,7 +661,19 @@ export class TradeLedgerService {
     symbol: string,
     filters: { startDate?: string; endDate?: string; tradeTypes?: TradeType[] } = {}
   ): Promise<StoredTrade[]> {
-    return this.queryTrades(clientCode, { symbol: normalizeSymbol(symbol), ...filters });
+    return this.getTradesForStock(clientCode, { symbol }, filters);
+  }
+
+  async getTradesForStock(
+    clientCode: string,
+    identity: { symbol?: string; isin?: string },
+    filters: { startDate?: string; endDate?: string; tradeTypes?: TradeType[] } = {}
+  ): Promise<StoredTrade[]> {
+    const isin = normalizeIsin(identity.isin);
+    if (isin) return this.queryTrades(clientCode, { isin, ...filters });
+    const symbol = (identity.symbol ?? '').trim().toUpperCase();
+    if (!symbol) return [];
+    return this.queryTrades(clientCode, { symbol, ...filters });
   }
 
   async getTradesForDateRange(
@@ -667,6 +689,7 @@ export class TradeLedgerService {
     clientCode: string,
     filters: {
       symbol?: string;
+      isin?: string;
       startDate?: string;
       endDate?: string;
       tradeTypes?: TradeType[];
@@ -684,7 +707,8 @@ export class TradeLedgerService {
         .eq('user_id', uid)
         .eq('client_code', clientCode);
 
-      if (filters.symbol) query = query.eq('symbol', filters.symbol);
+      if (filters.isin) query = query.eq('isin', filters.isin);
+      else if (filters.symbol) query = query.eq('symbol', filters.symbol);
       if (filters.startDate) query = query.gte('sell_date', filters.startDate);
       if (filters.endDate) query = query.lte('sell_date', filters.endDate);
 
@@ -1088,17 +1112,21 @@ export class TradeLedgerService {
     clientCode: string,
     clientName: string
   ): StockProfile[] {
-    const bySymbol = new Map<string, StoredTrade[]>();
+    const byKey = new Map<string, StoredTrade[]>();
     for (const trade of trades) {
-      const list = bySymbol.get(trade.symbol) ?? [];
+      const key = stockIdentityKey(trade);
+      const list = byKey.get(key) ?? [];
       list.push(trade);
-      bySymbol.set(trade.symbol, list);
+      byKey.set(key, list);
     }
 
-    return [...bySymbol.entries()]
-      .map(([symbol, symbolTrades]) =>
-        this.buildStockProfile(symbol, symbolTrades, clientCode, clientName)
-      )
+    return [...byKey.values()]
+      .map((symbolTrades) => {
+        const symbol =
+          symbolTrades.find((trade) => trade.symbol)?.symbol ||
+          normalizeSymbol(symbolTrades[0].stockName);
+        return this.buildStockProfile(symbol, symbolTrades, clientCode, clientName);
+      })
       .sort((a, b) => b.netPnL - a.netPnL);
   }
 
@@ -1156,7 +1184,7 @@ export class TradeLedgerService {
     return {
       symbol,
       stockName: trades[0].stockName,
-      isin: trades[0].isin,
+      isin: normalizeIsin(trades.find((trade) => trade.isin)?.isin ?? trades[0].isin),
       clientCode,
       clientName,
       tradeCount,
@@ -1257,6 +1285,93 @@ export class TradeLedgerService {
       if (error) throw error;
     }
     return toDelete.length;
+  }
+
+  private applyIdentity(report: Report, resolver: StockIdentityResolver): void {
+    report.trades = fillMissingIsins(report.trades).map((trade) => {
+      const identity = resolver.resolve(trade.isin, trade.stockName);
+      return { ...trade, isin: identity.isin };
+    });
+    if (report.unrealisedLots?.length) {
+      report.unrealisedLots = fillMissingIsins(report.unrealisedLots).map((lot) => {
+        const identity = resolver.resolve(lot.isin, lot.stockName);
+        return { ...lot, isin: identity.isin };
+      });
+    }
+    if (report.unrealisedHoldings?.length) {
+      report.unrealisedHoldings = fillMissingIsins(report.unrealisedHoldings).map((holding) => {
+        const identity = resolver.resolve(holding.isin, holding.stockName, holding.symbol);
+        return {
+          ...holding,
+          isin: identity.isin,
+          symbol: identity.symbol,
+          lots: fillMissingIsins(holding.lots ?? []).map((lot) => ({
+            ...lot,
+            isin: resolver.resolve(lot.isin, lot.stockName).isin,
+          })),
+        };
+      });
+    }
+    if (report.stockSummary.length) {
+      report.stockSummary = fillMissingIsins(report.stockSummary).map((stock) => {
+        const identity = resolver.resolve(stock.isin, stock.stockName, stock.symbol);
+        return { ...stock, isin: identity.isin, symbol: identity.symbol };
+      });
+    }
+  }
+
+  private async buildIdentityResolver(report: Report): Promise<StockIdentityResolver> {
+    const hints: IdentityHint[] = [];
+    try {
+      const registry = await this.registry.listAll();
+      for (const stock of registry) {
+        hints.push({
+          symbol: stock.symbol,
+          name: stock.name,
+          isin: stock.isin,
+          exchange: stock.exchange,
+        });
+      }
+    } catch {
+      // Registry may be empty on a fresh account.
+    }
+
+    const isins = [
+      ...report.trades.map((trade) => normalizeIsin(trade.isin)),
+      ...(report.unrealisedHoldings ?? []).map((holding) => normalizeIsin(holding.isin)),
+      ...(report.stockSummary ?? []).map((stock) => normalizeIsin(stock.isin)),
+    ].filter(Boolean);
+    hints.push(...(await this.lookupMarketTickersByIsin(isins)));
+
+    return StockIdentityResolver.fromHints(hints);
+  }
+
+  private async lookupMarketTickersByIsin(isins: string[]): Promise<IdentityHint[]> {
+    const unique = [...new Set(isins.map(normalizeIsin).filter(Boolean))];
+    if (!unique.length) return [];
+    const hints: IdentityHint[] = [];
+    const chunkSize = 200;
+    for (let i = 0; i < unique.length; i += chunkSize) {
+      const chunk = unique.slice(i, i + chunkSize);
+      const { data, error } = await this.supabase.client
+        .from('stocks')
+        .select('symbol, name, isin, exchange')
+        .in('isin', chunk);
+      if (error) return hints;
+      for (const row of data ?? []) {
+        const camel = rowToCamel<Record<string, unknown>>(row);
+        const symbol = String(camel['symbol'] ?? '').toUpperCase();
+        const isin = normalizeIsin(String(camel['isin'] ?? ''));
+        if (!symbol || !isin) continue;
+        hints.push({
+          symbol,
+          name: String(camel['name'] ?? symbol),
+          isin,
+          exchange: String(camel['exchange'] ?? 'NSE'),
+        });
+      }
+    }
+    return hints;
   }
 
   private async commitTradesInChunks(trades: StoredTrade[], userId: string): Promise<void> {

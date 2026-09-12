@@ -1,7 +1,8 @@
 import { effect, inject, Injectable, signal, untracked } from '@angular/core';
-import { AnalysisOptions, Report, StockSummary, StoredTrade, Trade } from '../models/trade.models';
+import { AnalysisOptions, Report, StockSummary, Trade } from '../models/trade.models';
 import { TradeLedgerService } from './trade-ledger.service';
 import { ReportStateService } from './report-state.service';
+import { stockIdentityKey, stocksMatch } from '../utils/stock-identity.utils';
 import { normalizeSymbol } from '../utils/upload-merge.utils';
 import { sortTradesBySellDateDesc, storedTradeToTrade } from '../utils/trade.utils';
 import { tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
@@ -53,7 +54,7 @@ export class LazyTradeLoaderService {
   }
 
   cacheKeyForStock(stock: StockSummary): string {
-    return `stock:${this.stockSymbol(stock)}:${this.filterKey()}`;
+    return `stock:${stockIdentityKey(stock)}:${this.filterKey()}`;
   }
 
   cacheKeyForPeriod(tab: 'daily' | 'weekly' | 'monthly', periodKey: string): string {
@@ -89,8 +90,11 @@ export class LazyTradeLoaderService {
 
     this.loadingKey.set(key);
     try {
-      const symbol = stock.symbol || normalizeSymbol(stock.stockName);
-      const rows = await this.ledger.getTradesForSymbol(clientCode, symbol, effective);
+      const rows = await this.ledger.getTradesForStock(
+        clientCode,
+        { symbol: stock.symbol || normalizeSymbol(stock.stockName), isin: stock.isin },
+        effective
+      );
       const trades = this.filterTrades(
         rows.map(storedTradeToTrade),
         stock,
@@ -172,14 +176,8 @@ export class LazyTradeLoaderService {
     });
   }
 
-  private tradeSymbol(trade: Trade): string {
-    const stored = trade as StoredTrade;
-    if (stored.symbol) return stored.symbol.toUpperCase();
-    return normalizeSymbol(trade.stockName).toUpperCase();
-  }
-
   private tradeMatchesStock(trade: Trade, stock: StockSummary): boolean {
-    return this.tradeSymbol(trade) === this.stockSymbol(stock);
+    return stocksMatch(trade, stock);
   }
 
   private filterTrades(trades: Trade[], stock: StockSummary, filters: AnalysisOptions): Trade[] {

@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, map, of } from 'rxjs';
 import { ChartView, MarketCatalogSummary, StockSnapshot } from '../models/market.models';
+import { normalizeIsin } from '../utils/stock-identity.utils';
 import { rowToCamel, SupabaseService } from './supabase.service';
 
 function mapStockRow(row: Record<string, unknown>): StockSnapshot {
@@ -9,7 +10,7 @@ function mapStockRow(row: Record<string, unknown>): StockSnapshot {
     symbol: String(camel['symbol'] ?? ''),
     name: String(camel['name'] ?? ''),
     exchange: String(camel['exchange'] ?? 'NSE'),
-    isin: camel['isin'] as string | undefined,
+    isin: normalizeIsin(String(camel['isin'] ?? '')) || undefined,
     ltp: Number(camel['ltp'] ?? 0),
     change: Number(camel['changeAmt'] ?? 0),
     changePct: Number(camel['changePct'] ?? 0),
@@ -89,6 +90,19 @@ export class StockFirestoreService {
       .maybeSingle();
     if (error) throw error;
     return data ? mapStockRow(data) : null;
+  }
+
+  async fetchStockByIsin(isin: string): Promise<StockSnapshot | null> {
+    const normalized = normalizeIsin(isin);
+    if (!normalized) return null;
+    const { data, error } = await this.supabase.client
+      .from('stocks')
+      .select('*')
+      .eq('isin', normalized)
+      .limit(1);
+    if (error) return null;
+    const row = data?.[0];
+    return row ? mapStockRow(row) : null;
   }
 
   watchChart(symbol: string): Observable<ChartView | undefined> {

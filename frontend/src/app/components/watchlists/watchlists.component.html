@@ -145,7 +145,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (stock of tierStocks(); track stock.isin || stock.stockName; let i = $index) {
+            @for (stock of tierStocks(); track stockRowKey(stock); let i = $index) {
               <tr
                 class="cursor-pointer transition"
                 [ngClass]="{ 'bg-kairo-50': isStockExpanded(stock) }"

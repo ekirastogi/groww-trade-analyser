@@ -20,6 +20,7 @@ import { StockLabelsManagerComponent } from '../stock-labels/stock-labels-manage
 import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
 import { TradePlanFormComponent } from '../trade-plans/trade-plan-form.component';
 import { PlannedTrade, RegistryStock } from '../../models/trading-journal.models';
+import { StockSnapshot } from '../../models/market.models';
 import { formatCurrency, formatDate, formatPct, pnlClass } from '../../utils/format.utils';
 import { formatDataAge, formatFetchedAt } from '../../utils/data-age.utils';
 import { TRADE_TYPE_LABELS, Trade, TradeType } from '../../models/trade.models';
@@ -28,6 +29,7 @@ import {
   tradeAllocatedCharge as allocatedChargeForTrade,
   tradeNetPnL as netPnLForTrade,
 } from '../../utils/trade-charges.utils';
+import { normalizeIsin, stocksMatch } from '../../utils/stock-identity.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
 
 @Component({
@@ -68,6 +70,7 @@ export class StockDetailComponent implements OnInit {
   screenerError = signal<string | null>(null);
   screenerSuccess = signal<string | null>(null);
   registryStock = signal<RegistryStock | null>(null);
+  isinMarketStock = signal<StockSnapshot | null>(null);
   showLabelPanel = signal(false);
 
   /** Labels currently tagged to this stock, for the read-only chips in the hero. */
@@ -82,6 +85,7 @@ export class StockDetailComponent implements OnInit {
     if (!sym || this.registryStock()) return;
     const row = await this.registrySvc.ensureListed(sym, {
       name: this.displayName(),
+      isin: this.displayIsin(),
       currentPrice: this.displayPrice()?.value,
       exchange: this.displayExchange(),
     });
@@ -130,18 +134,20 @@ export class StockDetailComponent implements OnInit {
   fmt = formatCurrency;
   fmtPct = formatPct;
 
-  hasMarketData = computed(() => !!this.stock());
+  hasMarketData = computed(() => !!(this.stock() || this.isinMarketStock()));
+
+  private resolvedMarket = computed(() => this.stock() ?? this.isinMarketStock() ?? undefined);
 
   displayName = computed(() => {
-    const s = this.stock();
+    const s = this.resolvedMarket();
     const reg = this.registryStock();
     return s?.name || reg?.name || this.symbol();
   });
 
-  displayExchange = computed(() => this.stock()?.exchange || this.registryStock()?.exchange || 'NSE');
+  displayExchange = computed(() => this.resolvedMarket()?.exchange || this.registryStock()?.exchange || 'NSE');
 
   displayPrice = computed(() => {
-    const s = this.stock();
+    const s = this.resolvedMarket();
     if (s?.ltp) {
       return {
         value: s.ltp,
@@ -157,22 +163,24 @@ export class StockDetailComponent implements OnInit {
     return null;
   });
 
-  headerPe = computed(() => this.stock()?.pe ?? this.registryStock()?.pe);
-  headerMarketCap = computed(() => this.stock()?.marketCap ?? this.registryStock()?.marketCap);
+  headerPe = computed(() => this.resolvedMarket()?.pe ?? this.registryStock()?.pe);
+  headerMarketCap = computed(() => this.resolvedMarket()?.marketCap ?? this.registryStock()?.marketCap);
 
   displayIsin = computed(() => {
-    const fromRegistry = this.registryStock()?.isin?.trim();
+    const fromRegistry = normalizeIsin(this.registryStock()?.isin);
     if (fromRegistry) return fromRegistry;
-    const fromHolding = this.myHolding()?.isin?.trim();
+    const fromMarket = normalizeIsin(this.resolvedMarket()?.isin);
+    if (fromMarket) return fromMarket;
+    const fromHolding = normalizeIsin(this.myHolding()?.isin);
     if (fromHolding) return fromHolding;
-    const fromTrade = this.myTrades().find((trade) => trade.isin?.trim())?.isin?.trim();
-    return fromTrade || '';
+    const fromTrade = this.myTrades().find((trade) => normalizeIsin(trade.isin))?.isin;
+    return normalizeIsin(fromTrade);
   });
 
   private lastSymbol = '';
 
   week52Position = computed(() => {
-    const s = this.stock();
+    const s = this.resolvedMarket();
     if (!s?.week52High || !s?.week52Low || !s.ltp) return 50;
     const range = s.week52High - s.week52Low;
     if (range <= 0) return 50;
@@ -205,11 +213,20 @@ export class StockDetailComponent implements OnInit {
     const gen = ++this.registryLoadGen;
     if (!sym) {
       this.registryStock.set(null);
+      this.isinMarketStock.set(null);
       return;
     }
-    void this.registrySvc.getBySymbol(sym).then((row) => {
+    void this.registrySvc.getBySymbol(sym).then(async (row) => {
       if (gen !== this.registryLoadGen) return;
       this.registryStock.set(row);
+      const isin = normalizeIsin(row?.isin);
+      if (!isin) {
+        this.isinMarketStock.set(null);
+        return;
+      }
+      const market = await this.stockSvc.fetchStockByIsin(isin);
+      if (gen !== this.registryLoadGen) return;
+      this.isinMarketStock.set(market);
     });
     void this.labelStore.ensureLoaded();
   }, { allowSignalWrites: true });
@@ -225,8 +242,9 @@ export class StockDetailComponent implements OnInit {
       return;
     }
 
+    const isin = normalizeIsin(this.registryStock()?.isin);
     this.tradesLoading.set(true);
-    void this.ledger.getTradesForSymbol(clientCode, sym).then((rows) => {
+    void this.ledger.getTradesForStock(clientCode, { symbol: sym, isin }).then((rows) => {
       const trades: Trade[] = rows.map(
         ({
           stockName,
@@ -277,12 +295,17 @@ export class StockDetailComponent implements OnInit {
   myHolding = computed(() => {
     const sym = this.symbol();
     if (!sym) return null;
-    const target = sym.toUpperCase();
+    const target = {
+      symbol: sym,
+      isin: normalizeIsin(this.registryStock()?.isin) || normalizeIsin(this.resolvedMarket()?.isin),
+      stockName: this.displayName(),
+    };
     return (
       (this.reportState.report()?.unrealisedHoldings ?? []).find(
         (holding) =>
-          holding.symbol.toUpperCase() === target ||
-          normalizeSymbol(holding.stockName) === target
+          stocksMatch(holding, target) ||
+          holding.symbol.toUpperCase() === sym ||
+          normalizeSymbol(holding.stockName) === sym
       ) ?? null
     );
   });

@@ -1,11 +1,12 @@
 import { StockSummary, UnrealisedHolding, UnrealisedLot } from '../models/trade.models';
+import { normalizeIsin, stockIdentityKey } from './stock-identity.utils';
 import { normalizeSymbol } from './upload-merge.utils';
 
 export type PnLBook = 'realised' | 'holdings';
 
 /** Buy-side identity for an open lot so mark-to-market rows can be purged across uploads. */
 export function buyLotKey(isin: string, buyDate: string, quantity: number, buyPrice: number): string {
-  return `${(isin || '').trim().toUpperCase()}|${buyDate}|${quantity}|${buyPrice.toFixed(4)}`;
+  return `${normalizeIsin(isin)}|${buyDate}|${quantity}|${buyPrice.toFixed(4)}`;
 }
 
 export function parseHoldingsAsOf(label: string): string | null {
@@ -41,7 +42,7 @@ export function aggregateLotsToHolding(lots: UnrealisedLot[], asOfDate: string):
   const first = lots[0];
   return {
     stockName: first.stockName,
-    isin: first.isin,
+    isin: normalizeIsin(first.isin),
     symbol: normalizeSymbol(first.stockName),
     quantity,
     avgBuyPrice: quantity ? buyValue / quantity : 0,
@@ -62,7 +63,7 @@ export function mergeHoldingsWithLots(
 ): UnrealisedHolding[] {
   const lotsByKey = new Map<string, UnrealisedLot[]>();
   for (const lot of lots) {
-    const key = lot.isin || lot.stockName;
+    const key = stockIdentityKey(lot);
     const list = lotsByKey.get(key) ?? [];
     list.push(lot);
     lotsByKey.set(key, list);
@@ -71,9 +72,10 @@ export function mergeHoldingsWithLots(
   if (scripHoldings.length) {
     return scripHoldings
       .map((holding) => {
-        const key = holding.isin || holding.stockName;
+        const key = stockIdentityKey(holding);
         return {
           ...holding,
+          isin: normalizeIsin(holding.isin),
           symbol: holding.symbol || normalizeSymbol(holding.stockName),
           asOfDate: holding.asOfDate || asOfDate,
           lots: lotsByKey.get(key) ?? holding.lots ?? [],
@@ -91,7 +93,7 @@ export function mergeHoldingsWithLots(
 export function holdingToStockSummary(holding: UnrealisedHolding): StockSummary {
   return {
     stockName: holding.stockName,
-    isin: holding.isin,
+    isin: normalizeIsin(holding.isin),
     symbol: holding.symbol || normalizeSymbol(holding.stockName),
     quantity: holding.quantity,
     avgBuyPrice: holding.avgBuyPrice,

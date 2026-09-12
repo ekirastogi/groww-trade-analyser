@@ -1,10 +1,19 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, of, shareReplay, switchMap } from 'rxjs';
 import { RegistryStock } from '../models/trading-journal.models';
+import { normalizeIsin } from '../utils/stock-identity.utils';
 import { AuthService } from './auth.service';
 import { objectToSnake, rowToCamel, rowsToCamel, SupabaseService } from './supabase.service';
 
 const UPSERT_BATCH_LIMIT = 400;
+
+function isMissingColumnError(error: { message?: string; code?: string }, column: string): boolean {
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    error.code === 'PGRST204' ||
+    (message.includes(column) && message.includes('does not exist'))
+  );
+}
 
 export type RegistryStockSource = NonNullable<RegistryStock['source']>;
 
@@ -45,6 +54,22 @@ export class RegistryStockService {
       .maybeSingle();
     if (error) throw error;
     return data ? rowToCamel<RegistryStock>(data) : null;
+  }
+
+  async getByIsin(isin: string): Promise<RegistryStock | null> {
+    await this.auth.whenReady();
+    const uid = await this.auth.getDataUserId();
+    const normalized = normalizeIsin(isin);
+    if (!uid || !normalized) return null;
+    const { data, error } = await this.supabase.client
+      .from('registry_stocks')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('isin', normalized)
+      .limit(1);
+    if (error) throw error;
+    const row = data?.[0];
+    return row ? rowToCamel<RegistryStock>(row) : null;
   }
 
   async listAll(): Promise<RegistryStock[]> {
@@ -89,20 +114,61 @@ export class RegistryStockService {
     const uid = await this.auth.getDataUserId();
     if (!uid) return 0;
 
+    const existing = await this.listAll();
+    const byIsin = new Map<string, RegistryStock>();
+    const bySymbol = new Map<string, RegistryStock>();
+    for (const stock of existing) {
+      bySymbol.set(stock.symbol, stock);
+      const isin = normalizeIsin(stock.isin);
+      if (isin && !byIsin.has(isin)) byIsin.set(isin, stock);
+    }
+
     const now = Date.now();
     const rows: Record<string, unknown>[] = [];
     const seen = new Set<string>();
 
     for (const entry of symbols) {
+      const isin = normalizeIsin(entry.isin);
       const sym = entry.symbol.toUpperCase().trim();
+      if (!sym && !isin) continue;
+
+      if (isin && byIsin.has(isin)) {
+        const current = byIsin.get(isin)!;
+        if (!normalizeIsin(current.isin)) {
+          await this.save({ ...current, isin, source: current.source ?? source });
+        }
+        continue;
+      }
+
       if (!sym || seen.has(sym)) continue;
       seen.add(sym);
+
+      const already = bySymbol.get(sym);
+      if (already) {
+        if (isin && !normalizeIsin(already.isin)) {
+          await this.save({ ...already, isin, source: already.source ?? source });
+          byIsin.set(isin, { ...already, isin });
+        }
+        continue;
+      }
+
+      const rowStock: RegistryStock = {
+        symbol: sym,
+        name: entry.name ?? sym,
+        isin,
+        exchange: 'NSE',
+        source,
+        currentPrice: 0,
+        supports: [],
+        resistances: [],
+        updatedAt: now,
+      };
       rows.push(
         objectToSnake({
           userId: uid,
           symbol: sym,
           name: entry.name ?? sym,
-          isin: entry.isin ?? '',
+          isin,
           exchange: 'NSE',
           source,
           currentPrice: 0,
@@ -112,6 +178,8 @@ export class RegistryStockService {
           updatedAt: now,
         })
       );
+      bySymbol.set(sym, rowStock);
+      if (isin) byIsin.set(isin, rowStock);
     }
 
     if (!rows.length) return 0;
@@ -136,7 +204,7 @@ export class RegistryStockService {
     const canonicalByIsin = new Map<string, string>();
 
     for (const stock of stocks) {
-      const isin = stock.isin?.trim();
+      const isin = normalizeIsin(stock.isin);
       if (!isin) continue;
       const existing = canonicalByIsin.get(isin);
       if (!existing || stock.exchange === 'NSE') {
@@ -146,7 +214,7 @@ export class RegistryStockService {
 
     const symbolsToRemove = new Set<string>();
     for (const stock of stocks) {
-      const isin = stock.isin?.trim();
+      const isin = normalizeIsin(stock.isin);
       if (!isin) continue;
       const canonical = canonicalByIsin.get(isin);
       if (!canonical || canonical === stock.symbol || !stockSymbols.has(canonical)) continue;
@@ -175,7 +243,9 @@ export class RegistryStockService {
 
     const bySymbol = new Map(registry.map((stock) => [stock.symbol, stock]));
     const symbols = [...bySymbol.keys()];
+    const isins = [...new Set(registry.map((stock) => normalizeIsin(stock.isin)).filter(Boolean))];
     const marketBySymbol = new Map<string, Record<string, unknown>>();
+    const marketByIsin = new Map<string, Record<string, unknown>>();
     const chunkSize = 200;
 
     for (let i = 0; i < symbols.length; i += chunkSize) {
@@ -185,13 +255,29 @@ export class RegistryStockService {
       for (const row of data ?? []) {
         const camel = rowToCamel<Record<string, unknown>>(row);
         marketBySymbol.set(String(camel['symbol'] ?? '').toUpperCase(), camel);
+        const isin = normalizeIsin(String(camel['isin'] ?? ''));
+        if (isin) marketByIsin.set(isin, camel);
+      }
+    }
+
+    for (let i = 0; i < isins.length; i += chunkSize) {
+      const chunk = isins.slice(i, i + chunkSize);
+      const { data, error } = await this.supabase.client.from('stocks').select('*').in('isin', chunk);
+      if (error) {
+        if (isMissingColumnError(error, 'isin')) break;
+        throw error;
+      }
+      for (const row of data ?? []) {
+        const camel = rowToCamel<Record<string, unknown>>(row);
+        const isin = normalizeIsin(String(camel['isin'] ?? ''));
+        if (isin) marketByIsin.set(isin, camel);
       }
     }
 
     let updated = 0;
 
     for (const stock of registry) {
-      const market = marketBySymbol.get(stock.symbol);
+      const market = marketByIsin.get(normalizeIsin(stock.isin)) ?? marketBySymbol.get(stock.symbol);
       if (!market) continue;
 
       const ltp = Number(market['ltp'] ?? 0);
@@ -241,7 +327,7 @@ export class RegistryStockService {
       userId: uid,
       symbol,
       name: stock.name.trim() || symbol,
-      isin: stock.isin ?? '',
+      isin: normalizeIsin(stock.isin),
       exchange: stock.exchange ?? 'NSE',
       source: stock.source ?? 'manual',
       currentPrice: stock.currentPrice ?? 0,
@@ -298,12 +384,23 @@ export class RegistryStockService {
   }
 
   async ensureListed(symbol: string, extras?: Partial<RegistryStock>): Promise<RegistryStock> {
+    const isin = normalizeIsin(extras?.isin);
+    const existingByIsin = isin ? await this.getByIsin(isin) : null;
+    if (existingByIsin) return existingByIsin;
     const existing = await this.getBySymbol(symbol);
-    if (existing) return existing;
+    if (existing) {
+      if (isin && !normalizeIsin(existing.isin)) {
+        const updated = { ...existing, isin };
+        await this.save(updated);
+        return updated;
+      }
+      return existing;
+    }
     const sym = symbol.trim().toUpperCase();
     const stock: RegistryStock = {
       symbol: sym,
       name: extras?.name?.trim() || sym,
+      isin,
       currentPrice: extras?.currentPrice ?? 0,
       exchange: extras?.exchange ?? 'NSE',
       source: extras?.source ?? 'manual',

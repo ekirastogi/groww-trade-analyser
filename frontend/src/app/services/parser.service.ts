@@ -20,6 +20,7 @@ import {
   mergeHoldingsWithLots,
   parseHoldingsAsOf,
 } from '../utils/holdings.utils';
+import { fillMissingIsins, normalizeIsin } from '../utils/stock-identity.utils';
 import { normalizeSymbol } from '../utils/upload-merge.utils';
 
 const CHARGE_LABELS = [
@@ -199,7 +200,7 @@ export class ParserService {
     if (isJunkScripRow(name)) return null;
     return {
       stockName: name,
-      isin: String(row[1]),
+      isin: normalizeIsin(String(row[1])),
       symbol: normalizeSymbol(name),
       quantity: this.parseFloat(row[2]),
       avgBuyPrice: this.parseFloat(row[3]),
@@ -225,7 +226,7 @@ export class ParserService {
     const unrealisedPnL = this.parseFloat(row[7]);
     return {
       stockName: name,
-      isin: String(row[1]).trim(),
+      isin: normalizeIsin(String(row[1])),
       symbol: normalizeSymbol(name),
       quantity: this.parseFloat(row[2]),
       avgBuyPrice: this.parseFloat(row[3]),
@@ -260,7 +261,7 @@ export class ParserService {
 
     return {
       stockName: String(row[0]).trim(),
-      isin: String(row[1]).trim(),
+      isin: normalizeIsin(String(row[1])),
       quantity: this.parseFloat(row[2]),
       buyDate,
       buyPrice: this.parseFloat(row[4]),
@@ -283,7 +284,7 @@ export class ParserService {
     const closeMs = new Date(closingDate).getTime();
     return {
       stockName: String(row[0]).trim(),
-      isin: String(row[1]).trim(),
+      isin: normalizeIsin(String(row[1])),
       quantity: this.parseFloat(row[2]),
       buyDate,
       buyPrice: this.parseFloat(row[4]),
@@ -298,6 +299,20 @@ export class ParserService {
   }
 
   private finalizeReport(report: Report): void {
+    report.trades = fillMissingIsins(report.trades);
+    if (report.unrealisedLots?.length) {
+      report.unrealisedLots = fillMissingIsins(report.unrealisedLots);
+    }
+    if (report.unrealisedHoldings?.length) {
+      report.unrealisedHoldings = fillMissingIsins(report.unrealisedHoldings).map((holding) => ({
+        ...holding,
+        lots: fillMissingIsins(holding.lots ?? []),
+      }));
+    }
+    if (report.stockSummary.length) {
+      report.stockSummary = fillMissingIsins(report.stockSummary);
+    }
+
     if (!report.charges.total) {
       report.charges.total = report.charges.items
         .filter((i) => i.label !== 'Total')

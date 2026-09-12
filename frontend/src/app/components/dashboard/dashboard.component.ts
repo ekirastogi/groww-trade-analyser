@@ -43,6 +43,7 @@ import {
 } from '../../utils/stock-scenario.utils';
 import { holdingsTotals, PnLBook } from '../../utils/holdings.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
+import { stockIdentityKey } from '../../utils/stock-identity.utils';
 import { FILTER_QUERY_KEYS, readWatchlistFilters } from '../../utils/filter-url.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
@@ -211,7 +212,7 @@ export class DashboardComponent implements OnInit {
     const stockDayNetPnL = new Map<string, number>();
 
     for (const trade of trades) {
-      const stockKey = trade.isin || trade.stockName;
+      const stockKey = stockIdentityKey(trade);
       const key = `${trade.sellDate}::${stockKey}`;
       stockDayNetPnL.set(key, (stockDayNetPnL.get(key) ?? 0) + trade.realisedPnL);
     }
@@ -395,7 +396,7 @@ export class DashboardComponent implements OnInit {
   }
 
   stockRowKey(stock: StockSummary): string {
-    return stock.isin || stock.stockName;
+    return stockIdentityKey(stock);
   }
 
   stockSymbol(stock: StockSummary): string {

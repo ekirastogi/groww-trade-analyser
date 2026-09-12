@@ -565,7 +565,7 @@
                 </tr>
               </thead>
               <tbody>
-                @for (stock of sortedStockData(); track stock.isin; let i = $index) {
+                @for (stock of sortedStockData(); track stockRowKey(stock); let i = $index) {
                   <tr
                     class="cursor-pointer transition"
                     [class.bg-kairo-50]="isPerStockExpanded(stock)"

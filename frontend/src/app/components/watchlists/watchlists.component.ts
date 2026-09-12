@@ -23,6 +23,7 @@ import {
 } from '../../utils/pnl-watchlist.utils';
 import { holdingsToStockSummaries, PnLBook } from '../../utils/holdings.utils';
 import { normalizeSymbol } from '../../utils/upload-merge.utils';
+import { stockIdentityKey } from '../../utils/stock-identity.utils';
 import { TableSortState } from '../../utils/table-sort.utils';
 import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type-filter.component';
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
@@ -330,7 +331,7 @@ export class WatchlistsComponent implements OnInit, OnDestroy {
   }
 
   stockRowKey(stock: StockSummary): string {
-    return stock.isin || stock.stockName;
+    return stockIdentityKey(stock);
   }
 
   isStockExpanded(stock: StockSummary): boolean {

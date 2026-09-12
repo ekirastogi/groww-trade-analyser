@@ -5,6 +5,7 @@ import { UnrealisedHolding, UnrealisedLot } from '../../../models/trade.models';
 import { formatCurrency, formatDate, formatPct, formatPrice, pnlClass } from '../../../utils/format.utils';
 import { TableSortState } from '../../../utils/table-sort.utils';
 import { holdingsTotals } from '../../../utils/holdings.utils';
+import { stockIdentityKey } from '../../../utils/stock-identity.utils';
 
 export type HoldingColumn =
   | 'stockName'
@@ -78,7 +79,7 @@ export class HoldingsTableComponent {
   }
 
   rowKey(holding: UnrealisedHolding): string {
-    return holding.isin || holding.symbol || holding.stockName;
+    return stockIdentityKey(holding);
   }
 
   sortedLots(holding: UnrealisedHolding): UnrealisedLot[] {

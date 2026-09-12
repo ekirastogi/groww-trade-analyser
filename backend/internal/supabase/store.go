@@ -580,11 +580,22 @@ func (s *Store) SyncRegistrySymbols(ctx context.Context, userID string, entries 
 			insert into registry_stocks (
 				user_id, symbol, name, isin, exchange, source, current_price,
 				supports, resistances, notes, updated_at
-			) values ($1,$2,$3,$4,$5,'exchange_seed',0,'[]'::jsonb,'[]'::jsonb,'',$6)
+			)
+			select $1,$2,$3,$4,$5,'exchange_seed',0,'[]'::jsonb,'[]'::jsonb,'',$6
+			where not exists (
+				select 1 from registry_stocks r
+				where r.user_id = $1 and $4 <> '' and r.isin = $4
+			)
 			on conflict (user_id, symbol) do update set
-				name=excluded.name, isin=excluded.isin, exchange=excluded.exchange,
-				source=excluded.source, updated_at=excluded.updated_at
-		`, userID, symbol, entry.Name, entry.ISIN, entry.Exchange, now)
+				name=excluded.name,
+				isin=case
+					when coalesce(registry_stocks.isin, '') = '' then excluded.isin
+					else registry_stocks.isin
+				end,
+				exchange=excluded.exchange,
+				source=excluded.source,
+				updated_at=excluded.updated_at
+		`, userID, symbol, entry.Name, strings.ToUpper(strings.TrimSpace(entry.ISIN)), entry.Exchange, now)
 		count++
 	}
 	br := s.pool.SendBatch(ctx, batch)

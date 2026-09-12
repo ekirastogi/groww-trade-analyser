@@ -9,6 +9,7 @@ import { PageShellService } from '../../services/page-shell.service';
 import { ReportStateService } from '../../services/report-state.service';
 import { StockSummary } from '../../models/trade.models';
 import { formatCurrency, pnlClass } from '../../utils/format.utils';
+import { stockIdentityKey } from '../../utils/stock-identity.utils';
 
 @Component({
   selector: 'app-custom-stock-list-editor',
@@ -84,6 +85,10 @@ export class CustomStockListEditorComponent implements OnInit {
 
   stockSymbol(stock: StockSummary): string {
     return this.lazyTrades.stockSymbol(stock);
+  }
+
+  stockRowKey(stock: StockSummary): string {
+    return stockIdentityKey(stock);
   }
 
   isSelected(stock: StockSummary): boolean {

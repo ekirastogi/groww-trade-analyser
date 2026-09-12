@@ -14,6 +14,7 @@ import {
   rollupDailyToPeriodBuckets,
 } from '../utils/analytics-aggregation.utils';
 import { buildTradeTypeFilter, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
+import { normalizeIsin, stockIdentityKey } from '../utils/stock-identity.utils';
 import { normalizeSymbol } from '../utils/upload-merge.utils';
 
 @Injectable({ providedIn: 'root' })
@@ -271,12 +272,12 @@ export class AnalysisService {
     const map = new Map<string, StockSummary>();
 
     for (const t of trades) {
-      const key = t.isin || t.stockName;
+      const key = stockIdentityKey(t);
       let s = map.get(key);
       if (!s) {
         s = {
           stockName: t.stockName,
-          isin: t.isin,
+          isin: normalizeIsin(t.isin),
           symbol: normalizeSymbol(t.stockName),
           quantity: 0,
           avgBuyPrice: 0,
