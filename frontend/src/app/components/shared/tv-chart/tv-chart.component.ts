@@ -241,22 +241,28 @@ export class TvChartComponent implements OnDestroy {
   private detach: Array<() => void> = [];
 
   constructor(private readonly host: ElementRef<HTMLElement>) {
-    effect(() => {
-      this.hydrate(this.storageKey());
-    });
+    effect(
+      () => {
+        this.hydrate(this.storageKey());
+      },
+      { allowSignalWrites: true },
+    );
 
-    effect(() => {
-      const data = this.view();
-      this.container();
-      this.overlay();
-      this.ensureChart();
-      this.pushSeries(data);
-      if (hasNegativePrices(data) && this.scaleMode() === 'log') {
-        this.scaleMode.set('normal');
-      }
-      this.syncVisibleRange(data);
-      this.paint();
-    });
+    effect(
+      () => {
+        const data = this.view();
+        this.container();
+        this.overlay();
+        this.ensureChart();
+        this.pushSeries(data);
+        if (hasNegativePrices(data) && this.scaleMode() === 'log') {
+          this.scaleMode.set('normal');
+        }
+        this.syncVisibleRange(data);
+        this.paint();
+      },
+      { allowSignalWrites: true },
+    );
 
     effect(() => {
       this.drawings();
@@ -760,7 +766,10 @@ export class TvChartComponent implements OnDestroy {
 
     const onRange = () => {
       const range = this.chart?.timeScale().getVisibleLogicalRange();
-      if (range) this.logicalRange.set({ from: range.from, to: range.to });
+      if (range) {
+        const next = { from: range.from, to: range.to };
+        queueMicrotask(() => this.logicalRange.set(next));
+      }
       this.paint();
     };
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
@@ -775,7 +784,7 @@ export class TvChartComponent implements OnDestroy {
 
     const onMove = (param: MouseEventParams) => {
       if (!param.time || !this.series) {
-        this.hover.set(null);
+        queueMicrotask(() => this.hover.set(null));
         return;
       }
       const candle = param.seriesData.get(this.series) as CandlestickData | undefined;
@@ -783,17 +792,18 @@ export class TvChartComponent implements OnDestroy {
         ? (param.seriesData.get(this.volumeSeries) as HistogramData | undefined)
         : undefined;
       if (!candle || typeof candle.open !== 'number') {
-        this.hover.set(null);
+        queueMicrotask(() => this.hover.set(null));
         return;
       }
-      this.hover.set({
+      const next: TvCandle = {
         time: String(param.time),
         open: candle.open,
         high: candle.high,
         low: candle.low,
         close: candle.close,
         volume: typeof volume?.value === 'number' ? volume.value : undefined,
-      });
+      };
+      queueMicrotask(() => this.hover.set(next));
     };
     this.chart.subscribeCrosshairMove(onMove);
     this.detach.push(() => this.chart?.unsubscribeCrosshairMove(onMove));

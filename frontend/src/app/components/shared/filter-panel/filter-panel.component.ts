@@ -1,4 +1,4 @@
-import { Component, inject, signal, effect, output, input } from '@angular/core';
+import { Component, inject, signal, effect, output, input, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ReportStateService } from '../../../services/report-state.service';
@@ -36,12 +36,16 @@ export class FilterPanelComponent {
 
   constructor() {
     effect(() => {
-      if (this.state.hasReport()) {
-        this.localTradeTypes.set([...this.state.selectedTradeTypes()]);
-        this.chartPeriod.set(this.state.chartPeriod());
-        this.topStocksCount.set(this.state.topStocksCount());
-      }
-    }, { allowSignalWrites: true });
+      if (!this.state.hasReport()) return;
+      const types = [...this.state.selectedTradeTypes()];
+      const period = this.state.chartPeriod();
+      const top = this.state.topStocksCount();
+      untracked(() => {
+        this.localTradeTypes.set(types);
+        this.chartPeriod.set(period);
+        this.topStocksCount.set(top);
+      });
+    });
   }
 
   toggleExpanded(): void {
