@@ -137,7 +137,9 @@ export class WatchlistService {
         updatedAt: now,
       });
     });
-    const { error } = await this.supabase.client.from('watchlists').upsert(rows);
+    const { error } = await this.supabase.client
+      .from('watchlists')
+      .upsert(rows, { onConflict: 'user_id,id' });
     if (error) throw error;
   }
 
