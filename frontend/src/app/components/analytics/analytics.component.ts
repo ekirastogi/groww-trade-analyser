@@ -271,6 +271,16 @@ export class AnalyticsComponent implements OnInit {
     )
   );
 
+  /** Day-of-month buckets split into profitable vs losing dates for the overview heatmap. */
+  calendarDayOutcomes = computed(() => {
+    const traded = this.dayOfMonthBuckets().filter((bucket) => bucket.tradeCount);
+    const byDay = (a: { key: string }, b: { key: string }) => Number(a.key) - Number(b.key);
+    return {
+      success: traded.filter((bucket) => bucket.netPnL > 0).sort(byDay),
+      failed: traded.filter((bucket) => bucket.netPnL < 0).sort(byDay),
+    };
+  });
+
   sortedDaily = computed(() =>
     [...(this.analysis()?.daily ?? [])].sort((a, b) => a.period.localeCompare(b.period))
   );
