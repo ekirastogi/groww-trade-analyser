@@ -38,7 +38,6 @@ import { TradeTypeFilterComponent } from '../shared/trade-type-filter/trade-type
 import { DateRangeFilterComponent } from '../shared/date-range-filter/date-range-filter.component';
 import { ChartCardComponent } from '../shared/chart-card/chart-card.component';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
-import { PnlCandle, PnlCandleChartComponent } from '../shared/pnl-candle-chart/pnl-candle-chart.component';
 import { HeatmapComponent } from '../heatmap/heatmap.component';
 import { StockBreakdownTableComponent } from '../shared/stock-breakdown-table/stock-breakdown-table.component';
 import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
@@ -80,7 +79,6 @@ type AnalyticsTab =
     ReportHistoryComponent,
     StockBreakdownTableComponent,
     HoldingsTableComponent,
-    PnlCandleChartComponent,
     HeatmapComponent,
     ErrorBannerComponent,
   ],
@@ -520,39 +518,6 @@ export class AnalyticsComponent implements OnInit {
         datasets: [buildZeroSplitLineDataset('Cumulative Net P&L', cumData)],
       },
       options: lineChartOptions(''),
-    });
-  });
-
-  /**
-   * Cumulative P&L as OHLC candles, one per trading day. Open is the previous day's close
-   * and close is the new running total, so the body is that day's result. Statements carry
-   * no intraday times, so the wicks use the widest equity swing the day could have taken:
-   * the high assumes every winning trade landed first, the low every losing trade did.
-   */
-  pnlCandles = computed<PnlCandle[]>(() => {
-    const rows = this.sortedDaily();
-    let open = 0;
-
-    return rows.map((day) => {
-      const close = open + day.netPnL;
-      let gains = 0;
-      let losses = 0;
-      for (const trade of day.trades) {
-        const net = trade.netPnL ?? trade.realisedPnL - (trade.allocatedCharges ?? 0);
-        if (net >= 0) gains += net;
-        else losses += net;
-      }
-
-      const candle: PnlCandle = {
-        time: day.period,
-        open,
-        close,
-        high: Math.max(open, close, open + gains),
-        low: Math.min(open, close, open + losses),
-        volume: day.tradeCount || day.trades.length,
-      };
-      open = close;
-      return candle;
     });
   });
 
