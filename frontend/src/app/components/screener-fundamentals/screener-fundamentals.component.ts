@@ -282,15 +282,15 @@ export class ScreenerFundamentalsComponent {
   activeTable(): RegistryFinancialTable | null {
     switch (this.activeTab()) {
       case 'quarterly':
-        return this.stock().quarterlyResults?.rows?.length ? this.stock().quarterlyResults : null;
+        return this.stock().quarterlyResults?.rows?.length ? this.stock().quarterlyResults ?? null : null;
       case 'annual':
-        return this.stock().profitLoss?.rows?.length ? this.stock().profitLoss : null;
+        return this.stock().profitLoss?.rows?.length ? this.stock().profitLoss ?? null : null;
       case 'balance':
-        return this.stock().balanceSheet?.rows?.length ? this.stock().balanceSheet : null;
+        return this.stock().balanceSheet?.rows?.length ? this.stock().balanceSheet ?? null : null;
       case 'cashflow':
-        return this.stock().cashFlow?.rows?.length ? this.stock().cashFlow : null;
+        return this.stock().cashFlow?.rows?.length ? this.stock().cashFlow ?? null : null;
       case 'shareholding':
-        return this.stock().shareholding?.rows?.length ? this.stock().shareholding : null;
+        return this.stock().shareholding?.rows?.length ? this.stock().shareholding ?? null : null;
       default:
         return null;
     }
