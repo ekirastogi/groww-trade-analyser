@@ -2,13 +2,21 @@
 
 Local Go backend for Kairo. Two jobs in one process:
 
-1. **Market worker** — Groww Trade API quotes + OHLC into **SQLite**; indicators, relative-strength signals, volume shockers; slim snapshots to **Firestore**.
+1. **Market worker** — Groww Trade API quotes + OHLC into **SQLite**; indicators, relative-strength signals, volume shockers; publishes to **Supabase Postgres** (what the UI reads) and slim snapshots to **Firestore** (legacy).
 2. **P&L HTTP API** (optional) — local REST to parse Groww exports (in-memory only).
 
 ```
-Groww API ──► SQLite (~/.groww-trader/market.db) ──► Firestore (slim) ◄── Angular
-P&L upload ──► universe/{SYMBOL} ──► worker hydrates on startup
+Groww API ──► SQLite (~/.groww-trader/market.db)  full history
+          └─► Supabase Postgres (direct connection) ◄── Angular
+          └─► Firestore (slim snapshots — no longer read by the UI)
 ```
+
+> The Angular UI moved to Supabase; it only reads Firestore for worker job eventing. The
+> Firestore publishers (`internal/firebase/publisher_slim.go`, `publisher.go`) are legacy.
+>
+> The Supabase connection uses the `postgres` superuser and therefore **bypasses RLS**. Keep
+> the HTTP API bound to loopback — the mutating `/api/v1/ingest/*` and `/api/v1/registry/*`
+> routes are currently unauthenticated.
 
 ## Required dependencies
 
