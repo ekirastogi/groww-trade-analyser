@@ -25,22 +25,8 @@
     </div>
   }
 } @else {
-  @if (analysis(); as data) {
-    <div class="mb-2 grid gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs sm:flex sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
-      <span class="font-semibold text-slate-700 sm:shrink-0">{{ state.report()!.summary.clientName }}</span>
-      <span class="hidden text-slate-300 sm:inline">|</span>
-      <div class="grid grid-cols-2 gap-x-3 gap-y-1 sm:contents">
-        <span><span class="text-slate-500">Net P&L</span> <span class="font-bold tabular-nums" [class]="pnlClass(data.summary.netPnL)">{{ formatCurrency(data.summary.netPnL) }}</span></span>
-        <span><span class="text-slate-500">P&L</span> <span class="font-semibold tabular-nums" [class]="pnlClass(data.summary.realisedPnL)">{{ formatCurrency(data.summary.realisedPnL) }}</span></span>
-        @if (holdingsSummary(); as open) {
-          <span><span class="text-slate-500">Unrealised</span> <span class="font-semibold tabular-nums" [class]="pnlClass(open.unrealisedPnL)">{{ formatCurrency(open.unrealisedPnL) }}</span></span>
-        }
-        <span><span class="text-slate-500">Charges</span> <a routerLink="/charges" class="font-semibold tabular-nums text-red-600 hover:underline">{{ formatCurrency(data.summary.allocatedCharges) }}</a></span>
-        <span><span class="text-slate-500">Win</span> <span class="font-semibold tabular-nums">{{ data.summary.winRate | number:'1.0-0' }}%</span> <span class="text-slate-400">({{ data.summary.winningTrades }}W/{{ data.summary.losingTrades }}L)</span></span>
-      </div>
-      <span class="col-span-full text-slate-400 sm:col-auto">{{ state.report()!.stockSummary.length }} stocks · {{ data.summary.tradeCount }} trades</span>
-    </div>
-
+  @if (analysis()) {
+    <div class="page-with-summary-bar">
     <div class="filter-toolbar mb-2">
       <div class="flex min-w-0 flex-wrap items-center gap-1.5">
         <span class="filter-toolbar-label">Book</span>
@@ -737,6 +723,45 @@
         }
       </div>
       }
+    </div>
+
+    @if (viewSummary(); as summary) {
+      <div class="tier-summary-bar" aria-live="polite">
+        <div class="tier-summary-compact">
+          <span class="tier-summary-tier truncate" [title]="viewSummaryLabel()">
+            {{ viewSummaryLabel() }}
+          </span>
+          <span class="tier-summary-kpi">
+            <span class="tier-summary-kpi-label">{{ summary.pnlLabel }}</span>
+            <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.realisedPnL)">{{ formatCurrency(summary.realisedPnL) }}</span>
+          </span>
+          @if (summary.showCharges) {
+            <span class="tier-summary-kpi hidden sm:inline-flex">
+              <span class="tier-summary-kpi-label">Charges</span>
+              <a routerLink="/charges" class="tier-summary-kpi-value tabular-nums text-red-400 hover:underline">{{ formatCurrency(summary.allocatedCharges) }}</a>
+            </span>
+          }
+          <span class="tier-summary-kpi">
+            <span class="tier-summary-kpi-label">Net</span>
+            <span class="tier-summary-kpi-value tabular-nums" [class]="pnlClass(summary.netPnL)">{{ formatCurrency(summary.netPnL) }}</span>
+          </span>
+          <span class="tier-summary-kpi hidden lg:inline-flex">
+            <span class="tier-summary-kpi-label">{{ summary.countLabel }}</span>
+            <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.stockCount }}</span>
+          </span>
+          <span class="tier-summary-kpi hidden lg:inline-flex">
+            <span class="tier-summary-kpi-label">{{ summary.volumeLabel }}</span>
+            <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.tradeCount | number }}</span>
+          </span>
+          @if (summary.winRate !== null) {
+            <span class="tier-summary-kpi hidden xl:inline-flex">
+              <span class="tier-summary-kpi-label">Win</span>
+              <span class="tier-summary-kpi-value tabular-nums text-slate-200">{{ summary.winRate | number:'1.0-0' }}%</span>
+            </span>
+          }
+        </div>
+      </div>
+    }
     </div>
   }
 }

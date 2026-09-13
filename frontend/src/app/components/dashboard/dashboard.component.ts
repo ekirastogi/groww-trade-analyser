@@ -307,6 +307,74 @@ export class DashboardComponent implements OnInit {
     };
   });
 
+  viewSummaryLabel = computed(() => {
+    if (this.book() === 'holdings') return 'Unrealised';
+    switch (this.activeTab()) {
+      case 'daily':
+        return 'Daily';
+      case 'weekly':
+        return 'Weekly';
+      case 'monthly':
+        return 'Monthly';
+      case 'custom':
+        return this.customLists.selectedList()?.name ?? 'Custom';
+      default:
+        return 'Overall';
+    }
+  });
+
+  viewSummary = computed(() => {
+    if (this.book() === 'holdings') {
+      const open = this.holdingsSummary();
+      return {
+        pnlLabel: 'Unrealised',
+        countLabel: 'Stocks',
+        volumeLabel: 'Qty',
+        realisedPnL: open?.unrealisedPnL ?? 0,
+        allocatedCharges: 0,
+        netPnL: open?.unrealisedPnL ?? 0,
+        stockCount: open?.stockCount ?? 0,
+        tradeCount: open?.quantity ?? 0,
+        winRate: null as number | null,
+        showCharges: false,
+      };
+    }
+
+    const tab = this.activeTab();
+    if (tab === 'daily' || tab === 'weekly' || tab === 'monthly') {
+      const rows = this.activePeriodData();
+      const tradeCount = rows.reduce((sum, row) => sum + row.tradeCount, 0);
+      const winningTrades = rows.reduce((sum, row) => sum + row.winningTrades, 0);
+      return {
+        pnlLabel: 'P&L',
+        countLabel: 'Periods',
+        volumeLabel: 'Trades',
+        realisedPnL: rows.reduce((sum, row) => sum + row.realisedPnL, 0),
+        allocatedCharges: rows.reduce((sum, row) => sum + row.allocatedCharges, 0),
+        netPnL: rows.reduce((sum, row) => sum + row.netPnL, 0),
+        stockCount: rows.length,
+        tradeCount,
+        winRate: tradeCount ? (winningTrades / tradeCount) * 100 : 0,
+        showCharges: true,
+      };
+    }
+
+    const totals = this.stockTableTotals();
+    const summary = this.analysis()?.summary;
+    return {
+      pnlLabel: 'P&L',
+      countLabel: 'Stocks',
+      volumeLabel: 'Trades',
+      realisedPnL: totals?.realisedPnL ?? summary?.realisedPnL ?? 0,
+      allocatedCharges: totals?.allocatedCharges ?? summary?.allocatedCharges ?? 0,
+      netPnL: totals?.netPnL ?? summary?.netPnL ?? 0,
+      stockCount: totals?.stockCount ?? this.filteredStocks.stocks().length,
+      tradeCount: totals?.tradeCount ?? summary?.tradeCount ?? 0,
+      winRate: summary?.winRate ?? null,
+      showCharges: true,
+    };
+  });
+
   async loadClient(clientCode: string): Promise<void> {
     await this.state.loadFromClient(clientCode);
     this.clients.set(await this.clientSvc.listClients());
