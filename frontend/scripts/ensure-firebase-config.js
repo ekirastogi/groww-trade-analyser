@@ -36,11 +36,13 @@ function fetchFromFirebaseCli() {
     `firebase apps:sdkconfig WEB ${webAppId} --project=${projectId}`,
     { encoding: 'utf8' }
   );
-  const match = output.match(/firebase\.initializeApp\((\{[\s\S]*?\})\);/);
-  if (!match) {
+  const initializeMatch = output.match(/firebase\.initializeApp\((\{[\s\S]*?\})\);/);
+  const jsonMatch = output.match(/\{[\s\S]*\}/);
+  const raw = initializeMatch?.[1] ?? jsonMatch?.[0];
+  if (!raw) {
     throw new Error('Could not parse firebase apps:sdkconfig output');
   }
-  const config = JSON.parse(match[1]);
+  const config = JSON.parse(raw);
   delete config.projectNumber;
   delete config.version;
   return config;
