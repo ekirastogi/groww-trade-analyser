@@ -43,7 +43,18 @@ function currencyTooltipLabel(label: string, value: number): string {
   return `${label}: ${formatCurrency(value)}`;
 }
 
+function parsedAxisValue(ctx: { parsed?: unknown }, axis: 'x' | 'y'): number {
+  const parsed = ctx.parsed;
+  if (parsed == null) return NaN;
+  if (typeof parsed === 'number') return parsed;
+  if (typeof parsed === 'object' && axis in parsed) {
+    return Number((parsed as Record<string, unknown>)[axis]);
+  }
+  return NaN;
+}
+
 function percentTooltipLabel(label: string, value: number): string {
+  if (!Number.isFinite(value)) return label;
   return `${label}: ${value.toFixed(1)}%`;
 }
 
@@ -176,7 +187,7 @@ export function barChartOptions(title: string, horizontal = false): ChartOptions
         callbacks: {
           label: (ctx) => currencyTooltipLabel(
             ctx.dataset.label ?? '',
-            Number(horizontal ? ctx.parsed.x : ctx.parsed.y)
+            parsedAxisValue(ctx, horizontal ? 'x' : 'y')
           ),
         },
       },
@@ -198,7 +209,7 @@ export function sparklineChartOptions(): ChartOptions {
         ...baseTooltip(),
         callbacks: {
           title: (items) => items[0]?.label ?? '',
-          label: (ctx) => currencyTooltipLabel(ctx.dataset.label ?? '', Number(ctx.parsed.y)),
+          label: (ctx) => currencyTooltipLabel(ctx.dataset.label ?? '', parsedAxisValue(ctx, 'y')),
         },
       },
     },
@@ -224,7 +235,7 @@ export function inlineBarChartOptions(): ChartOptions {
       tooltip: {
         ...baseTooltip(),
         callbacks: {
-          label: (ctx) => currencyTooltipLabel(ctx.dataset.label ?? '', Number(ctx.parsed.y)),
+          label: (ctx) => currencyTooltipLabel(ctx.dataset.label ?? '', parsedAxisValue(ctx, 'y')),
         },
       },
     },
@@ -274,10 +285,15 @@ export function scatterChartOptions(xLabel: string, yLabel: string, xCurrency = 
         ...baseTooltip(),
         callbacks: {
           label: (ctx) => {
-            const x = Number((ctx.raw as { x: number; y: number }).x);
-            const y = Number((ctx.raw as { x: number; y: number }).y);
-            const xStr = xCurrency ? formatCurrency(x) : String(x);
-            const yStr = yCurrency ? formatCurrency(y) : yPercent ? `${y.toFixed(1)}%` : String(y);
+            const raw = ctx.raw as { x?: number; y?: number } | undefined;
+            const x = Number(raw?.x);
+            const y = Number(raw?.y);
+            const xStr = xCurrency ? formatCurrency(x) : String(Number.isFinite(x) ? x : '—');
+            const yStr = yCurrency
+              ? formatCurrency(y)
+              : yPercent
+                ? Number.isFinite(y) ? `${y.toFixed(1)}%` : '—'
+                : String(Number.isFinite(y) ? y : '—');
             return `${xLabel}: ${xStr}  ·  ${yLabel}: ${yStr}`;
           },
           title: (items) => (items[0]?.dataset?.label ?? ''),
@@ -340,7 +356,7 @@ export function comboChartOptions(title: string): ChartOptions {
       tooltip: {
         ...baseTooltip(),
         callbacks: {
-          label: (ctx) => currencyTooltipLabel(ctx.dataset.label ?? '', Number(ctx.parsed.y)),
+          label: (ctx) => currencyTooltipLabel(ctx.dataset.label ?? '', parsedAxisValue(ctx, 'y')),
         },
       },
     },
@@ -362,8 +378,8 @@ export function lineChartOptions(title: string, percent = false): ChartOptions {
         ...baseTooltip(),
         callbacks: {
           label: (ctx) => percent
-            ? percentTooltipLabel(ctx.dataset.label ?? '', Number(ctx.parsed.y))
-            : currencyTooltipLabel(ctx.dataset.label ?? '', Number(ctx.parsed.y)),
+            ? percentTooltipLabel(ctx.dataset.label ?? '', parsedAxisValue(ctx, 'y'))
+            : currencyTooltipLabel(ctx.dataset.label ?? '', parsedAxisValue(ctx, 'y')),
         },
       },
     },
@@ -383,7 +399,7 @@ export function countBarChartOptions(title: string): ChartOptions {
       tooltip: {
         ...baseTooltip(),
         callbacks: {
-          label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} trades`,
+          label: (ctx) => `${ctx.dataset.label}: ${parsedAxisValue(ctx, 'y') || 0} trades`,
         },
       },
     },

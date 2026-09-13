@@ -1,9 +1,11 @@
 export function formatCurrency(value: number): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return '—';
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(amount);
 }
 
 export function formatPrice(value: number): string {

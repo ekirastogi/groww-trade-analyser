@@ -60,6 +60,7 @@ export class FilteredStockService {
       untracked(() => {
         if (!report?.dateRange) {
           this.dateFiltered.set([]);
+          this.error.set(null);
           return;
         }
 
@@ -71,6 +72,7 @@ export class FilteredStockService {
         if (!needsTradeQuery) {
           this.dateFiltered.set([]);
           this.loading.set(false);
+          this.error.set(null);
           return;
         }
 
@@ -97,12 +99,17 @@ export class FilteredStockService {
         this.error.set(null);
       }
     } catch (e) {
-      // Record the failure rather than only clearing the list: an empty array is
-      // indistinguishable from "this user has no trades", and the pages that render it were
-      // telling people to re-upload their statement during a transient outage.
+      // Keep the last good list (and aggregate P&L). Only surface the error when
+      // there is nothing left to show for this filter.
       if (seq === this.loadSeq) {
-        this.dateFiltered.set([]);
-        this.error.set(e instanceof Error ? e.message : 'Could not load trades for this filter');
+        console.warn('Filtered stock reload failed', e);
+        const hasFallback =
+          this.dateFiltered().length > 0 ||
+          (this.state.analysis()?.stocks.length ?? 0) > 0 ||
+          (this.state.report()?.stockSummary.length ?? 0) > 0;
+        if (!hasFallback) {
+          this.error.set(e instanceof Error ? e.message : 'Could not load trades for this filter');
+        }
       }
     } finally {
       if (seq === this.loadSeq) {

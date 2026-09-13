@@ -663,10 +663,11 @@ export class AnalyticsComponent implements OnInit {
             cornerRadius: 10,
             callbacks: {
               label: (ctx) => {
+                const value = Number(ctx.parsed?.y);
                 if (ctx.dataset.yAxisID === 'yWin') {
-                  return `Win Rate: ${Number(ctx.parsed.y).toFixed(1)}%`;
+                  return Number.isFinite(value) ? `Win Rate: ${value.toFixed(1)}%` : 'Win Rate';
                 }
-                return `Net P&L: ${formatCurrency(Number(ctx.parsed.y))}`;
+                return `Net P&L: ${formatCurrency(value)}`;
               },
             },
           },

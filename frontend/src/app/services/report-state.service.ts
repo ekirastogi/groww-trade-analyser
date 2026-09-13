@@ -148,7 +148,9 @@ export class ReportStateService {
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load saved trades';
       this.error.set(message);
-      throw e;
+      // Keep any already-loaded report on screen. Re-throwing here surfaced a
+      // red banner even when P&L from the previous successful load was correct.
+      if (!this.report()) throw e;
     } finally {
       this.loading.set(false);
     }
@@ -199,6 +201,10 @@ export class ReportStateService {
         merged.unrealisedHoldings = current.unrealisedHoldings;
         merged.unrealisedLots = current.unrealisedLots;
         this.applyFirebaseReport(merged);
+      } catch (e) {
+        // Stock/daily aggregates already drive P&L. A flaky trade-row fetch
+        // must not replace a working dashboard with an unhandled error banner.
+        console.warn('Trade detail load failed; keeping aggregate P&L', e);
       } finally {
         this.tradesLoading.set(false);
         this.tradesLoadPromise = null;
