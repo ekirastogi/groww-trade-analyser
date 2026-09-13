@@ -11,7 +11,7 @@ export interface CalendarBucket {
   losingTrades: number;
 }
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function tradeNetPnL(trade: Trade, chargeRatio: number): number {
   const charges = trade.allocatedCharges ?? trade.sellValue * chargeRatio;

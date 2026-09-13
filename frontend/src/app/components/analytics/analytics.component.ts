@@ -6,7 +6,7 @@ import {
   HostListener,
   OnInit,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ChartConfiguration } from 'chart.js';
 import { ReportStateService } from '../../services/report-state.service';
@@ -14,6 +14,7 @@ import { FilteredStockService } from '../../services/filtered-stock.service';
 import { AnalysisService } from '../../services/analysis.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
 import { formatCompactCurrency, formatCurrency, formatDate, pnlClass } from '../../utils/format.utils';
+import { tradeDateKey } from '../../utils/trade-date.utils';
 import { holdingsTotals } from '../../utils/holdings.utils';
 import { stockIdentityKey } from '../../utils/stock-identity.utils';
 import {
@@ -42,6 +43,8 @@ import { HeatmapComponent } from '../heatmap/heatmap.component';
 import { StockBreakdownTableComponent } from '../shared/stock-breakdown-table/stock-breakdown-table.component';
 import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
 import {
+  CalendarBucket,
+  WEEKDAY_LABELS,
   aggregateByWeekday,
   aggregateByDayOfMonth,
   avgNetPerTrade,
@@ -71,6 +74,7 @@ type AnalyticsTab =
   standalone: true,
   imports: [
     CommonModule,
+    NgTemplateOutlet,
     RouterLink,
     FilterPanelComponent,
     TradeTypeFilterComponent,
@@ -106,7 +110,10 @@ type AnalyticsTab =
       @apply border-red-200 bg-red-50/40;
     }
     .heat-cell {
-      @apply flex min-h-[2.75rem] flex-col items-center justify-center overflow-hidden rounded-lg border border-slate-200/80 px-0.5 py-1 text-center transition;
+      @apply flex min-h-[2.75rem] flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-slate-200/80 px-0.5 py-1 text-center transition;
+    }
+    .heat-this-month {
+      @apply border-slate-900;
     }
     .overview-calendar-cell {
       @apply min-h-[3.35rem] gap-0.5 px-0.5 py-1.5 sm:min-h-[5rem] sm:px-2 sm:py-2.5;
@@ -160,6 +167,7 @@ export class AnalyticsComponent implements OnInit {
   ];
   readonly heatClass = heatClass;
   readonly avgNetPerTrade = avgNetPerTrade;
+  readonly calendarWeekdayLabels = WEEKDAY_LABELS;
 
   private chartVersion = signal(0);
   winRateShowDots = signal(false);
@@ -271,7 +279,7 @@ export class AnalyticsComponent implements OnInit {
     )
   );
 
-  /** Day-of-month buckets split into profitable vs losing dates for the overview heatmap. */
+  /** Day-of-month buckets split into profitable vs losing dates for heatmap counts. */
   calendarDayOutcomes = computed(() => {
     const traded = this.dayOfMonthBuckets().filter((bucket) => bucket.tradeCount);
     const byDay = (a: { key: string }, b: { key: string }) => Number(a.key) - Number(b.key);
@@ -280,6 +288,59 @@ export class AnalyticsComponent implements OnInit {
       failed: traded.filter((bucket) => bucket.netPnL < 0).sort(byDay),
     };
   });
+
+  /** Day-of-month numbers that had a realised trade in the current calendar month (IST). */
+  currentMonthTradingDayKeys = computed(() => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const prefix = today.slice(0, 7);
+    const keys = new Set<string>();
+    const add = (iso: string | undefined) => {
+      const date = tradeDateKey(iso);
+      if (!date.startsWith(prefix)) return;
+      keys.add(String(Number(date.slice(8, 10))));
+    };
+    for (const row of this.state.report()?.dailyAnalytics ?? []) {
+      if (row.tradeCount > 0) add(row.sellDate);
+    }
+    for (const day of this.analysis()?.daily ?? []) {
+      if (day.tradeCount > 0) add(day.period);
+    }
+    for (const trade of this.analysis()?.filteredTrades ?? []) {
+      add(trade.sellDate);
+    }
+    return keys;
+  });
+
+  /** Current-month calendar cells: weekday padding, then days 1…N in 7-column weeks. */
+  calendarHeatmapCells = computed(() => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const [year, month] = today.split('-').map(Number);
+    const monthKey = today.slice(0, 7);
+    const firstWeekday = new Date(`${monthKey}-01T12:00:00`).getDay();
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const buckets = this.dayOfMonthBuckets();
+    const traded = this.currentMonthTradingDayKeys();
+    const cells: { key: string; bucket: CalendarBucket | null; tradedThisMonth: boolean }[] = [];
+    for (let i = 0; i < firstWeekday; i++) {
+      cells.push({ key: `pad-${i}`, bucket: null, tradedThisMonth: false });
+    }
+    for (let day = 1; day <= daysInMonth; day++) {
+      const bucket = buckets[day - 1] ?? null;
+      cells.push({
+        key: String(day),
+        bucket,
+        tradedThisMonth: traded.has(String(day)),
+      });
+    }
+    return cells;
+  });
+
+  calendarCellTitle(bucket: CalendarBucket, tradedThisMonth: boolean): string {
+    const base = bucket.tradeCount
+      ? `${bucket.label}: ${formatCurrency(bucket.netPnL)}`
+      : 'No trades';
+    return tradedThisMonth ? `${base} · Traded this month` : base;
+  }
 
   sortedDaily = computed(() =>
     [...(this.analysis()?.daily ?? [])].sort((a, b) => a.period.localeCompare(b.period))
