@@ -46,6 +46,20 @@ import {
   uniqueByKey,
 } from '../utils/stock-identity.utils';
 
+/**
+ * Realised P&L the ledger holds for the statement's period against the figure printed on the
+ * file. They must agree; when they do not, rows were lost or double-counted on the way in and
+ * every downstream screen quietly disagrees with Groww.
+ */
+export interface UploadReconciliation {
+  /** Realised P&L from the statement header. */
+  statement: number;
+  /** Realised P&L now stored for the same period. */
+  stored: number;
+  difference: number;
+  matches: boolean;
+}
+
 export interface UploadResult {
   uploadId: string;
   clientCode: string;
@@ -55,7 +69,11 @@ export interface UploadResult {
   fileDuplicate: boolean;
   affectedSymbols: string[];
   report?: Report;
+  reconciliation?: UploadReconciliation;
 }
+
+/** Rounding across thousands of rows, so anything under a rupee is not a real discrepancy. */
+const RECONCILIATION_TOLERANCE = 1;
 
 export interface UploadOptions {
   forceReingest?: boolean;
@@ -280,6 +298,33 @@ function tradeToRow(trade: StoredTrade, userId: string): Record<string, unknown>
   });
 }
 
+/**
+ * Compares the ledger against the statement over the file's own date range, so a file covering
+ * part of the history is still checked fairly against the rest of the ledger.
+ */
+function reconcileAgainstStatement(
+  statement: Report,
+  stored: Report | null
+): UploadReconciliation | null {
+  const expected = statement.summary.realisedPnL;
+  const { min, max } = statement.dateRange;
+  if (!Number.isFinite(expected) || !expected || !min || !max) return null;
+  if (!stored?.tradesLoaded || !stored.trades.length) return null;
+
+  const actual = stored.trades.reduce(
+    (sum, trade) =>
+      trade.sellDate >= min && trade.sellDate <= max ? sum + trade.realisedPnL : sum,
+    0
+  );
+  const difference = actual - expected;
+  return {
+    statement: expected,
+    stored: actual,
+    difference,
+    matches: Math.abs(difference) < RECONCILIATION_TOLERANCE,
+  };
+}
+
 function dailyAnalyticsFromRow(row: Record<string, unknown>): DailyAnalyticsRow {
   const camel = rowToCamel<Record<string, unknown>>(row);
   return {
@@ -382,6 +427,7 @@ export class TradeLedgerService {
           fileDuplicate: true,
           affectedSymbols: holdings.map((holding) => holding.symbol),
           report: syncedReport ?? undefined,
+          reconciliation: reconcileAgainstStatement(report, syncedReport) ?? undefined,
         };
       }
     }
@@ -485,6 +531,7 @@ export class TradeLedgerService {
       fileDuplicate: false,
       affectedSymbols: [...affectedSymbols],
       report: syncedReport ?? undefined,
+      reconciliation: reconcileAgainstStatement(report, syncedReport) ?? undefined,
     };
   }
 
@@ -1256,14 +1303,23 @@ export class TradeLedgerService {
     return counts;
   }
 
-  /** Keep the oldest row per fingerprint so overlapping P&L windows do not inflate totals. */
+  /**
+   * Keep the oldest row per occurrence key so overlapping P&L windows do not inflate totals.
+   *
+   * Deduping on the bare fingerprint is wrong: a statement legitimately repeats a row when the
+   * same scrip is bought and sold twice at identical quantity and prices on the same day, and
+   * every fingerprint field matches. Those are separate executions, so the ingest path keeps
+   * them apart with an occurrence suffix (`dedupe_key`); collapsing them to one silently drops
+   * real P&L. The occurrence key is already the primary key, so this pass only clears genuine
+   * duplicates left by older ingest schemes.
+   */
   private async removeDuplicateTrades(userId: string, clientCode: string): Promise<number> {
     const pageSize = 1000;
-    const rows: { id: string; fingerprint: string }[] = [];
+    const rows: { id: string; occurrenceKey: string }[] = [];
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await this.supabase.client
         .from('trades')
-        .select('id, fingerprint, created_at')
+        .select('id, dedupe_key, created_at')
         .eq('user_id', userId)
         .eq('client_code', clientCode)
         .order('created_at', { ascending: true })
@@ -1271,11 +1327,9 @@ export class TradeLedgerService {
       if (error) throw error;
       if (!data?.length) break;
       for (const row of data) {
-        const rec = row as { id?: string; fingerprint?: string };
-        rows.push({
-          id: String(rec.id ?? ''),
-          fingerprint: String(rec.fingerprint ?? ''),
-        });
+        const rec = row as { id?: string; dedupe_key?: string };
+        const id = String(rec.id ?? '');
+        rows.push({ id, occurrenceKey: String(rec.dedupe_key ?? '') || id });
       }
       if (data.length < pageSize) break;
     }
@@ -1283,9 +1337,9 @@ export class TradeLedgerService {
     const seen = new Set<string>();
     const toDelete: string[] = [];
     for (const row of rows) {
-      if (!row.id || !row.fingerprint) continue;
-      if (seen.has(row.fingerprint)) toDelete.push(row.id);
-      else seen.add(row.fingerprint);
+      if (!row.id || !row.occurrenceKey) continue;
+      if (seen.has(row.occurrenceKey)) toDelete.push(row.id);
+      else seen.add(row.occurrenceKey);
     }
 
     for (let i = 0; i < toDelete.length; i += UPSERT_BATCH_LIMIT) {

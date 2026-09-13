@@ -2,9 +2,10 @@ import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ReportStateService } from '../../services/report-state.service';
-import { TradeLedgerService } from '../../services/trade-ledger.service';
+import { TradeLedgerService, UploadReconciliation } from '../../services/trade-ledger.service';
 import { AuthService } from '../../services/auth.service';
 import { ReportHistoryComponent } from '../shared/report-history/report-history.component';
+import { formatCurrency } from '../../utils/format.utils';
 
 @Component({
   selector: 'app-upload',
@@ -23,6 +24,7 @@ export class UploadComponent {
   uploading = signal(false);
   pushResult = signal<string | null>(null);
   pushError = signal<string | null>(null);
+  pushWarning = signal<string | null>(null);
 
   onDragOver(e: DragEvent): void {
     e.preventDefault();
@@ -48,6 +50,7 @@ export class UploadComponent {
   private async handleFile(file: File): Promise<void> {
     this.pushResult.set(null);
     this.pushError.set(null);
+    this.pushWarning.set(null);
     this.uploading.set(true);
 
     try {
@@ -61,6 +64,7 @@ export class UploadComponent {
 
         const result = await this.ledger.uploadReport(file);
         this.state.applyUploadResult(result);
+        this.pushWarning.set(reconciliationWarning(result.reconciliation));
 
         if (result.fileDuplicate) {
           this.pushResult.set(
@@ -94,4 +98,20 @@ export class UploadComponent {
   goToDashboard(): void {
     void this.router.navigate(['/dashboard']);
   }
+}
+
+/**
+ * The stored ledger merges every statement ever uploaded, so a drift against the file's own
+ * header is the only signal that rows were lost or double-counted. Left unflagged it surfaces
+ * much later as a dashboard that disagrees with Groww by an unexplained amount.
+ */
+function reconciliationWarning(check: UploadReconciliation | undefined): string | null {
+  if (!check || check.matches) return null;
+  const direction = check.difference > 0 ? 'more' : 'less';
+  return (
+    `Stored P&L does not match this statement. The file reports ${formatCurrency(check.statement)} realised, ` +
+    `the ledger now holds ${formatCurrency(check.stored)} for the same period — ` +
+    `${formatCurrency(Math.abs(check.difference))} ${direction}. ` +
+    `Use Settings → Reset data to re-import this file from scratch.`
+  );
 }

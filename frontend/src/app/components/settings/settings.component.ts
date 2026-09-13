@@ -6,6 +6,7 @@ import { AuthService } from '../../services/auth.service';
 import { TradeLedgerService } from '../../services/trade-ledger.service';
 import { WorkerJobService } from '../../services/worker-job.service';
 import { UploadComponent } from '../upload/upload.component';
+import { formatCurrency } from '../../utils/format.utils';
 
 type SettingsTab = 'upload' | 'backfill' | 'worker' | 'reset';
 
@@ -214,8 +215,12 @@ export class SettingsComponent {
       if (file && options.tradeData) {
         const upload = await this.ledger.uploadReport(file, { forceReingest: true });
         this.state.applyUploadResult(upload);
+        const drift = upload.reconciliation;
         this.resetSuccess.set(
-          `Reset complete. Re-ingested ${upload.newTradesAdded} trades for ${upload.clientName}.`
+          `Reset complete. Re-ingested ${upload.newTradesAdded} trades for ${upload.clientName}.` +
+            (drift && !drift.matches
+              ? ` Warning: stored P&L is off the statement by ${formatCurrency(Math.abs(drift.difference))}.`
+              : '')
         );
         this.resetConfirmChecked.set(false);
         this.reingestFile.set(null);
