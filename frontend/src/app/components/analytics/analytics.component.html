@@ -414,6 +414,7 @@
         class="heat-cell overview-calendar-cell"
         [class]="bucket.tradeCount ? heatClass(bucket.netPnL, dayOfMonthMaxAbs()) : 'heat-neutral opacity-40'"
         [class.heat-session-muted]="isCalendarSessionMuted(bucket.key)"
+        [attr.aria-disabled]="isCalendarSessionMuted(bucket.key) || null"
         [title]="calendarCellTitle(bucket)"
       >
         <span class="heat-day">{{ bucket.label }}</span>

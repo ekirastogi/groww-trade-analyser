@@ -53,7 +53,6 @@ import {
 import {
   currentMonthMarketDays,
   type MarketDayInfo,
-  type MarketSession,
 } from '../../utils/market-calendar.utils';
 import {
   aggregateDayOfMonthFromDaily,
@@ -61,6 +60,9 @@ import {
   filterDailyAnalytics,
 } from '../../utils/analytics-aggregation.utils';
 import { ErrorBannerComponent } from '../shared/error-banner/error-banner.component';
+
+/** Calendar heatmap scope: every date, or only the days the market actually traded. */
+type CalendarSessionFilter = 'all' | 'open';
 
 type AnalyticsTab =
   | 'overview'
@@ -115,8 +117,9 @@ type AnalyticsTab =
     .heat-cell {
       @apply flex min-h-[2.75rem] flex-col items-center justify-center overflow-hidden rounded-lg border border-slate-200/80 px-0.5 py-1 text-center transition;
     }
+    /* Grayscale rather than a colour override, so it wins regardless of the heat class applied. */
     .heat-session-muted {
-      @apply pointer-events-auto opacity-[0.28];
+      @apply border-dashed border-slate-300 opacity-40 grayscale;
     }
     .overview-calendar-cell {
       @apply min-h-[3.35rem] gap-0.5 px-0.5 py-1.5 sm:min-h-[5rem] sm:px-2 sm:py-2.5;
@@ -170,10 +173,10 @@ export class AnalyticsComponent implements OnInit {
   ];
   readonly heatClass = heatClass;
   readonly avgNetPerTrade = avgNetPerTrade;
-  readonly calendarSessionFilters: { id: 'all' | MarketSession; label: string }[] = [
+  /** Closed days are shown as disabled cells rather than as their own filter. */
+  readonly calendarSessionFilters: { id: CalendarSessionFilter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'open', label: 'Open' },
-    { id: 'closed', label: 'Closed' },
   ];
 
   private chartVersion = signal(0);
@@ -286,9 +289,14 @@ export class AnalyticsComponent implements OnInit {
     )
   );
 
-  /** Day-of-month buckets split into profitable vs losing dates for heatmap counts. */
+  /**
+   * Day-of-month buckets split into profitable vs losing dates for heatmap counts. Dates the
+   * session filter greys out are left out, so the counts always describe the cells on screen.
+   */
   calendarDayOutcomes = computed(() => {
-    const traded = this.dayOfMonthBuckets().filter((bucket) => bucket.tradeCount);
+    const traded = this.dayOfMonthBuckets().filter(
+      (bucket) => bucket.tradeCount && !this.isCalendarSessionMuted(bucket.key)
+    );
     const byDay = (a: { key: string }, b: { key: string }) => Number(a.key) - Number(b.key);
     return {
       success: traded.filter((bucket) => bucket.netPnL > 0).sort(byDay),
@@ -296,7 +304,7 @@ export class AnalyticsComponent implements OnInit {
     };
   });
 
-  calendarSessionFilter = signal<'all' | MarketSession>('all');
+  calendarSessionFilter = signal<CalendarSessionFilter>('all');
 
   currentMonthSessions = computed(() => {
     const map = new Map<number, MarketDayInfo>();
@@ -318,16 +326,15 @@ export class AnalyticsComponent implements OnInit {
     return `${label} · ${open} open · ${closed} closed`;
   });
 
-  setCalendarSessionFilter(id: 'all' | MarketSession): void {
+  setCalendarSessionFilter(id: CalendarSessionFilter): void {
     this.calendarSessionFilter.set(id);
   }
 
+  /** True for dates the market was shut, once the user has narrowed the grid to open days. */
   isCalendarSessionMuted(dayKey: string): boolean {
-    const filter = this.calendarSessionFilter();
-    if (filter === 'all') return false;
+    if (this.calendarSessionFilter() === 'all') return false;
     const info = this.currentMonthSessions().get(Number(dayKey));
-    if (!info) return true;
-    return info.session !== filter;
+    return info ? info.session !== 'open' : true;
   }
 
   calendarCellTitle(bucket: CalendarBucket): string {
