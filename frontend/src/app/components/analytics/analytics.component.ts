@@ -14,7 +14,6 @@ import { FilteredStockService } from '../../services/filtered-stock.service';
 import { AnalysisService } from '../../services/analysis.service';
 import { TRADE_TYPE_LABELS, TradeType } from '../../models/trade.models';
 import { formatCompactCurrency, formatCurrency, formatDate, pnlClass } from '../../utils/format.utils';
-import { tradeDateKey } from '../../utils/trade-date.utils';
 import { holdingsTotals } from '../../utils/holdings.utils';
 import { stockIdentityKey } from '../../utils/stock-identity.utils';
 import {
@@ -44,7 +43,6 @@ import { StockBreakdownTableComponent } from '../shared/stock-breakdown-table/st
 import { HoldingsTableComponent } from '../shared/holdings-table/holdings-table.component';
 import {
   CalendarBucket,
-  WEEKDAY_LABELS,
   aggregateByWeekday,
   aggregateByDayOfMonth,
   avgNetPerTrade,
@@ -52,6 +50,11 @@ import {
   pickExtremeBucket,
   pickExtremePeriod,
 } from '../../utils/analytics-insights.utils';
+import {
+  currentMonthMarketDays,
+  type MarketDayInfo,
+  type MarketSession,
+} from '../../utils/market-calendar.utils';
 import {
   aggregateDayOfMonthFromDaily,
   aggregateWeekdayFromDaily,
@@ -110,10 +113,10 @@ type AnalyticsTab =
       @apply border-red-200 bg-red-50/40;
     }
     .heat-cell {
-      @apply flex min-h-[2.75rem] flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-slate-200/80 px-0.5 py-1 text-center transition;
+      @apply flex min-h-[2.75rem] flex-col items-center justify-center overflow-hidden rounded-lg border border-slate-200/80 px-0.5 py-1 text-center transition;
     }
-    .heat-this-month {
-      @apply border-slate-900;
+    .heat-session-muted {
+      @apply pointer-events-auto opacity-[0.28];
     }
     .overview-calendar-cell {
       @apply min-h-[3.35rem] gap-0.5 px-0.5 py-1.5 sm:min-h-[5rem] sm:px-2 sm:py-2.5;
@@ -167,7 +170,11 @@ export class AnalyticsComponent implements OnInit {
   ];
   readonly heatClass = heatClass;
   readonly avgNetPerTrade = avgNetPerTrade;
-  readonly calendarWeekdayLabels = WEEKDAY_LABELS;
+  readonly calendarSessionFilters: { id: 'all' | MarketSession; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'open', label: 'Open' },
+    { id: 'closed', label: 'Closed' },
+  ];
 
   private chartVersion = signal(0);
   winRateShowDots = signal(false);
@@ -289,57 +296,48 @@ export class AnalyticsComponent implements OnInit {
     };
   });
 
-  /** Day-of-month numbers that had a realised trade in the current calendar month (IST). */
-  currentMonthTradingDayKeys = computed(() => {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const prefix = today.slice(0, 7);
-    const keys = new Set<string>();
-    const add = (iso: string | undefined) => {
-      const date = tradeDateKey(iso);
-      if (!date.startsWith(prefix)) return;
-      keys.add(String(Number(date.slice(8, 10))));
-    };
-    for (const row of this.state.report()?.dailyAnalytics ?? []) {
-      if (row.tradeCount > 0) add(row.sellDate);
+  calendarSessionFilter = signal<'all' | MarketSession>('all');
+
+  currentMonthSessions = computed(() => {
+    const map = new Map<number, MarketDayInfo>();
+    for (const day of currentMonthMarketDays()) {
+      map.set(day.day, day);
     }
-    for (const day of this.analysis()?.daily ?? []) {
-      if (day.tradeCount > 0) add(day.period);
-    }
-    for (const trade of this.analysis()?.filteredTrades ?? []) {
-      add(trade.sellDate);
-    }
-    return keys;
+    return map;
   });
 
-  /** Current-month calendar cells: weekday padding, then days 1…N in 7-column weeks. */
-  calendarHeatmapCells = computed(() => {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const [year, month] = today.split('-').map(Number);
-    const monthKey = today.slice(0, 7);
-    const firstWeekday = new Date(`${monthKey}-01T12:00:00`).getDay();
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const buckets = this.dayOfMonthBuckets();
-    const traded = this.currentMonthTradingDayKeys();
-    const cells: { key: string; bucket: CalendarBucket | null; tradedThisMonth: boolean }[] = [];
-    for (let i = 0; i < firstWeekday; i++) {
-      cells.push({ key: `pad-${i}`, bucket: null, tradedThisMonth: false });
-    }
-    for (let day = 1; day <= daysInMonth; day++) {
-      const bucket = buckets[day - 1] ?? null;
-      cells.push({
-        key: String(day),
-        bucket,
-        tradedThisMonth: traded.has(String(day)),
-      });
-    }
-    return cells;
+  calendarSessionCaption = computed(() => {
+    const days = [...this.currentMonthSessions().values()];
+    if (!days.length) return '';
+    const open = days.filter((day) => day.session === 'open').length;
+    const closed = days.length - open;
+    const label = new Date(`${days[0].iso}T12:00:00`).toLocaleDateString('en-IN', {
+      month: 'short',
+      year: 'numeric',
+    });
+    return `${label} · ${open} open · ${closed} closed`;
   });
 
-  calendarCellTitle(bucket: CalendarBucket, tradedThisMonth: boolean): string {
-    const base = bucket.tradeCount
+  setCalendarSessionFilter(id: 'all' | MarketSession): void {
+    this.calendarSessionFilter.set(id);
+  }
+
+  isCalendarSessionMuted(dayKey: string): boolean {
+    const filter = this.calendarSessionFilter();
+    if (filter === 'all') return false;
+    const info = this.currentMonthSessions().get(Number(dayKey));
+    if (!info) return true;
+    return info.session !== filter;
+  }
+
+  calendarCellTitle(bucket: CalendarBucket): string {
+    const pnl = bucket.tradeCount
       ? `${bucket.label}: ${formatCurrency(bucket.netPnL)}`
-      : 'No trades';
-    return tradedThisMonth ? `${base} · Traded this month` : base;
+      : `${bucket.label}: no trades`;
+    const session = this.currentMonthSessions().get(Number(bucket.key));
+    if (!session) return pnl;
+    const status = session.session === 'open' ? 'Open' : 'Closed';
+    return `${pnl} · ${status} this month (${session.reason})`;
   }
 
   sortedDaily = computed(() =>
