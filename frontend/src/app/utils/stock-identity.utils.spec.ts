@@ -7,6 +7,8 @@ import {
   normalizeIsin,
   StockIdentityResolver,
   stockIdentityKey,
+  stocksMatch,
+  tradeBelongsToStock,
   uniqueByKey,
 } from './stock-identity.utils';
 
@@ -82,6 +84,24 @@ describe('stock identity', () => {
       (a, b) => ({ symbol: 'VBL', qty: a.qty + b.qty })
     );
     expect(merged).toEqual([{ symbol: 'VBL', qty: 5 }]);
+  });
+
+  it('keeps a post-split ISIN with the stock row its trades are displayed under', () => {
+    const stock = { isin: 'INE296A01024', symbol: 'BAJFINANCE', stockName: 'BAJAJ FINANCE LIMITED' };
+    // Groww files post-split trades under a fresh ISIN while the name stays the same.
+    const splitTrade = { isin: 'INE296A01032', stockName: 'BAJAJ FINANCE LIMITED' };
+
+    expect(stocksMatch(splitTrade, stock)).toBe(false);
+    expect(tradeBelongsToStock(splitTrade, stock)).toBe(true);
+  });
+
+  it('does not pull a different scrip into a stock row', () => {
+    expect(
+      tradeBelongsToStock(
+        { isin: 'INE918I01018', stockName: 'BAJAJ FINSERV LTD.' },
+        { isin: 'INE296A01024', symbol: 'BAJFINANCE', stockName: 'BAJAJ FINANCE LIMITED' }
+      )
+    ).toBe(false);
   });
 
   it('drops later upsert rows that share a conflict key', () => {

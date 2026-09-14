@@ -679,10 +679,9 @@ export class TradeLedgerService {
     filters: { startDate?: string; endDate?: string; tradeTypes?: TradeType[] } = {}
   ): Promise<StoredTrade[]> {
     const isin = normalizeIsin(identity.isin);
-    if (isin) return this.queryTrades(clientCode, { isin, ...filters });
     const symbol = (identity.symbol ?? '').trim().toUpperCase();
-    if (!symbol) return [];
-    return this.queryTrades(clientCode, { symbol, ...filters });
+    if (!isin && !symbol) return [];
+    return this.queryTrades(clientCode, { isin, symbol, ...filters });
   }
 
   async getTradesForDateRange(
@@ -716,7 +715,16 @@ export class TradeLedgerService {
         .eq('user_id', uid)
         .eq('client_code', clientCode);
 
-      if (filters.isin) query = query.eq('isin', filters.isin);
+      /**
+       * A stock row is merged by display symbol, so it can cover more than one ISIN once a
+       * split issues a new one. Matching either column keeps those trades with their stock.
+       */
+      const identityFilters = [
+        filters.isin ? `isin.eq.${filters.isin}` : '',
+        filters.symbol ? `symbol.eq.${filters.symbol}` : '',
+      ].filter(Boolean);
+      if (identityFilters.length > 1) query = query.or(identityFilters.join(','));
+      else if (filters.isin) query = query.eq('isin', filters.isin);
       else if (filters.symbol) query = query.eq('symbol', filters.symbol);
       if (filters.startDate) query = query.gte('sell_date', filters.startDate);
       if (filters.endDate) query = query.lte('sell_date', filters.endDate);

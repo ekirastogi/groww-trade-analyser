@@ -2,7 +2,7 @@ import { effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { AnalysisOptions, Report, StockSummary, Trade } from '../models/trade.models';
 import { TradeLedgerService } from './trade-ledger.service';
 import { ReportStateService } from './report-state.service';
-import { stockIdentityKey, stocksMatch } from '../utils/stock-identity.utils';
+import { stockIdentityKey, tradeBelongsToStock } from '../utils/stock-identity.utils';
 import { normalizeSymbol } from '../utils/upload-merge.utils';
 import { sortTradesBySellDateDesc, storedTradeToTrade } from '../utils/trade.utils';
 import { tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
@@ -177,7 +177,7 @@ export class LazyTradeLoaderService {
   }
 
   private tradeMatchesStock(trade: Trade, stock: StockSummary): boolean {
-    return stocksMatch(trade, stock);
+    return tradeBelongsToStock(trade, stock);
   }
 
   private filterTrades(trades: Trade[], stock: StockSummary, filters: AnalysisOptions): Trade[] {

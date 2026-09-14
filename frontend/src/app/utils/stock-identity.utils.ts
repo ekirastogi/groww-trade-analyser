@@ -46,6 +46,30 @@ export function stocksMatch(a: StockIdentityFields, b: StockIdentityFields): boo
   return stockIdentityKey(a) === stockIdentityKey(b);
 }
 
+/** Ticker plus the name-derived fallback, so rows identified either way still line up. */
+function symbolAliases(row: StockIdentityFields): Set<string> {
+  const aliases = new Set<string>();
+  const symbol = (row.symbol ?? '').trim().toUpperCase();
+  if (symbol) aliases.add(symbol);
+  const name = (row.stockName ?? row.name ?? '').trim();
+  if (name) aliases.add(normalizeSymbol(name));
+  return aliases;
+}
+
+/**
+ * Whether a trade belongs to a stock row. Stock rows are merged by display symbol, so one row
+ * can span several ISINs — a split or face-value change issues a new one, and Groww then files
+ * the same scrip under both. Matching on ISIN alone hides every trade booked under the others.
+ */
+export function tradeBelongsToStock(
+  trade: StockIdentityFields,
+  stock: StockIdentityFields
+): boolean {
+  if (stocksMatch(trade, stock)) return true;
+  const stockAliases = symbolAliases(stock);
+  return [...symbolAliases(trade)].some((alias) => stockAliases.has(alias));
+}
+
 export function collectIsinsByName(rows: Iterable<StockIdentityFields>): Map<string, string> {
   const isinByName = new Map<string, string>();
   for (const row of rows) {
