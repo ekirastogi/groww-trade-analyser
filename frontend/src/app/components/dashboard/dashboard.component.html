@@ -203,6 +203,10 @@
                                   <div class="border-t border-slate-100 bg-slate-50/50 px-3 py-3 sm:px-4">
                                     @if (daySummariesForTrades(group.trades); as groupDays) {
                                     <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      @if (group.isin) {
+                                        <span class="normal-case tracking-normal text-slate-400">{{ group.isin }}</span>
+                                        <span class="mx-1.5 text-slate-300">·</span>
+                                      }
                                       {{ groupDays.length }} trading {{ groupDays.length === 1 ? 'day' : 'days' }}
                                     </div>
                                     <div class="space-y-2">
@@ -592,6 +596,10 @@
                             @if (isStockTradesLoading(stock)) {
                               Loading trades…
                             } @else {
+                              @if (stock.isin) {
+                                <span class="normal-case tracking-normal text-slate-400">{{ stock.isin }}</span>
+                                <span class="mx-1.5 text-slate-300">·</span>
+                              }
                               {{ expandedStockDays().length }} trading {{ expandedStockDays().length === 1 ? 'day' : 'days' }} · {{ expandedStockTrades().length }} trades
                             }
                           </div>
