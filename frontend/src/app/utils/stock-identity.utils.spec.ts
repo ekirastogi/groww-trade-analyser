@@ -66,13 +66,12 @@ describe('stock identity', () => {
     expect(trades[0].isin).toBe('INE200M01013');
   });
 
-  it('keeps a distinct symbol when two ISINs would share a name-derived ticker', () => {
+  it('keeps one ticker across split ISINs so Bajaj Finance stays a single stock', () => {
     const resolver = new StockIdentityResolver();
-    const first = resolver.resolve('INE000000001', 'ACME LIMITED');
-    const second = resolver.resolve('INE000000002', 'ACME LTD');
-    expect(first.symbol).toBe(normalizeSymbol('ACME LIMITED'));
-    expect(second.symbol).not.toBe(first.symbol);
-    expect(second.isin).toBe('INE000000002');
+    const pre = resolver.resolve('INE296A01024', 'BAJAJ FINANCE LIMITED');
+    const post = resolver.resolve('INE296A01032', 'BAJAJ FINANCE LIMITED');
+    expect(pre.symbol).toBe(post.symbol);
+    expect(pre.isin).not.toBe(post.isin);
   });
 
   it('merges rows that share a display ticker', () => {

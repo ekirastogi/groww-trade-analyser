@@ -32,6 +32,17 @@ const CHARGE_LABELS = [
   'MTF Unpledge Charges', 'MTF interest', 'Total GST', 'Total',
 ];
 
+/** "P&L Statement for stocks from 01-08-2019 TO 13-09-2026" → ISO bounds. */
+export function parseStatementPeriod(label: string): { min: string; max: string } | null {
+  const match = label.match(
+    /(\d{2})-(\d{2})-(\d{4})\s*(?:TO|to|-|–)\s*(\d{2})-(\d{2})-(\d{4})/
+  );
+  if (!match) return null;
+  const min = `${match[3]}-${match[2]}-${match[1]}`;
+  const max = `${match[6]}-${match[5]}-${match[4]}`;
+  return min <= max ? { min, max } : { min: max, max: min };
+}
+
 @Injectable({ providedIn: 'root' })
 export class ParserService {
   async parseFile(file: File): Promise<Report> {
@@ -150,8 +161,14 @@ export class ParserService {
 
       if (label === 'Name') report.summary.clientName = value;
       else if (label === 'Unique Client Code') report.summary.clientCode = value;
-      else if (label.includes('P&L Statement')) report.summary.period = label;
-      else if (label === 'Realised P&L') report.summary.realisedPnL = this.parseFloat(value);
+      else if (label.includes('P&L Statement')) {
+        report.summary.period = label;
+        // Groww prints the official window on the statement ("from DD-MM-YYYY TO DD-MM-YYYY").
+        // That window — not the set of sell dates that happen to appear in the rows — is what
+        // an import must replace, so leftover corrupt rows outside the file's trade dates die.
+        const parsed = parseStatementPeriod(label);
+        if (parsed) report.dateRange = parsed;
+      } else if (label === 'Realised P&L') report.summary.realisedPnL = this.parseFloat(value);
       else if (label === 'Unrealised P&L') report.summary.unrealisedPnL = this.parseFloat(value);
       else if (CHARGE_LABELS.includes(label)) {
         const amount = this.parseFloat(value);
@@ -339,7 +356,10 @@ export class ParserService {
       if (i === 0 || t.sellDate > maxDate) maxDate = t.sellDate;
     });
 
-    report.dateRange = { min: minDate, max: maxDate };
+    // Prefer the statement header window when present; fall back to observed sell dates.
+    if (!report.dateRange.min || !report.dateRange.max) {
+      report.dateRange = { min: minDate, max: maxDate };
+    }
     const order: TradeType[] = ['all', 'intraday', 'delivery', 'same_day', 'mtf', 'fno'];
     report.tradeTypes = order.filter((t) => typeSet.has(t));
   }

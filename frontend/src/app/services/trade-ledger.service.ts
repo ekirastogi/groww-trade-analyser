@@ -435,16 +435,18 @@ export class TradeLedgerService {
     });
 
     /**
-     * A statement is the broker's complete record for the dates it covers, so the file wins
-     * outright: every stored row on those sell dates is cleared before the new ones land. That
-     * makes re-uploading an overlapping or corrected statement idempotent, and it is why the
-     * file must contain *all* trades for each date it touches — a partial day would drop the
-     * rest of that day from the ledger.
+     * A Groww P&L statement is the complete record for its printed window. Wipe every stored
+     * trade in that window (not only sell dates that appear in the rows) before inserting, so
+     * orphan rows from older buggy imports cannot survive a full re-upload and silently skew
+     * FYTD / all-time totals away from Groww.
      */
-    const tradesReplaced = await this.deleteTradesForSellDates(
+    const replaceStart = report.dateRange.min;
+    const replaceEnd = report.dateRange.max;
+    const tradesReplaced = await this.deleteTradesInSellDateRange(
       uid,
       clientCode,
-      report.trades.map((trade) => trade.sellDate)
+      replaceStart,
+      replaceEnd
     );
 
     if (pendingWrites.length) {
@@ -1068,8 +1070,8 @@ export class TradeLedgerService {
       unrealisedHoldings: holdings,
       unrealisedLots: holdings.flatMap((holding) => holding.lots ?? []),
       dateRange: {
-        min: dates[0] ?? '',
-        max: dates[dates.length - 1] ?? '',
+        min: uploadMeta?.periodStart || dates[0] || '',
+        max: uploadMeta?.periodEnd || dates[dates.length - 1] || '',
       },
       tradeTypes: plainTrades.length
         ? (ALL_REPORT_TRADE_TYPES.filter((t) => typeSet.has(t)) as TradeType[])
@@ -1283,33 +1285,27 @@ export class TradeLedgerService {
   }
 
   /**
-   * Clears every stored trade on the given sell dates. The uploaded statement is authoritative
-   * for the dates it covers, so wiping them first makes an import idempotent no matter how many
-   * times an overlapping file is uploaded.
+   * Clears every stored trade whose sell date falls in [start, end]. A full-window Groww
+   * statement owns that interval completely; wiping it first makes re-import idempotent and
+   * removes orphans left by older ingest bugs.
    */
-  private async deleteTradesForSellDates(
+  private async deleteTradesInSellDateRange(
     userId: string,
     clientCode: string,
-    sellDates: string[]
+    start: string,
+    end: string
   ): Promise<number> {
-    const dates = [...new Set(sellDates.filter(Boolean))];
-    if (!dates.length) return 0;
-
-    let removed = 0;
-    // Chunked to keep the `in` list (and the resulting URL) within Postgres/PostgREST limits.
-    const chunkSize = 200;
-    for (let i = 0; i < dates.length; i += chunkSize) {
-      const { data, error } = await this.supabase.client
-        .from('trades')
-        .delete()
-        .eq('user_id', userId)
-        .eq('client_code', clientCode)
-        .in('sell_date', dates.slice(i, i + chunkSize))
-        .select('id');
-      if (error) throw error;
-      removed += data?.length ?? 0;
-    }
-    return removed;
+    if (!start || !end) return 0;
+    const { data, error } = await this.supabase.client
+      .from('trades')
+      .delete()
+      .eq('user_id', userId)
+      .eq('client_code', clientCode)
+      .gte('sell_date', start)
+      .lte('sell_date', end)
+      .select('id');
+    if (error) throw error;
+    return data?.length ?? 0;
   }
 
   private applyIdentity(report: Report, resolver: StockIdentityResolver): void {

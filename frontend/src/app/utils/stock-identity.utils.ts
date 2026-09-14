@@ -191,14 +191,16 @@ export class StockIdentityResolver {
     }
 
     const hinted = symbolHint.trim().toUpperCase();
-    let symbol = hinted || normalizeSymbol(name);
+    const symbol = hinted || normalizeSymbol(name);
     if (isin) {
-      const takenBy = this.isinBySymbol.get(symbol);
-      if (takenBy && takenBy !== isin) {
-        symbol = `${symbol}-${isin.slice(-6)}`;
-      }
+      /**
+       * Groww issues a new ISIN on a split/face-value change while the company name stays the
+       * same. Those rows must share one ticker so stock profiles, day lists, and FYTD totals
+       * stay one stock — suffixing (`BAJAJFINANCE-A01032`) was splitting them apart and
+       * dropping post-split trades from the day breakdown while the header still summed both.
+       */
       this.symbolByIsin.set(isin, symbol);
-      this.isinBySymbol.set(symbol, isin);
+      if (!this.isinBySymbol.has(symbol)) this.isinBySymbol.set(symbol, isin);
     }
     return { isin, symbol };
   }
