@@ -25,10 +25,8 @@ import {
   buildTradeTypeStats,
   computeTradeCharges,
   computeFileContentHash,
-  computeTradeFingerprint,
   enrichTradeWithCharges,
   normalizeSymbol,
-  tradeOccurrenceKey,
 } from '../utils/upload-merge.utils';
 import { expandTradeTypes, effectiveTradeType, tradeMatchesTypeFilter } from '../utils/trade-type-filter.utils';
 import { mergeStockProfiles, mergeStockSummaries, profileToStockSummary, profilesHaveTypeBreakdown } from '../utils/filter-stock-profiles.utils';
@@ -65,7 +63,8 @@ export interface UploadResult {
   clientCode: string;
   clientName: string;
   newTradesAdded: number;
-  duplicatesSkipped: number;
+  /** Stored rows cleared because the file supplied a fresh version of those dates. */
+  tradesReplaced: number;
   fileDuplicate: boolean;
   affectedSymbols: string[];
   report?: Report;
@@ -153,7 +152,6 @@ function tradeFromRow(row: Record<string, unknown>): StoredTrade {
   const camel = rowToCamel<Record<string, unknown>>(row);
   return {
     dedupeKey: String(camel['dedupeKey'] ?? camel['id'] ?? ''),
-    fingerprint: camel['fingerprint'] as string | undefined,
     uploadId: String(camel['uploadId'] ?? ''),
     clientCode: String(camel['clientCode'] ?? ''),
     clientName: String(camel['clientName'] ?? ''),
@@ -275,7 +273,6 @@ function tradeToRow(trade: StoredTrade, userId: string): Record<string, unknown>
     userId,
     clientCode: trade.clientCode,
     dedupeKey: trade.dedupeKey,
-    fingerprint: trade.fingerprint,
     uploadId: trade.uploadId,
     symbol: trade.symbol,
     stockName: trade.stockName,
@@ -378,6 +375,8 @@ export class TradeLedgerService {
   private stockProfilesSupportByTradeType: boolean | null = null;
   /** null = unknown; false = `unrealised_holdings` table not on remote DB yet. */
   private holdingsTableAvailable: boolean | null = null;
+  /** null = unknown; false = `trades_replaced` column not on remote DB yet. */
+  private uploadsSupportTradesReplaced: boolean | null = null;
   /** The traded-label backfill only needs to run once per session. */
   private tradedLabelsSynced = false;
 
@@ -404,42 +403,11 @@ export class TradeLedgerService {
       await this.deleteClientData(clientCode);
     }
 
-    if (!options.forceReingest) {
-      await this.removeDuplicateTrades(uid, clientCode);
-      const { data: existingFile } = await this.supabase.client
-        .from('uploads')
-        .select('id')
-        .eq('user_id', uid)
-        .eq('client_code', clientCode)
-        .eq('content_hash', contentHash)
-        .limit(1)
-        .maybeSingle();
-      if (existingFile) {
-        await this.purgeMarkToMarketTrades(clientCode, report);
-        await this.replaceHoldings(clientCode, holdings);
-        const syncedReport = await this.syncDerivedData(clientCode, clientName, { holdings });
-        return {
-          uploadId: existingFile.id,
-          clientCode,
-          clientName,
-          newTradesAdded: 0,
-          duplicatesSkipped: 0,
-          fileDuplicate: true,
-          affectedSymbols: holdings.map((holding) => holding.symbol),
-          report: syncedReport ?? undefined,
-          reconciliation: reconcileAgainstStatement(report, syncedReport) ?? undefined,
-        };
-      }
-    }
+    const existingUploadId = options.forceReingest
+      ? null
+      : await this.findUploadByContentHash(uid, clientCode, contentHash);
 
-    // Hash every row up front: the digests are independent, so awaiting them one per
-    // iteration below serialized thousands of WebCrypto round trips.
-    const fingerprints = await Promise.all(
-      report.trades.map((trade) => computeTradeFingerprint(trade, clientCode))
-    );
-    const fingerprintCounts = await this.loadFingerprintCounts(uid, clientCode, fingerprints);
-
-    const uploadId = crypto.randomUUID();
+    const uploadId = existingUploadId ?? crypto.randomUUID();
     const rateCardCharges = computeTradeCharges(
       report.trades,
       this.chargesSvc,
@@ -447,30 +415,15 @@ export class TradeLedgerService {
     );
     const now = Date.now();
 
-    let newTradesAdded = 0;
-    let duplicatesSkipped = 0;
     const affectedSymbols = new Set<string>();
-    const pendingWrites: StoredTrade[] = [];
-    const occurrenceInFile = new Map<string, number>();
-
-    for (const [index, trade] of report.trades.entries()) {
-      const fingerprint = fingerprints[index];
-      const occurrence = occurrenceInFile.get(fingerprint) ?? 0;
-      occurrenceInFile.set(fingerprint, occurrence + 1);
-      const alreadyStored = fingerprintCounts.get(fingerprint) ?? 0;
-      if (occurrence < alreadyStored) {
-        duplicatesSkipped++;
-        continue;
-      }
-
-      const dedupeKey = await tradeOccurrenceKey(fingerprint, occurrence);
+    const pendingWrites: StoredTrade[] = report.trades.map((trade, index) => {
       const identity = resolver.resolve(trade.isin, trade.stockName);
       const enriched = enrichTradeWithCharges(trade, rateCardCharges[index] ?? 0);
-      pendingWrites.push({
+      affectedSymbols.add(identity.symbol);
+      return {
         ...trade,
         isin: identity.isin,
-        dedupeKey,
-        fingerprint,
+        dedupeKey: crypto.randomUUID(),
         uploadId,
         clientCode,
         clientName,
@@ -478,14 +431,26 @@ export class TradeLedgerService {
         allocatedCharges: enriched.allocatedCharges,
         netPnL: enriched.netPnL,
         createdAt: now,
-      });
-      newTradesAdded++;
-      affectedSymbols.add(identity.symbol);
-    }
+      };
+    });
+
+    /**
+     * A statement is the broker's complete record for the dates it covers, so the file wins
+     * outright: every stored row on those sell dates is cleared before the new ones land. That
+     * makes re-uploading an overlapping or corrected statement idempotent, and it is why the
+     * file must contain *all* trades for each date it touches — a partial day would drop the
+     * rest of that day from the ledger.
+     */
+    const tradesReplaced = await this.deleteTradesForSellDates(
+      uid,
+      clientCode,
+      report.trades.map((trade) => trade.sellDate)
+    );
 
     if (pendingWrites.length) {
       await this.commitTradesInChunks(pendingWrites, uid);
     }
+    const newTradesAdded = pendingWrites.length;
 
     const uploadRecord: Omit<UploadRecord, 'id'> = {
       fileName: file.name,
@@ -502,17 +467,10 @@ export class TradeLedgerService {
       charges: report.charges.items,
       tradeCount: report.trades.length,
       newTradesAdded,
-      duplicatesSkipped,
+      tradesReplaced,
       status: 'completed',
     };
-    const { error: uploadError } = await this.supabase.client.from('uploads').insert(
-      objectToSnake({
-        id: uploadId,
-        userId: uid,
-        ...uploadRecord,
-      })
-    );
-    if (uploadError) throw uploadError;
+    await this.writeUploadRecord(uploadId, uid, uploadRecord);
 
     await this.purgeMarkToMarketTrades(clientCode, report);
     await this.replaceHoldings(clientCode, holdings);
@@ -527,8 +485,8 @@ export class TradeLedgerService {
       clientCode,
       clientName,
       newTradesAdded,
-      duplicatesSkipped,
-      fileDuplicate: false,
+      tradesReplaced,
+      fileDuplicate: existingUploadId !== null,
       affectedSymbols: [...affectedSymbols],
       report: syncedReport ?? undefined,
       reconciliation: reconcileAgainstStatement(report, syncedReport) ?? undefined,
@@ -1265,89 +1223,85 @@ export class TradeLedgerService {
   }
 
   /**
-   * How many rows are already stored per fingerprint. Scoped to the fingerprints in the file
-   * being uploaded — the previous full-table scan paged the entire history (400 sequential
-   * round trips at 100k trades) to answer a question about a few thousand rows.
+   * Upserts the upload record, so re-uploading a file refreshes its row rather than adding a
+   * second one. Falls back to omitting `trades_replaced` while migration 018 is still pending
+   * on a remote database, since a failed write here would block the whole import.
    */
-  private async loadFingerprintCounts(
+  private async writeUploadRecord(
+    uploadId: string,
+    userId: string,
+    record: Omit<UploadRecord, 'id'>
+  ): Promise<void> {
+    const write = (payload: Omit<UploadRecord, 'id'> | Omit<UploadRecord, 'id' | 'tradesReplaced'>) =>
+      this.supabase.client
+        .from('uploads')
+        .upsert(objectToSnake({ id: uploadId, userId, ...payload }));
+
+    if (this.uploadsSupportTradesReplaced === false) {
+      const { tradesReplaced: _omitted, ...rest } = record;
+      const { error } = await write(rest);
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await write(record);
+    if (!error) {
+      this.uploadsSupportTradesReplaced = true;
+      return;
+    }
+    if (!isMissingColumnError(error, 'trades_replaced')) throw error;
+
+    this.uploadsSupportTradesReplaced = false;
+    const { tradesReplaced: _omitted, ...rest } = record;
+    const { error: retryError } = await write(rest);
+    if (retryError) throw retryError;
+  }
+
+  /** Finds a previous upload of this exact file, so re-uploads refresh rather than duplicate. */
+  private async findUploadByContentHash(
     userId: string,
     clientCode: string,
-    fingerprints: string[]
-  ): Promise<Map<string, number>> {
-    const counts = new Map<string, number>();
-    const wanted = [...new Set(fingerprints.filter(Boolean))];
-    if (!wanted.length) return counts;
-
-    // Chunked to keep the `in` list (and the resulting URL) within Postgres/PostgREST limits.
-    const chunkSize = 200;
-    for (let i = 0; i < wanted.length; i += chunkSize) {
-      const chunk = wanted.slice(i, i + chunkSize);
-      for (let from = 0; ; from += SELECT_PAGE_SIZE) {
-        const { data, error } = await this.supabase.client
-          .from('trades')
-          .select('fingerprint')
-          .eq('user_id', userId)
-          .eq('client_code', clientCode)
-          .in('fingerprint', chunk)
-          .range(from, from + SELECT_PAGE_SIZE - 1);
-        if (error) throw error;
-        if (!data?.length) break;
-        for (const row of data) {
-          const fingerprint = String((row as { fingerprint?: string }).fingerprint ?? '');
-          if (!fingerprint) continue;
-          counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + 1);
-        }
-        if (data.length < SELECT_PAGE_SIZE) break;
-      }
-    }
-    return counts;
+    contentHash: string
+  ): Promise<string | null> {
+    const { data } = await this.supabase.client
+      .from('uploads')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('client_code', clientCode)
+      .eq('content_hash', contentHash)
+      .limit(1)
+      .maybeSingle();
+    return data?.id ? String(data.id) : null;
   }
 
   /**
-   * Keep the oldest row per occurrence key so overlapping P&L windows do not inflate totals.
-   *
-   * Deduping on the bare fingerprint is wrong: a statement legitimately repeats a row when the
-   * same scrip is bought and sold twice at identical quantity and prices on the same day, and
-   * every fingerprint field matches. Those are separate executions, so the ingest path keeps
-   * them apart with an occurrence suffix (`dedupe_key`); collapsing them to one silently drops
-   * real P&L. The occurrence key is already the primary key, so this pass only clears genuine
-   * duplicates left by older ingest schemes.
+   * Clears every stored trade on the given sell dates. The uploaded statement is authoritative
+   * for the dates it covers, so wiping them first makes an import idempotent no matter how many
+   * times an overlapping file is uploaded.
    */
-  private async removeDuplicateTrades(userId: string, clientCode: string): Promise<number> {
-    const pageSize = 1000;
-    const rows: { id: string; occurrenceKey: string }[] = [];
-    for (let from = 0; ; from += pageSize) {
+  private async deleteTradesForSellDates(
+    userId: string,
+    clientCode: string,
+    sellDates: string[]
+  ): Promise<number> {
+    const dates = [...new Set(sellDates.filter(Boolean))];
+    if (!dates.length) return 0;
+
+    let removed = 0;
+    // Chunked to keep the `in` list (and the resulting URL) within Postgres/PostgREST limits.
+    const chunkSize = 200;
+    for (let i = 0; i < dates.length; i += chunkSize) {
       const { data, error } = await this.supabase.client
         .from('trades')
-        .select('id, dedupe_key, created_at')
+        .delete()
         .eq('user_id', userId)
         .eq('client_code', clientCode)
-        .order('created_at', { ascending: true })
-        .range(from, from + pageSize - 1);
+        .in('sell_date', dates.slice(i, i + chunkSize))
+        .select('id');
       if (error) throw error;
-      if (!data?.length) break;
-      for (const row of data) {
-        const rec = row as { id?: string; dedupe_key?: string };
-        const id = String(rec.id ?? '');
-        rows.push({ id, occurrenceKey: String(rec.dedupe_key ?? '') || id });
-      }
-      if (data.length < pageSize) break;
+      removed += data?.length ?? 0;
     }
-
-    const seen = new Set<string>();
-    const toDelete: string[] = [];
-    for (const row of rows) {
-      if (!row.id || !row.occurrenceKey) continue;
-      if (seen.has(row.occurrenceKey)) toDelete.push(row.id);
-      else seen.add(row.occurrenceKey);
-    }
-
-    for (let i = 0; i < toDelete.length; i += UPSERT_BATCH_LIMIT) {
-      const chunk = toDelete.slice(i, i + UPSERT_BATCH_LIMIT);
-      const { error } = await this.supabase.client.from('trades').delete().in('id', chunk);
-      if (error) throw error;
-    }
-    return toDelete.length;
+    return removed;
   }
 
   private applyIdentity(report: Report, resolver: StockIdentityResolver): void {

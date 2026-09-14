@@ -189,8 +189,8 @@ export interface AnalysisOptions {
 }
 
 export interface StoredTrade extends Trade {
+  /** Row id. Uploads replace whole sell dates, so this only has to be unique. */
   dedupeKey: string;
-  fingerprint?: string;
   uploadId: string;
   clientCode: string;
   clientName: string;
@@ -259,7 +259,8 @@ export interface UploadRecord {
   charges: ChargeItem[];
   tradeCount: number;
   newTradesAdded: number;
-  duplicatesSkipped: number;
+  /** Stored rows cleared because this file supplied a fresh version of those dates. */
+  tradesReplaced: number;
   status: 'completed' | 'failed';
   errorMessage?: string;
 }

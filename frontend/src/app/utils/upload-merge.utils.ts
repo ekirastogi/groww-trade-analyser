@@ -14,53 +14,6 @@ export async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
-/** Stable fingerprint for a trade row — includes value totals so same-day legs stay distinct. */
-export async function computeTradeFingerprint(trade: Trade, clientCode: string): Promise<string> {
-  const raw = [
-    clientCode,
-    normalizeIsin(trade.isin),
-    trade.stockName,
-    trade.buyDate,
-    trade.sellDate,
-    trade.quantity,
-    trade.buyPrice,
-    trade.buyValue,
-    trade.sellPrice,
-    trade.sellValue,
-    trade.realisedPnL,
-    trade.tradeType,
-    trade.remark,
-  ].join('|');
-  return sha256Hex(raw);
-}
-
-/** Doc id for the Nth identical fingerprint (0 = the fingerprint itself). */
-export async function tradeOccurrenceKey(fingerprint: string, occurrence: number): Promise<string> {
-  return occurrence <= 0 ? fingerprint : sha256Hex(`${fingerprint}|${occurrence}`);
-}
-
-/** @deprecated Use computeTradeFingerprint */
-export async function computeTradeDedupeKey(trade: Trade, clientCode: string): Promise<string> {
-  return computeTradeFingerprint(trade, clientCode);
-}
-
-/**
- * Stable id for a parsed row. Returns null when that occurrence already exists
- * (caller should skip the row). Identical rows in the same file use suffixes.
- */
-export async function resolveTradeDedupeKey(
-  trade: Trade,
-  clientCode: string,
-  occurrenceInFile: number,
-  takenKeys: Set<string>
-): Promise<string | null> {
-  const base = await computeTradeFingerprint(trade, clientCode);
-  const key = await tradeOccurrenceKey(base, occurrenceInFile);
-  if (takenKeys.has(key)) return null;
-  takenKeys.add(key);
-  return key;
-}
-
 export async function computeFileContentHash(buffer: ArrayBuffer): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', buffer);
   return Array.from(new Uint8Array(hash))

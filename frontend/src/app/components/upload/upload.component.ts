@@ -19,7 +19,7 @@ export class UploadComponent {
   private router = inject(Router);
   readonly auth = inject(AuthService);
 
-  saveToSupabase = signal(true);
+saveToSupabase = signal(true);
   dragOver = signal(false);
   uploading = signal(false);
   pushResult = signal<string | null>(null);
@@ -66,20 +66,16 @@ export class UploadComponent {
         this.state.applyUploadResult(result);
         this.pushWarning.set(reconciliationWarning(result.reconciliation));
 
-        if (result.fileDuplicate) {
-          this.pushResult.set(
-            `File already saved for ${result.clientName} (${result.clientCode}). Dashboard refreshed from cloud.`
-          );
-        } else {
-          const skipped =
-            result.duplicatesSkipped > 0
-              ? ` ${result.duplicatesSkipped} already stored and skipped.`
-              : '';
-          this.pushResult.set(
-            `Saved to Supabase for ${result.clientName} (${result.clientCode}): ` +
-              `${result.newTradesAdded} trades imported.${skipped}`
-          );
-        }
+        const replaced =
+          result.tradesReplaced > 0
+            ? ` ${result.tradesReplaced} earlier rows on those dates were replaced.`
+            : '';
+        this.pushResult.set(
+          (result.fileDuplicate
+            ? `File re-imported for ${result.clientName} (${result.clientCode}): `
+            : `Saved to Supabase for ${result.clientName} (${result.clientCode}): `) +
+            `${result.newTradesAdded} trades imported.${replaced}`
+        );
 
         await this.router.navigate(['/dashboard']);
         return;
