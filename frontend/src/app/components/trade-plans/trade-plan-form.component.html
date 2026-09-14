@@ -87,6 +87,16 @@
         <label class="block text-sm">
           <span class="text-slate-500">CMP (current price) *</span>
           <input class="input-field mt-1 w-full" type="number" [(ngModel)]="form.cmp" />
+          @if (needsCmpFetch()) {
+            <button
+              type="button"
+              class="mt-1.5 text-xs font-medium text-kairo-600 hover:underline disabled:opacity-50"
+              [disabled]="screenerBusy()"
+              (click)="fetchCmpFromScreener()"
+            >
+              {{ screenerBusy() ? 'Fetching from Screener…' : 'Fetch CMP from Screener' }}
+            </button>
+          }
         </label>
       </div>
 

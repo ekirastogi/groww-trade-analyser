@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { RegistryStockService } from '../../services/registry-stock.service';
+import { ScreenerService, ScreenerSnapshot } from '../../services/screener.service';
 import { StockFirestoreService } from '../../services/stock-firestore.service';
 import { TradePlanService } from '../../services/trade-plan.service';
 import { PlannedEntryLeg, TradeDirection, TradeSegment, RegistryStock } from '../../models/trading-journal.models';
@@ -44,6 +45,7 @@ interface EntryLegRow {
 })
 export class TradePlanFormComponent implements OnInit {
   private registrySvc = inject(RegistryStockService);
+  private screenerSvc = inject(ScreenerService);
   private stockSvc = inject(StockFirestoreService);
   private planSvc = inject(TradePlanService);
   private route = inject(ActivatedRoute);
@@ -68,9 +70,16 @@ export class TradePlanFormComponent implements OnInit {
   pnlClass = pnlClass;
   error = signal<string | null>(null);
   busy = signal(false);
+  screenerBusy = signal(false);
   loading = signal(false);
   editingId = signal<string | null>(null);
   isEditing = computed(() => this.editingId() != null);
+
+  needsCmpFetch(): boolean {
+    const sym = this.form.symbol.trim();
+    const cmp = parseFloat(this.form.cmp);
+    return !!sym && !(Number.isFinite(cmp) && cmp > 0);
+  }
 
   form = {
     symbol: '',
@@ -358,6 +367,105 @@ export class TradePlanFormComponent implements OnInit {
     } catch {
       return null;
     }
+  }
+
+  async fetchCmpFromScreener(): Promise<void> {
+    const sym = this.form.symbol.trim().toUpperCase();
+    if (!sym || this.screenerBusy()) return;
+
+    this.screenerBusy.set(true);
+    this.error.set(null);
+    try {
+      const existing =
+        this.registry().find((s) => s.symbol === sym) ??
+        (await this.registrySvc.getBySymbol(sym));
+      const data = await this.screenerSvc.fetchStock(
+        sym,
+        existing?.name ?? (this.form.name.trim() || undefined)
+      );
+      const updated = this.applyScreenerSnapshot(
+        existing ?? {
+          symbol: sym,
+          name: data.name || this.form.name || sym,
+          currentPrice: 0,
+          supports: [],
+          resistances: [],
+          updatedAt: Date.now(),
+        },
+        data
+      );
+      await this.registrySvc.save(updated);
+      this.registry.update((rows) => {
+        const without = rows.filter((s) => s.symbol !== sym);
+        return [...without, updated].sort((a, b) => a.symbol.localeCompare(b.symbol));
+      });
+
+      this.form.symbol = sym;
+      this.form.name = updated.name || this.form.name || sym;
+      this.symbolQuery.set(sym);
+
+      if (updated.currentPrice > 0) {
+        this.form.cmp = String(updated.currentPrice);
+        if (!this.entryLegRows()[0]?.price) {
+          this.updateEntryLeg(0, 'price', String(updated.currentPrice));
+        }
+      } else {
+        this.error.set(`Screener data saved for ${sym}, but no CMP was returned.`);
+        return;
+      }
+
+      if (!this.form.targetPrice && updated.resistances[0]) {
+        this.form.targetPrice = String(updated.resistances[0]);
+      }
+      if (!this.form.stopLoss && updated.supports[0]) {
+        this.form.stopLoss = String(updated.supports[0]);
+      }
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Screener fetch failed');
+    } finally {
+      this.screenerBusy.set(false);
+    }
+  }
+
+  private applyScreenerSnapshot(stock: RegistryStock, data: ScreenerSnapshot): RegistryStock {
+    return {
+      ...stock,
+      name: data.name || stock.name,
+      currentPrice: data.currentPrice ?? stock.currentPrice,
+      marketCap: data.marketCap ?? stock.marketCap,
+      pe: data.pe ?? stock.pe,
+      bookValue: data.bookValue,
+      dividendYield: data.dividendYield,
+      roce: data.roce,
+      roe: data.roe,
+      faceValue: data.faceValue,
+      highLow: data.highLow,
+      salesGrowth3y: data.salesGrowth3y,
+      salesGrowth5y: data.salesGrowth5y,
+      salesGrowth10y: data.salesGrowth10y,
+      salesGrowthTtm: data.salesGrowthTtm,
+      profitGrowth3y: data.profitGrowth3y,
+      profitGrowth5y: data.profitGrowth5y,
+      profitGrowth10y: data.profitGrowth10y,
+      profitGrowthTtm: data.profitGrowthTtm,
+      stockCagr1y: data.stockCagr1y,
+      stockCagr3y: data.stockCagr3y,
+      stockCagr5y: data.stockCagr5y,
+      stockCagr10y: data.stockCagr10y,
+      promoterHolding: data.promoterHolding,
+      fiiHolding: data.fiiHolding,
+      diiHolding: data.diiHolding,
+      publicHolding: data.publicHolding,
+      governmentHolding: data.governmentHolding,
+      otherHolding: data.otherHolding,
+      quarterlyResults: data.quarterlyResults,
+      profitLoss: data.profitLoss,
+      balanceSheet: data.balanceSheet,
+      cashFlow: data.cashFlow,
+      shareholding: data.shareholding,
+      screenerUrl: data.url,
+      screenerFetchedAt: data.fetchedAt,
+    };
   }
 
   cancel(): void {
