@@ -477,10 +477,24 @@ export class TradeLedgerService {
     await this.purgeMarkToMarketTrades(clientCode, report);
     await this.replaceHoldings(clientCode, holdings);
 
+    // Re-read with a stable key order so same-day pages cannot skip/duplicate rows, then
+    // rebuild profiles/analytics from that exact set — this is what the dashboard will sum.
+    const storedTrades = await this.getAllTrades(clientCode);
     const syncedReport = await this.syncDerivedData(clientCode, clientName, {
+      trades: storedTrades,
       uploadMeta: uploadRecord,
       holdings,
     });
+
+    const reconciliation = reconcileAgainstStatement(report, syncedReport);
+    if (reconciliation && !reconciliation.matches) {
+      throw new Error(
+        `Realised P&L does not match this statement after import ` +
+          `(file ${reconciliation.statement.toLocaleString('en-IN')}, ` +
+          `ledger ${reconciliation.stored.toLocaleString('en-IN')}). ` +
+          `Upload the full Groww file again.`
+      );
+    }
 
     return {
       uploadId,
@@ -491,7 +505,7 @@ export class TradeLedgerService {
       fileDuplicate: existingUploadId !== null,
       affectedSymbols: [...affectedSymbols],
       report: syncedReport ?? undefined,
-      reconciliation: reconcileAgainstStatement(report, syncedReport) ?? undefined,
+      reconciliation: reconciliation ?? undefined,
     };
   }
 
@@ -637,22 +651,23 @@ export class TradeLedgerService {
     const uid = await this.auth.getDataUserId();
     if (!uid) return [];
 
-    const pageSize = 1000;
     const all: StoredTrade[] = [];
-    for (let from = 0; ; from += pageSize) {
+    for (let from = 0; ; from += SELECT_PAGE_SIZE) {
       const { data, error } = await this.supabase.client
         .from('trades')
         .select('*')
         .eq('user_id', uid)
         .eq('client_code', clientCode)
+        // id is the tie-break: ordering by sell_date alone skips/duplicates same-day rows across pages.
         .order('sell_date', { ascending: false })
-        .range(from, from + pageSize - 1);
+        .order('id', { ascending: true })
+        .range(from, from + SELECT_PAGE_SIZE - 1);
       if (error) throw error;
       if (!data?.length) break;
       all.push(...data.map((row) => tradeFromRow(row)));
-      if (data.length < pageSize) break;
+      if (data.length < SELECT_PAGE_SIZE) break;
     }
-    return all;
+    return uniqueByKey(all, (trade) => trade.dedupeKey);
   }
 
   async countTrades(clientCode: string): Promise<number> {
@@ -708,7 +723,7 @@ export class TradeLedgerService {
     const uid = await this.auth.getDataUserId();
     if (!uid) return [];
 
-    const pageSize = 1000;
+    const pageSize = SELECT_PAGE_SIZE;
     const all: StoredTrade[] = [];
     for (let from = 0; ; from += pageSize) {
       let query = this.supabase.client
@@ -733,6 +748,7 @@ export class TradeLedgerService {
 
       const { data, error } = await query
         .order('sell_date', { ascending: false })
+        .order('id', { ascending: true })
         .range(from, from + pageSize - 1);
       if (error) throw error;
       if (!data?.length) break;
@@ -740,10 +756,11 @@ export class TradeLedgerService {
       if (data.length < pageSize) break;
     }
 
+    const deduped = uniqueByKey(all, (trade) => trade.dedupeKey);
     if (filters.tradeTypes?.length && !filters.tradeTypes.includes('all')) {
-      return all.filter((trade) => tradeMatchesTypeFilter(trade, filters.tradeTypes));
+      return deduped.filter((trade) => tradeMatchesTypeFilter(trade, filters.tradeTypes));
     }
-    return all;
+    return deduped;
   }
 
   async getFilteredStockSummaries(
@@ -1288,6 +1305,9 @@ export class TradeLedgerService {
    * Clears every stored trade whose sell date falls in [start, end]. A full-window Groww
    * statement owns that interval completely; wiping it first makes re-import idempotent and
    * removes orphans left by older ingest bugs.
+   *
+   * PostgREST caps how many rows a single DELETE…RETURNING can touch, so we loop until the
+   * window is empty rather than trusting one shot to clear multi-thousand-row ledgers.
    */
   private async deleteTradesInSellDateRange(
     userId: string,
@@ -1296,16 +1316,23 @@ export class TradeLedgerService {
     end: string
   ): Promise<number> {
     if (!start || !end) return 0;
-    const { data, error } = await this.supabase.client
-      .from('trades')
-      .delete()
-      .eq('user_id', userId)
-      .eq('client_code', clientCode)
-      .gte('sell_date', start)
-      .lte('sell_date', end)
-      .select('id');
-    if (error) throw error;
-    return data?.length ?? 0;
+    let removed = 0;
+    for (;;) {
+      const { data, error } = await this.supabase.client
+        .from('trades')
+        .delete()
+        .eq('user_id', userId)
+        .eq('client_code', clientCode)
+        .gte('sell_date', start)
+        .lte('sell_date', end)
+        .select('id')
+        .limit(SELECT_PAGE_SIZE);
+      if (error) throw error;
+      const batch = data?.length ?? 0;
+      removed += batch;
+      if (batch < SELECT_PAGE_SIZE) break;
+    }
+    return removed;
   }
 
   private applyIdentity(report: Report, resolver: StockIdentityResolver): void {
