@@ -64,6 +64,9 @@ import { ErrorBannerComponent } from '../shared/error-banner/error-banner.compon
 /** Calendar heatmap scope: every date, or only the days the market actually traded. */
 type CalendarSessionFilter = 'all' | 'open';
 
+/** Stocks tab: show every stock, or only those in profit / loss on net P&L. */
+type StockPnLFilter = 'all' | 'profitable' | 'losing';
+
 type AnalyticsTab =
   | 'overview'
   | 'daily'
@@ -178,6 +181,11 @@ export class AnalyticsComponent implements OnInit {
     { id: 'all', label: 'All' },
     { id: 'open', label: 'Open' },
   ];
+  readonly stockPnLFilters: { id: StockPnLFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'profitable', label: 'Profitable' },
+    { id: 'losing', label: 'Losing' },
+  ];
 
   private chartVersion = signal(0);
   winRateShowDots = signal(false);
@@ -223,6 +231,21 @@ export class AnalyticsComponent implements OnInit {
     const filtered = this.filteredStocks.stocks();
     if (filtered.length) return filtered;
     return this.analysis()?.stocks ?? [];
+  });
+
+  stockPnLFilter = signal<StockPnLFilter>('all');
+
+  setStockPnLFilter(id: StockPnLFilter): void {
+    this.stockPnLFilter.set(id);
+  }
+
+  /** Stocks tab table rows — All / Profitable / Losing on net P&L. */
+  stocksTabRows = computed(() => {
+    const stocks = this.visibleStocks();
+    const filter = this.stockPnLFilter();
+    if (filter === 'profitable') return stocks.filter((stock) => stock.netPnL > 0);
+    if (filter === 'losing') return stocks.filter((stock) => stock.netPnL < 0);
+    return stocks;
   });
 
   holdings = computed(() => this.state.report()?.unrealisedHoldings ?? []);
